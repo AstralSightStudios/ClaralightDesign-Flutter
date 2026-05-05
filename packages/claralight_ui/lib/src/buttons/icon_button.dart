@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-class IconButton extends StatelessWidget {
+class CLIconButton extends StatelessWidget {
     final IconData icon;
     final VoidCallback onPressed;
 
-    const IconButton({
+    const CLIconButton({
         super.key,
         required this.icon,
         required this.onPressed,
@@ -13,9 +13,11 @@ class IconButton extends StatelessWidget {
 
     @override
     Widget build(BuildContext context) {
-        return GlassButton(
-            onTap: onPressed,
+        return GlassIconButton(
             icon: Icon(icon),
+            quality: GlassQuality.premium,
+            useOwnLayer: true,
+            onPressed: onPressed,
         );
     }
 }

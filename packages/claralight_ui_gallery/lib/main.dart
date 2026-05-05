@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:claralight_ui/claralight_ui.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -7,12 +9,11 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'Claralight UI Gallery',
+      home: const MyHomePage(title: 'Claralight UI Gallery'),
     );
   }
 }
@@ -30,17 +31,37 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      appBar: AppBar(title: Text(widget.title)),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Container(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: NetworkImage('https://bing.npanuhin.me/US/en/2024-01-16.jpg'),
+                fit: BoxFit.cover,
+              ),
+            ),
+            child: Flex(
+          direction: Axis.vertical,
           children: [
-            const Text('Hello World!'),
-          ],
+            const Text(
+                'Buttons',
+                style: TextStyle(fontSize: 24.0, fontWeight: FontWeight.bold),
+              ),
+
+              Flex(
+                direction: Axis.vertical,
+                children: [
+                  Text("IconButton"),
+                  CLIconButton(icon: Icons.add, onPressed: () {}),
+                  Text("SideBar"),
+                  CLSideBar(child: Flex(direction: Axis.vertical,children: [Text("11111111111111111"),Text("11111111111111111"),Text("11111111111111111")])),
+                ],
+              ),
+            ],
+          ),
         ),
-      )
+      ),
     );
   }
 }
