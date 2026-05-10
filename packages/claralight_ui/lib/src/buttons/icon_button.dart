@@ -15,7 +15,6 @@ class CLIconButton extends StatelessWidget {
     Widget build(BuildContext context) {
         return GlassIconButton(
             icon: Icon(icon),
-            quality: GlassQuality.premium,
             useOwnLayer: true,
             onPressed: onPressed,
         );

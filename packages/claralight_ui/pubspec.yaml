@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  liquid_glass_widgets: ^0.10.2
+  liquid_glass_widgets: ^0.10.9
 
 dev_dependencies:
   flutter_test:
