@@ -1,0 +1,22 @@
+name: claralight_design_workspace
+description: Claralight Design monorepo workspace.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.11.5
+  flutter: '>=3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  claralight_ui:
+    path: packages/claralight_ui
+
+  claralight_ui_gallery:
+    path: packages/claralight_ui_gallery
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

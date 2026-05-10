@@ -1,0 +1,5 @@
+analyzer:
+  exclude:
+    - "**/build/**"
+    - "**/.dart_tool/**"
+    - "**/generated_plugin_registrant.dart"
