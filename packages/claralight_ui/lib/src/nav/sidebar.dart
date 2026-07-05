@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+
+import 'package:claralight_ui/src/surfaces/glass.dart';
 
 class CLSideBar extends StatelessWidget {
     final Widget child;
@@ -11,9 +12,9 @@ class CLSideBar extends StatelessWidget {
 
     @override
     Widget build(BuildContext context) {
-        return GlassCard(
-            quality: GlassQuality.premium,
-            useOwnLayer: true,
+        return Glass(
+            blur: 12,
+            borderRadius: BorderRadius.circular(24),
             child: child,
         );
     }

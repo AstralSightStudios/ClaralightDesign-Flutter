@@ -2,18 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:claralight_ui/claralight_ui.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Pre-cache shaders and register the debug performance monitor.
-  await LiquidGlassWidgets.initialize();
-
-  // Wrap the app with LiquidGlassWidgets to install the root backdrop scope
-  // and accessibility bridge. Enable adaptiveQuality for automatic per-device tuning.
-  runApp(LiquidGlassWidgets.wrap(
-    child: const MyApp(),
-    adaptiveQuality: true,
-  ));
+void main() {
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -45,6 +35,7 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Container(
+          width: double.infinity,
             decoration: BoxDecoration(
               image: DecorationImage(
                 image: NetworkImage('https://bing.npanuhin.me/US/en/2024-01-16.jpg'),
