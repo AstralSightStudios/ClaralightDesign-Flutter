@@ -3,14 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
-/// A unified glass surface that adapts to the current rendering backend.
-///
-/// On Impeller (detected via [ui.ImageFilter.isShaderFilterSupported]) it uses
-/// [LiquidGlass.withOwnLayer] for a real refractive glass effect.
-///
-/// On Skia-only platforms (e.g. web, Windows, Linux, or when Impeller is
-/// disabled) it falls back to a frosted-glass style using [BackdropFilter]
-/// blur, a translucent tint, border, shadow and subtle inner highlights.
+
 class Glass extends StatelessWidget {
   /// The widget displayed on top of the glass surface.
   final Widget child;
@@ -36,22 +29,23 @@ class Glass extends StatelessWidget {
   /// Margin applied outside the glass surface.
   final EdgeInsetsGeometry? margin;
 
+  final bool? grouped;
+
   const Glass({
     super.key,
     required this.child,
     this.backgroundColor = Colors.transparent,
-    this.blur = 5,
+    this.blur = 10,
     this.borderRadius = const BorderRadius.all(Radius.circular(12)),
-    this.border = const Border.fromBorderSide(BorderSide(color: Colors.transparent)),
+    this.border = const Border.fromBorderSide(
+      BorderSide(color: Colors.transparent),
+    ),
     this.boxShadow = const [
-      BoxShadow(
-        color: Color(0x33000000),
-        blurRadius: 10,
-        offset: Offset(0, 2),
-      ),
+      BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 2)),
     ],
     this.padding,
     this.margin,
+    this.grouped = false
   });
 
   /// Whether the Impeller rendering backend is active.
@@ -78,11 +72,17 @@ class Glass extends StatelessWidget {
     // top-left radius as the representative value.
     final radius = borderRadius.topLeft.x;
 
+    if(grouped != null && grouped!) {
+      return LiquidGlass.grouped(
+        shape: LiquidRoundedSuperellipse(borderRadius: radius),
+        child: _borderOverlay(content),
+      );
+    }
+
     return LiquidGlass.withOwnLayer(
       settings: LiquidGlassSettings(
         blur: blur,
         glassColor: backgroundColor,
-        lightIntensity: 0,
         saturation: 1,
       ),
       shape: LiquidRoundedSuperellipse(borderRadius: radius),

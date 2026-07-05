@@ -6,11 +6,6 @@ import 'package:flutter/physics.dart';
 
 import 'glass.dart';
 
-/// A press-responsive glass surface inspired by macOS-style controls.
-///
-/// The surface intentionally has no hover state: it stays visually still when
-/// the pointer moves nearby or over it, then expands and brightens only while
-/// the pointer is pressed. Dragging while pressed softly deforms the surface.
 class InteractiveGlass extends StatefulWidget {
   /// The widget displayed in the center of the glass control.
   final Widget child;
@@ -42,9 +37,6 @@ class InteractiveGlass extends StatefulWidget {
 
   /// Base tint color of the glass surface.
   final Color backgroundColor;
-
-  /// Tint color while pressed.
-  final Color pressedBackgroundColor;
 
   /// Optional border passed directly to [Glass].
   ///
@@ -83,8 +75,7 @@ class InteractiveGlass extends StatefulWidget {
     this.borderRadius,
     this.pressedScale = 1.35,
     this.blur = 18,
-    this.backgroundColor = const Color(0x5A4A4A4A),
-    this.pressedBackgroundColor = const Color(0x8A777777),
+    this.backgroundColor = Colors.transparent,
     this.border = const Border.fromBorderSide(
       BorderSide(color: Colors.transparent),
     ),
@@ -285,11 +276,7 @@ class _InteractiveGlassState extends State<InteractiveGlass>
                   child: Glass(
                     blur: widget.blur,
                     borderRadius: radius,
-                    backgroundColor: Color.lerp(
-                      widget.backgroundColor,
-                      widget.pressedBackgroundColor,
-                      press,
-                    )!,
+                    backgroundColor: widget.backgroundColor,
                     border: widget.border,
                     boxShadow: boxShadow,
                     child: ClipRRect(
