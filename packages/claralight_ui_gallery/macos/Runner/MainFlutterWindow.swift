@@ -8,7 +8,14 @@ class MainFlutterWindow: NSWindow {
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
-    let windowFrame = self.frame
+    var windowFrame = self.frame
+    // Give the gallery enough height for full-size component demos. State
+    // restoration would shrink the window back after launch, so opt out.
+    self.isRestorable = false
+    if windowFrame.height < 920, let screen = self.screen ?? NSScreen.main {
+      windowFrame.size = NSSize(width: max(windowFrame.width, 880), height: 920)
+      windowFrame.origin.y = max(screen.visibleFrame.minY, screen.visibleFrame.maxY - 940)
+    }
     adoptTahoeLiquidGlassChrome(using: flutterViewController)
     self.setFrame(windowFrame, display: true)
 
