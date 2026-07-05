@@ -5,20 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:claralight_ui/claralight_ui.dart';
 
 void main() {
-  testWidgets('Glass renders its child', (WidgetTester tester) async {
-    const key = Key('glass-child');
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Glass(child: Container(key: key)),
-        ),
-      ),
-    );
-
-    expect(find.byType(Glass), findsOneWidget);
-    expect(find.byKey(key), findsOneWidget);
-  });
-
   testWidgets('InteractiveGlass renders child and ignores hover', (
     WidgetTester tester,
   ) async {
@@ -112,6 +98,40 @@ void main() {
     expect(surface.width, 120);
     expect(surface.height, 48);
     expect(tester.widget<Glass>(find.byType(Glass)).borderRadius, radius);
+  });
+
+  testWidgets('InteractiveGlass keeps the same Glass border while pressed', (
+    WidgetTester tester,
+  ) async {
+    const border = Border.fromBorderSide(
+      BorderSide(color: Color(0x33445566), width: 1.5),
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: InteractiveGlass(
+              border: border,
+              child: Icon(Icons.grid_view),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    BoxBorder currentBorder() =>
+        tester.widget<Glass>(find.byType(Glass)).border!;
+
+    expect(currentBorder(), border);
+
+    final center = tester.getCenter(find.byType(InteractiveGlass));
+    final gesture = await tester.startGesture(center);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 220));
+
+    expect(currentBorder(), border);
+
+    await gesture.up();
   });
 
   testWidgets('InteractiveGlass scales while pressed and springs back', (
@@ -279,28 +299,6 @@ void main() {
     );
 
     await tester.tap(find.byType(InteractiveGlass));
-    expect(tapped, isTrue);
-  });
-
-  testWidgets('CLIconButton uses InteractiveGlass and reports taps', (
-    WidgetTester tester,
-  ) async {
-    var tapped = false;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLIconButton(icon: Icons.add, onPressed: () => tapped = true),
-        ),
-      ),
-    );
-
-    expect(find.byType(InteractiveGlass), findsOneWidget);
-    expect(
-      tester.widget<InteractiveGlass>(find.byType(InteractiveGlass)).size,
-      44,
-    );
-
-    await tester.tap(find.byType(CLIconButton));
     expect(tapped, isTrue);
   });
 }

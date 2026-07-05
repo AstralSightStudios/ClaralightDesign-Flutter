@@ -46,11 +46,15 @@ class InteractiveGlass extends StatefulWidget {
   /// Tint color while pressed.
   final Color pressedBackgroundColor;
 
-  /// Base outline color.
-  final Color borderColor;
+  /// Optional border passed directly to [Glass].
+  ///
+  /// Pressing the surface never mutates this border.
+  final BoxBorder? border;
 
-  /// Outline color while pressed.
-  final Color pressedBorderColor;
+  /// Optional shadow passed directly to [Glass].
+  ///
+  /// When omitted, InteractiveGlass uses a subtle press-responsive shadow.
+  final List<BoxShadow>? boxShadow;
 
   /// Padding around [child].
   final EdgeInsetsGeometry padding;
@@ -81,8 +85,10 @@ class InteractiveGlass extends StatefulWidget {
     this.blur = 18,
     this.backgroundColor = const Color(0x5A4A4A4A),
     this.pressedBackgroundColor = const Color(0x8A777777),
-    this.borderColor = const Color(0x26FFFFFF),
-    this.pressedBorderColor = const Color(0x66FFFFFF),
+    this.border = const Border.fromBorderSide(
+      BorderSide(color: Colors.transparent),
+    ),
+    this.boxShadow,
     this.padding = EdgeInsets.zero,
     this.duration = const Duration(milliseconds: 170),
     this.curve = Curves.easeOutQuart,
@@ -262,6 +268,15 @@ class _InteractiveGlassState extends State<InteractiveGlass>
                 final yOffset = ui.lerpDouble(4, 9, press)!;
                 final shadowAlpha = (0x42 + (0x22 * press)).round();
                 final radius = _surfaceBorderRadius;
+                final boxShadow =
+                    widget.boxShadow ??
+                    [
+                      BoxShadow(
+                        color: Color.fromARGB(shadowAlpha, 0, 0, 0),
+                        blurRadius: blurRadius,
+                        offset: Offset(0, yOffset),
+                      ),
+                    ];
 
                 return SizedBox(
                   key: _surfaceKey,
@@ -275,20 +290,8 @@ class _InteractiveGlassState extends State<InteractiveGlass>
                       widget.pressedBackgroundColor,
                       press,
                     )!,
-                    border: Border.all(
-                      color: Color.lerp(
-                        widget.borderColor,
-                        widget.pressedBorderColor,
-                        press,
-                      )!,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color.fromARGB(shadowAlpha, 0, 0, 0),
-                        blurRadius: blurRadius,
-                        offset: Offset(0, yOffset),
-                      ),
-                    ],
+                    border: widget.border,
+                    boxShadow: boxShadow,
                     child: ClipRRect(
                       borderRadius: radius,
                       child: Stack(
