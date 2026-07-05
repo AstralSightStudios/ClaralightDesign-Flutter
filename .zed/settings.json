@@ -1,0 +1,17 @@
+{
+  "languages": {
+    "Dart": {
+      "prettier": {
+        "allowed": true,
+      },
+    },
+  },
+  "lsp": {
+    "dart": {
+      "binary": {
+        "path": "./.fvm/flutter_sdk/bin/dart",
+        "arguments": ["language-server", "--protocol=lsp"],
+      },
+    },
+  },
+}
