@@ -54,7 +54,7 @@ class CLButton extends StatelessWidget {
         width: surfaceWidth,
         height: defaultHeight,
         borderRadius: radius,
-        pressedScale: 1.03,
+        pressedScale: 1.1,
         blur: 3,
         backgroundColor: _backgroundColor,
         boxShadow: const [

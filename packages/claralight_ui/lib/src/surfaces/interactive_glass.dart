@@ -73,7 +73,7 @@ class InteractiveGlass extends StatefulWidget {
     this.width,
     this.height,
     this.borderRadius,
-    this.pressedScale = 1.35,
+    this.pressedScale = 1.1,
     this.blur = 18,
     this.backgroundColor = Colors.transparent,
     this.border = const Border.fromBorderSide(
@@ -108,6 +108,7 @@ class _InteractiveGlassState extends State<InteractiveGlass>
   Offset _pressOrigin = Offset.zero;
   Offset _dragOffset = Offset.zero;
   Offset _springStartOffset = Offset.zero;
+  Offset _highlightPosition = Offset.zero;
 
   double get _surfaceWidth => widget.width ?? widget.size;
 
@@ -121,6 +122,15 @@ class _InteractiveGlassState extends State<InteractiveGlass>
 
   double get _scale =>
       ui.lerpDouble(1, widget.pressedScale, _scaleController.value)!;
+
+  Alignment get _highlightAlignment {
+    final localPosition = _inversePressedTransform(_highlightPosition);
+
+    return Alignment(
+      (localPosition.dx / _surfaceWidth) * 2 - 1,
+      (localPosition.dy / _surfaceHeight) * 2 - 1,
+    );
+  }
 
   @override
   void initState() {
@@ -158,6 +168,7 @@ class _InteractiveGlassState extends State<InteractiveGlass>
       _pressOrigin = event.localPosition;
       _dragOffset = Offset.zero;
       _springStartOffset = Offset.zero;
+      _highlightPosition = event.localPosition;
       _pressed = true;
     });
   }
@@ -166,6 +177,7 @@ class _InteractiveGlassState extends State<InteractiveGlass>
     if (event.pointer != _activePointer) return;
     setState(() {
       _dragOffset = (event.localPosition - _pressOrigin) / widget.dragTension;
+      _highlightPosition = event.localPosition;
     });
   }
 
@@ -211,6 +223,22 @@ class _InteractiveGlassState extends State<InteractiveGlass>
       ),
     );
     setState(() {});
+  }
+
+  Offset _inversePressedTransform(Offset position) {
+    final center = Offset(_surfaceWidth / 2, _surfaceHeight / 2);
+    final scaleMatrix = Matrix4.identity()..scaleByDouble(_scale, _scale, 1, 1);
+    final transform = Matrix4.identity()
+      ..translateByDouble(center.dx, center.dy, 0, 1)
+      ..multiply(scaleMatrix)
+      ..multiply(_deformationMatrix(_dragOffset))
+      ..translateByDouble(-center.dx, -center.dy, 0, 1);
+    final inverseTransform = Matrix4.copy(transform);
+    final determinant = inverseTransform.invert();
+
+    if (determinant == 0) return position;
+
+    return MatrixUtils.transformPoint(inverseTransform, position);
   }
 
   Matrix4 _deformationMatrix(Offset dragOffset) {
@@ -306,11 +334,13 @@ class _InteractiveGlassState extends State<InteractiveGlass>
   }
 
   Widget _highlightOverlay(double press) {
+    if (!_pressed) return const SizedBox.shrink();
+
     return IgnorePointer(
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: RadialGradient(
-            center: const Alignment(-0.48, -0.7),
+            center: _highlightAlignment,
             radius: 1.08,
             colors: [
               Color.lerp(

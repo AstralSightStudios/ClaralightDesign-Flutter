@@ -12,6 +12,7 @@ class CLIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InteractiveGlass(
       onTap: onPressed,
+      pressedScale: 1.3,
       blur: 3,
       child: Icon(icon, color: const Color(0xFFEDEDED)),
     );

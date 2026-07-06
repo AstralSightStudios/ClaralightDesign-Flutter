@@ -4,6 +4,52 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:claralight_ui/claralight_ui.dart';
 
+RadialGradient? _highlightGradient(WidgetTester tester) {
+  final decoratedBoxes = tester.widgetList<DecoratedBox>(
+    find.byType(DecoratedBox),
+  );
+
+  for (final decoratedBox in decoratedBoxes) {
+    final decoration = decoratedBox.decoration;
+    if (decoration is BoxDecoration && decoration.gradient is RadialGradient) {
+      return decoration.gradient! as RadialGradient;
+    }
+  }
+
+  return null;
+}
+
+Offset _transformAroundCenter(Matrix4 matrix, Size size, Offset position) {
+  final center = Offset(size.width / 2, size.height / 2);
+  final effectiveTransform = Matrix4.identity()
+    ..translateByDouble(center.dx, center.dy, 0, 1)
+    ..multiply(matrix)
+    ..translateByDouble(-center.dx, -center.dy, 0, 1);
+
+  return MatrixUtils.transformPoint(effectiveTransform, position);
+}
+
+Offset _highlightVisualPosition(WidgetTester tester, Size surfaceSize) {
+  const scaleKey = Key('interactive-glass-scale-transform');
+  const deformationKey = Key('interactive-glass-deformation-transform');
+  final highlightCenter = _highlightGradient(tester)!.center as Alignment;
+  final highlightPosition = Offset(
+    ((highlightCenter.x + 1) / 2) * surfaceSize.width,
+    ((highlightCenter.y + 1) / 2) * surfaceSize.height,
+  );
+  final deformedPosition = _transformAroundCenter(
+    tester.widget<Transform>(find.byKey(deformationKey)).transform,
+    surfaceSize,
+    highlightPosition,
+  );
+
+  return _transformAroundCenter(
+    tester.widget<Transform>(find.byKey(scaleKey)).transform,
+    surfaceSize,
+    deformedPosition,
+  );
+}
+
 void main() {
   testWidgets('InteractiveGlass renders child and ignores hover', (
     WidgetTester tester,
@@ -44,6 +90,146 @@ void main() {
 
     await gesture.removePointer();
   });
+
+  testWidgets('InteractiveGlass shows highlight only while pressed', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: InteractiveGlass(
+              width: 80,
+              height: 60,
+              child: Icon(Icons.grid_view),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(_highlightGradient(tester), isNull);
+
+    final pressLocation = tester.getCenter(find.byType(InteractiveGlass));
+    final gesture = await tester.startGesture(
+      pressLocation,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(_highlightGradient(tester), isNotNull);
+
+    await gesture.up();
+    await tester.pump();
+
+    expect(_highlightGradient(tester), isNull);
+  });
+
+  testWidgets('InteractiveGlass places highlight under the mouse pointer', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: InteractiveGlass(
+              width: 80,
+              height: 60,
+              child: Icon(Icons.grid_view),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final surfaceRect = tester.getRect(find.byType(InteractiveGlass));
+    final pressLocation = surfaceRect.topLeft + const Offset(60, 10);
+    final gesture = await tester.startGesture(
+      pressLocation,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(
+      _highlightVisualPosition(tester, const Size(80, 60)).dx,
+      moreOrLessEquals(60, epsilon: 0.001),
+    );
+    expect(
+      _highlightVisualPosition(tester, const Size(80, 60)).dy,
+      moreOrLessEquals(10, epsilon: 0.001),
+    );
+
+    await gesture.moveTo(surfaceRect.topLeft + const Offset(20, 45));
+    await tester.pump();
+
+    expect(
+      _highlightVisualPosition(tester, const Size(80, 60)).dx,
+      moreOrLessEquals(20, epsilon: 0.001),
+    );
+    expect(
+      _highlightVisualPosition(tester, const Size(80, 60)).dy,
+      moreOrLessEquals(45, epsilon: 0.001),
+    );
+
+    await gesture.up();
+  });
+
+  testWidgets(
+    'InteractiveGlass keeps highlight visually under pointer when scaled',
+    (WidgetTester tester) async {
+      const surfaceSize = Size(80, 60);
+      const pointerLocalPosition = Offset(60, 10);
+      const pressedScale = 1.35;
+      final surfaceCenter = Offset(
+        surfaceSize.width / 2,
+        surfaceSize.height / 2,
+      );
+      final compensatedLocalPosition =
+          surfaceCenter + (pointerLocalPosition - surfaceCenter) / pressedScale;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: InteractiveGlass(
+                width: surfaceSize.width,
+                height: surfaceSize.height,
+                pressedScale: pressedScale,
+                child: Icon(Icons.grid_view),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final surfaceRect = tester.getRect(find.byType(InteractiveGlass));
+      final gesture = await tester.startGesture(
+        surfaceRect.topLeft + pointerLocalPosition,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+
+      final highlightCenter = _highlightGradient(tester)!.center as Alignment;
+
+      expect(
+        highlightCenter.x,
+        moreOrLessEquals(
+          (compensatedLocalPosition.dx / surfaceSize.width) * 2 - 1,
+          epsilon: 0.0001,
+        ),
+      );
+      expect(
+        highlightCenter.y,
+        moreOrLessEquals(
+          (compensatedLocalPosition.dy / surfaceSize.height) * 2 - 1,
+          epsilon: 0.0001,
+        ),
+      );
+
+      await gesture.up();
+    },
+  );
 
   testWidgets('InteractiveGlass defaults to 44px with centered child', (
     WidgetTester tester,
