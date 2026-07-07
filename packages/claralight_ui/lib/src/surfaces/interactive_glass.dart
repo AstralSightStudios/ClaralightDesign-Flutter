@@ -30,9 +30,13 @@ class InteractiveGlass extends StatefulWidget {
   final BorderRadius? borderRadius;
 
   /// Scale applied only while the pointer is pressed.
+  ///
+  /// Defaults to the LiquidButton expansion ratio: 4px over a 48px surface.
   final double pressedScale;
 
   /// Background blur strength passed to [Glass].
+  ///
+  /// Defaults to the LiquidButton blur strength.
   final double blur;
 
   /// Base tint color of the glass surface.
@@ -73,8 +77,8 @@ class InteractiveGlass extends StatefulWidget {
     this.width,
     this.height,
     this.borderRadius,
-    this.pressedScale = 1.1,
-    this.blur = 18,
+    this.pressedScale = 1 + 4 / 48,
+    this.blur = 2,
     this.backgroundColor = Colors.transparent,
     this.border = const Border.fromBorderSide(
       BorderSide(color: Colors.transparent),

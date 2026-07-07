@@ -2,23 +2,39 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'package:claralight_ui/src/surfaces/glass.dart';
 import 'package:claralight_ui/src/surfaces/interactive_glass.dart';
 
 /// Visual variants from the Figma button component.
 enum CLButtonVariant { primary, neutral, danger }
 
 class CLButton extends StatelessWidget {
-  static const double defaultHeight = 50;
+  static const double defaultHeight = 48;
   static const double defaultWidth = 354;
   static const double minWidth = 64;
   static const double horizontalInset = 16;
   static const double iconSize = 24;
+  static const double contentGap = 8;
 
   final String label;
   final VoidCallback? onPressed;
   final Widget? leadingIcon;
   final Widget? trailingIcon;
   final CLButtonVariant variant;
+
+  /// Uses the liquid press and drag highlight when true.
+  ///
+  /// When false, the button keeps the same glass surface and uses Material's
+  /// regular tap indication instead.
+  final bool isInteractive;
+
+  /// Optional hue/tint color for the glass surface.
+  ///
+  /// Mirrors the Android LiquidButton tint pass with a 75% surface tint.
+  final Color? tint;
+
+  /// Optional solid surface color drawn above [tint] and [variant].
+  final Color? surfaceColor;
 
   /// Button width. Pass any finite width, or null to use the Figma width.
   ///
@@ -32,6 +48,9 @@ class CLButton extends StatelessWidget {
     this.leadingIcon,
     this.trailingIcon,
     this.variant = CLButtonVariant.primary,
+    this.isInteractive = true,
+    this.tint,
+    this.surfaceColor,
     this.width = defaultWidth,
   }) : assert(width == null || (width > 0 && width < double.infinity));
 
@@ -46,32 +65,68 @@ class CLButton extends StatelessWidget {
       foregroundColor: _foregroundColor,
     );
 
+    final usesLiquidInteraction = isInteractive && onPressed != null;
+
     return Semantics(
       button: true,
       enabled: onPressed != null,
-      child: InteractiveGlass(
-        onTap: onPressed,
-        width: surfaceWidth,
-        height: defaultHeight,
-        borderRadius: radius,
-        pressedScale: 1.1,
-        blur: 3,
-        backgroundColor: _backgroundColor,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 10,
-            offset: Offset(0, 2),
-          ),
-        ],
-        child: SizedBox.expand(child: content),
-      ),
+      child: usesLiquidInteraction
+          ? InteractiveGlass(
+              onTap: onPressed,
+              width: surfaceWidth,
+              height: defaultHeight,
+              borderRadius: radius,
+              backgroundColor: _surfaceTint,
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 10,
+                  offset: Offset(0, 2),
+                ),
+              ],
+              child: SizedBox.expand(child: content),
+            )
+          : SizedBox(
+              width: surfaceWidth,
+              height: defaultHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                fit: StackFit.expand,
+                children: [
+                  Glass(
+                    blur: 2,
+                    borderRadius: radius,
+                    backgroundColor: _surfaceTint,
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                    child: SizedBox.expand(child: content),
+                  ),
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: radius,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: InkWell(onTap: onPressed, borderRadius: radius),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
   Color get _foregroundColor => const Color(0xFFF7F7F2);
 
-  Color get _backgroundColor => switch (variant) {
+  Color get _surfaceTint =>
+      surfaceColor ?? (tint ?? _variantTint).withValues(alpha: 0.75);
+
+  Color get _variantTint => switch (variant) {
     CLButtonVariant.primary => const Color(0xFF2482C5),
     CLButtonVariant.neutral => const Color(0xFF575757),
     CLButtonVariant.danger => const Color(0xFFC93442),
@@ -91,23 +146,23 @@ class _ButtonContent extends StatelessWidget {
     required this.foregroundColor,
   });
 
-  bool get _hasAnyIcon => leadingIcon != null || trailingIcon != null;
-
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: CLButton.horizontalInset),
       child: Row(
         mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: _hasAnyIcon
-            ? MainAxisAlignment.spaceBetween
-            : MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (_hasAnyIcon)
+          if (leadingIcon != null) ...[
             _IconSlot(icon: leadingIcon, foregroundColor: foregroundColor),
+            const SizedBox(width: CLButton.contentGap),
+          ],
           _Label(label: label, foregroundColor: foregroundColor),
-          if (_hasAnyIcon)
+          if (trailingIcon != null) ...[
+            const SizedBox(width: CLButton.contentGap),
             _IconSlot(icon: trailingIcon, foregroundColor: foregroundColor),
+          ],
         ],
       ),
     );

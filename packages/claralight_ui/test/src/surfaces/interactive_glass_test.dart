@@ -231,6 +231,13 @@ void main() {
     },
   );
 
+  test('InteractiveGlass defaults to LiquidButton blur and press scale', () {
+    const glass = InteractiveGlass(child: SizedBox());
+
+    expect(glass.blur, 2);
+    expect(glass.pressedScale, moreOrLessEquals(1 + 4 / 48));
+  });
+
   testWidgets('InteractiveGlass defaults to 44px with centered child', (
     WidgetTester tester,
   ) async {
