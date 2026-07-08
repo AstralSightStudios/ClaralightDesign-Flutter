@@ -152,6 +152,19 @@ void main() {
     expect(tapped, isTrue);
   });
 
+  testWidgets('CLButton disabled skips interactive press feedback', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: CLButton(label: '继续')),
+      ),
+    );
+
+    expect(find.byType(InteractiveGlass), findsNothing);
+    expect(find.byType(Glass), findsOneWidget);
+  });
+
   testWidgets('CLButton can use non-interactive material indication', (
     WidgetTester tester,
   ) async {
