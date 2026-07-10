@@ -89,6 +89,54 @@ void main() {
       expect(value, isTrue);
     });
 
+    testWidgets('uses nonlinear easing when a tap changes state', (
+      WidgetTester tester,
+    ) async {
+      var value = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                return Center(
+                  child: CLToggle(
+                    value: value,
+                    onChanged: (nextValue) {
+                      setState(() => value = nextValue);
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(CLToggle));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      var positioned = tester.widget<Positioned>(
+        find.byKey(const Key('cl-toggle-thumb')),
+      );
+      final linearOffset =
+          CLToggle.thumbPadding + CLToggle.dragWidth * (40 / 180);
+      expect(positioned.left, greaterThan(linearOffset));
+      expect(
+        positioned.left,
+        lessThan(CLToggle.thumbPadding + CLToggle.dragWidth),
+      );
+
+      await tester.pumpAndSettle();
+      positioned = tester.widget<Positioned>(
+        find.byKey(const Key('cl-toggle-thumb')),
+      );
+      expect(
+        positioned.left,
+        closeTo(CLToggle.thumbPadding + CLToggle.dragWidth, 0.01),
+      );
+    });
+
     testWidgets('drags thumb past midpoint toggles on', (
       WidgetTester tester,
     ) async {

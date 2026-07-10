@@ -1,4 +1,3 @@
-import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/shape.dart';
@@ -7,7 +6,7 @@ import '../theme/theme.dart';
 /// A Claralight toggle switch.
 ///
 /// The track is a 48x24 outlined capsule; the wide 28x20 white thumb can be
-/// tapped or dragged, with the springy Claralight overshoot on release.
+/// tapped or dragged, with a smooth ease-out transition on release.
 /// Geometry and fills follow the ClaraLight design source.
 class CLToggle extends StatefulWidget {
   /// Whether the switch is currently on.
@@ -42,8 +41,7 @@ class CLToggle extends StatefulWidget {
   static const double thumbPadding = 2;
 
   /// Horizontal distance the thumb travels between on/off states.
-  static const double dragWidth =
-      trackWidth - thumbWidth - 2 * thumbPadding;
+  static const double dragWidth = trackWidth - thumbWidth - 2 * thumbPadding;
 
   @override
   State<CLToggle> createState() => _CLToggleState();
@@ -68,8 +66,9 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
     super.initState();
     _currentFraction = widget.value ? 1 : 0;
 
-    _fractionController = AnimationController.unbounded(
+    _fractionController = AnimationController(
       value: _currentFraction,
+      duration: _transitionDuration,
       vsync: this,
     )..addListener(_onFractionChanged);
 
@@ -110,19 +109,16 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
   }
 
   void _animateFractionTo(double target) {
-    _fractionController.animateWith(
-      SpringSimulation(
-        _kSpring,
-        _fractionController.value,
-        target,
-        0,
-        tolerance: Tolerance.defaultTolerance,
-      ),
-    );
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _fractionController.value = target;
+      return;
+    }
+
+    _fractionController.animateTo(target, curve: Curves.easeOutQuart);
   }
 
   void _commitSelectedChange(bool selected) {
-    _fractionController.value = selected ? 1 : 0;
+    _animateFractionTo(selected ? 1 : 0);
     widget.onChanged!(selected);
     _scheduleControlledResync(selected);
   }
@@ -189,11 +185,7 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
     return Directionality.of(context) != TextDirection.rtl;
   }
 
-  static const SpringDescription _kSpring = SpringDescription(
-    mass: 1,
-    stiffness: 520,
-    damping: 16,
-  );
+  static const Duration _transitionDuration = Duration(milliseconds: 180);
 
   @override
   Widget build(BuildContext context) {
@@ -241,8 +233,7 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
                 height: CLToggle.trackHeight,
                 decoration: clSmoothDecoration(
                   color: trackColor,
-                  borderRadius:
-                      BorderRadius.circular(CLToggle.trackHeight / 2),
+                  borderRadius: BorderRadius.circular(CLToggle.trackHeight / 2),
                   side: BorderSide(color: theme.colors.outline),
                 ),
               ),
