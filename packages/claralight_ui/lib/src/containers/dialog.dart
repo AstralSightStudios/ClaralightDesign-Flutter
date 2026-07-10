@@ -72,10 +72,9 @@ class CLDialog extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: DefaultTextStyle(
-                  style: theme.typography.body.copyWith(
-                    fontWeight: FontWeight.w400,
-                    color: theme.colors.textPrimary,
-                  ),
+                  style: theme.typography.body
+                      .withCLWeight(FontWeight.w400)
+                      .copyWith(color: theme.colors.textPrimary),
                   textAlign: TextAlign.center,
                   child: child,
                 ),
@@ -147,7 +146,7 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
   Duration get transitionDuration => const Duration(milliseconds: 380);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 160);
 
   @override
   Widget buildPage(
@@ -158,7 +157,9 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
     final scale = CurvedAnimation(
       parent: animation,
       curve: const _SpringOutCurve(),
-      reverseCurve: Curves.easeInCubic,
+      // Accelerating shrink on the way out; the fade below spans the whole
+      // reverse so the dialog melts instead of hanging and blinking off.
+      reverseCurve: Curves.easeIn,
     );
 
     return SafeArea(
@@ -169,6 +170,7 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
             opacity: CurvedAnimation(
               parent: animation,
               curve: const Interval(0, 0.4, curve: Curves.easeOut),
+              reverseCurve: Curves.easeOut,
             ),
             child: ScaleTransition(
               scale: Tween<double>(begin: 0.86, end: 1).animate(scale),

@@ -2,6 +2,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/control_size.dart';
+import '../foundation/shape.dart';
 import '../theme/theme.dart';
 
 /// The Claralight segmented control — the 亮屏/息屏 pill of the mockups.
@@ -82,7 +83,7 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
     final enabled = widget.onChanged != null;
     final textStyle = widget.size == CLControlSize.small
         ? theme.typography.callout
-        : theme.typography.body.copyWith(fontWeight: FontWeight.w600);
+        : theme.typography.body.withCLWeight(FontWeight.w600);
     const inset = 3.0;
 
     return Semantics(
@@ -97,7 +98,7 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
                 inset + segmentWidth * _position.value.clamp(0, widget.segments.length - 1);
 
             return DecoratedBox(
-              decoration: BoxDecoration(
+              decoration: clSmoothDecoration(
                 color: theme.colors.track,
                 borderRadius: BorderRadius.circular(_height / 2),
               ),
@@ -111,7 +112,7 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
                     child: DecoratedBox(
                       // The raised segment is another white-alpha layer on
                       // top of the track, per the design source.
-                      decoration: BoxDecoration(
+                      decoration: clSmoothDecoration(
                         color: theme.colors.control,
                         borderRadius:
                             BorderRadius.circular((_height - inset * 2) / 2),

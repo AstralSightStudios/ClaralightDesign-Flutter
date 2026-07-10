@@ -1,6 +1,7 @@
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/shape.dart';
 import '../theme/theme.dart';
 
 /// A Claralight toggle switch.
@@ -238,11 +239,11 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
                 key: _trackKey,
                 width: CLToggle.trackWidth,
                 height: CLToggle.trackHeight,
-                decoration: BoxDecoration(
+                decoration: clSmoothDecoration(
                   color: trackColor,
                   borderRadius:
                       BorderRadius.circular(CLToggle.trackHeight / 2),
-                  border: Border.all(color: theme.colors.outline),
+                  side: BorderSide(color: theme.colors.outline),
                 ),
               ),
               // Thumb
@@ -275,10 +276,10 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
     // toggle turns on. Disabled thumbs stay dimmer.
     final alpha = enabled ? _lerpDouble(0.7, 1, _currentFraction) : 0.45;
     return DecoratedBox(
-      decoration: BoxDecoration(
+      decoration: clSmoothDecoration(
         color: Color.fromRGBO(255, 255, 255, alpha),
         borderRadius: BorderRadius.circular(CLToggle.thumbHeight / 2),
-        boxShadow: const [
+        shadows: const [
           BoxShadow(
             color: Color(0x40000000),
             blurRadius: 6,

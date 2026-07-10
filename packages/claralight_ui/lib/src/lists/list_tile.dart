@@ -79,7 +79,7 @@ class _CLListTileState extends State<CLListTile> {
 
     final textStyle = (widget.size == CLControlSize.large
             ? theme.typography.body
-            : theme.typography.callout.copyWith(fontWeight: FontWeight.w500))
+            : theme.typography.callout.withCLWeight(FontWeight.w500))
         .copyWith(
       color: widget.outlined
           ? colors.textHint

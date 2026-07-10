@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../foundation/shape.dart';
 import '../theme/theme.dart';
 
 /// A Claralight linear progress bar.
@@ -75,11 +76,11 @@ class _CLProgressBarState extends State<CLProgressBar>
       child: SizedBox(
         height: widget.height,
         child: DecoratedBox(
-          decoration: BoxDecoration(
+          decoration: clSmoothDecoration(
             color: theme.colors.track,
             borderRadius: radius,
           ),
-          child: ClipRRect(
+          child: ClipRSuperellipse(
             borderRadius: radius,
             child: widget.value != null
                 ? Align(
@@ -90,7 +91,7 @@ class _CLProgressBarState extends State<CLProgressBar>
                       widthFactor: widget.value!.clamp(0.0, 1.0),
                       heightFactor: 1,
                       child: DecoratedBox(
-                        decoration: BoxDecoration(
+                        decoration: clSmoothDecoration(
                           color: fillColor,
                           borderRadius: radius,
                         ),
@@ -148,8 +149,8 @@ class _SweepPainter extends CustomPainter {
         stops: const [0, 0.25, 0.75, 1],
       ).createShader(rect);
 
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(radius)),
+    canvas.drawRSuperellipse(
+      RSuperellipse.fromRectAndRadius(rect, Radius.circular(radius)),
       paint,
     );
   }

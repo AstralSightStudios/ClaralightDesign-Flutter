@@ -92,17 +92,17 @@ class CLMenu extends StatefulWidget {
 }
 
 class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
-  // Width springs open fast and bouncy; height is softer and lags half a
-  // beat behind, which gives the panel its jelly stretch.
+  // Width springs open fast; height lags a beat behind and lands with a
+  // single soft overshoot — an unfurl, not a wobble.
   static const _openSpringW = SpringDescription(
     mass: 1,
-    stiffness: 600,
-    damping: 30,
+    stiffness: 700,
+    damping: 34,
   );
   static const _openSpringH = SpringDescription(
     mass: 1,
-    stiffness: 260,
-    damping: 16,
+    stiffness: 380,
+    damping: 26,
   );
   static const _closeSpringW = SpringDescription(
     mass: 1,
@@ -189,28 +189,31 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       _contentHeight,
       math.max(growDown ? spaceBelow : spaceAbove, widget.buttonSize),
     );
-    _startSize = widget.buttonSize * 1.3;
+    // The morph starts and ends exactly on the anchor button's circle so
+    // the panel and the button always read as one object; the "burst" out
+    // of the button comes from the springs' initial velocity alone.
+    _startSize = widget.buttonSize;
 
     _open = true;
     _closing = false;
     _portal.show();
     // The initial velocity makes the panel burst out of the button before
-    // the springs settle it. Height starts a beat after width, so the panel
-    // widens first, then stretches down and bounces.
+    // the springs settle it. Height starts a beat after width, so the
+    // panel widens first, then unfurls downward.
     _morphW.animateWith(
-      SpringSimulation(_openSpringW, _morphW.value, 1, 3,
+      SpringSimulation(_openSpringW, _morphW.value, 1, 2.2,
           tolerance: Tolerance.defaultTolerance),
     );
-    Future.delayed(const Duration(milliseconds: 45), () {
+    Future.delayed(const Duration(milliseconds: 30), () {
       if (!mounted || !_open) return;
       _morphH.animateWith(
-        SpringSimulation(_openSpringH, _morphH.value, 1, 2.4,
+        SpringSimulation(_openSpringH, _morphH.value, 1, 1.6,
             tolerance: Tolerance.defaultTolerance),
       );
     });
     _content.animateTo(
       1,
-      duration: const Duration(milliseconds: 360),
+      duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
     );
     widget.onOpened?.call();
@@ -250,10 +253,13 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       child: CompositedTransformTarget(
         link: _link,
         child: AnimatedBuilder(
-          animation: _morphW,
+          animation: Listenable.merge([_morphW, _morphH]),
           builder: (context, child) {
-            final hidden = (_morphW.value * 5).clamp(0.0, 1.0);
-            return Opacity(opacity: 1 - hidden, child: child);
+            // Crossfades with the panel (which uses the same curve
+            // inverted), so open and close read as one surface morphing.
+            final presence = (math.max(_morphW.value, _morphH.value) * 5)
+                .clamp(0.0, 1.0);
+            return Opacity(opacity: 1 - presence, child: child);
           },
           child: CLPressable(
             onTap: _toggle,
@@ -318,71 +324,74 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
     final reveal = _content.value;
     final opacity = math.pow(reveal, 0.6).toDouble();
-    final sigma = 16 * math.pow(1 - reveal, 1.3).toDouble();
     final shadowStrength = math.max(tW, tH).clamp(0.0, 1.0);
+    // Mirrors the anchor button's fade so the two crossfade in place
+    // instead of popping between states.
+    final presence = (math.max(tW, tH) * 5).clamp(0.0, 1.0);
 
     return IgnorePointer(
       ignoring: !_open,
-      child: Container(
-        width: w,
-        height: h,
-        decoration: clSmoothDecoration(
-          borderRadius: borderRadius,
-          side: BorderSide(color: theme.colors.outlineStrong),
-          shadows: [
-            BoxShadow(
-              color: Color.fromARGB((0x40 * shadowStrength).round(), 0, 0, 0),
-              blurRadius: 36,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
-        child: ClipRSuperellipse(
-          borderRadius: borderRadius,
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                IgnorePointer(
-                  child: ColoredBox(color: theme.colors.frost),
-                ),
-                // While morphing, the surface gathers light — a milky wash
-                // that clears as the content sharpens.
-                IgnorePointer(
-                  child: ColoredBox(
-                    color: Color.fromRGBO(
-                      255,
-                      255,
-                      255,
-                      0.16 * (1 - reveal) * math.sqrt(shadowStrength),
+      child: Opacity(
+        opacity: presence,
+        child: Container(
+          width: w,
+          height: h,
+          decoration: clSmoothDecoration(
+            borderRadius: borderRadius,
+            side: BorderSide(color: theme.colors.outlineStrong),
+            shadows: [
+              BoxShadow(
+                color:
+                    Color.fromARGB((0x40 * shadowStrength).round(), 0, 0, 0),
+                blurRadius: 36,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: ClipRSuperellipse(
+            borderRadius: borderRadius,
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  IgnorePointer(
+                    child: ColoredBox(color: theme.colors.frost),
+                  ),
+                  // A faint wash of light while morphing, gone by the time
+                  // the content lands.
+                  IgnorePointer(
+                    child: ColoredBox(
+                      color: Color.fromRGBO(
+                        255,
+                        255,
+                        255,
+                        0.06 * (1 - reveal) * math.sqrt(shadowStrength),
+                      ),
                     ),
                   ),
-                ),
-                OverflowBox(
-                  alignment: _anchor,
-                  minWidth: widget.menuWidth,
-                  maxWidth: widget.menuWidth,
-                  minHeight: _menuHeight,
-                  maxHeight: _menuHeight,
-                  child: Transform(
+                  // The content is laid out at its final size and pinned to
+                  // the anchor corner; the growing panel reveals it while a
+                  // slight *uniform* scale makes it emerge from the button.
+                  // Never stretched — rows don't squash while unfurling.
+                  OverflowBox(
                     alignment: _anchor,
-                    transform: Matrix4.identity()
-                      ..scaleByDouble(
-                          w / widget.menuWidth, h / _menuHeight, 1, 1),
-                    child: Opacity(
-                      opacity: opacity.clamp(0.0, 1.0),
-                      child: sigma < 0.1
-                          ? _buildContent()
-                          : ImageFiltered(
-                              imageFilter: ui.ImageFilter.blur(
-                                  sigmaX: sigma, sigmaY: sigma),
-                              child: _buildContent(),
-                            ),
+                    minWidth: widget.menuWidth,
+                    maxWidth: widget.menuWidth,
+                    minHeight: _menuHeight,
+                    maxHeight: _menuHeight,
+                    child: Transform.scale(
+                      scale: 0.8 +
+                          0.2 * math.min(tW, tH).clamp(0.0, 1.0),
+                      alignment: _anchor,
+                      child: Opacity(
+                        opacity: opacity.clamp(0.0, 1.0),
+                        child: _buildContent(),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -767,8 +776,11 @@ class _GlowPainter extends CustomPainter {
         ..color =
             Color.fromRGBO(255, 255, 255, 0.015 * strength + 0.05 * press)
         ..style = PaintingStyle.fill;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(row.deflate(3), const Radius.circular(12)),
+      canvas.drawRSuperellipse(
+        RSuperellipse.fromRectAndRadius(
+          row.deflate(3),
+          const Radius.circular(12),
+        ),
         highlight,
       );
     }

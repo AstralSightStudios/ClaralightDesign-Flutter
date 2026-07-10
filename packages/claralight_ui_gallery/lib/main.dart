@@ -47,10 +47,12 @@ class _GalleryHomeState extends State<GalleryHome> {
   @override
   void initState() {
     super.initState();
-    if (kAutoOpen == 'dialog' || kAutoOpen == 'sheet') {
+    if (kAutoOpen == 'dialog' || kAutoOpen == 'sheet' || kAutoOpen == 'picker') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (kAutoOpen == 'dialog') {
+        if (kAutoOpen == 'picker') {
+          CLColorPicker.show(context, color: const Color(0xFF297E7B));
+        } else if (kAutoOpen == 'dialog') {
           CLDialog.show(
             context,
             title: '导出表盘',
@@ -616,10 +618,9 @@ class _ProgressSectionState extends State<_ProgressSection> {
           Text.rich(
             TextSpan(
               text: '占用固件内存: ',
-              style: theme.typography.callout.copyWith(
-                fontWeight: FontWeight.w500,
-                color: theme.colors.textTertiary,
-              ),
+              style: theme.typography.callout
+                  .withCLWeight(FontWeight.w500)
+                  .copyWith(color: theme.colors.textTertiary),
               children: [
                 TextSpan(
                   text: '${(_progress * 1024).round()}KB/1024KB',
@@ -968,10 +969,9 @@ class _SheetDemoContentState extends State<_SheetDemoContent> {
         Text.rich(
           TextSpan(
             text: '占用固件内存: ',
-            style: theme.typography.callout.copyWith(
-              fontWeight: FontWeight.w500,
-              color: theme.colors.textTertiary,
-            ),
+            style: theme.typography.callout
+                .withCLWeight(FontWeight.w500)
+                .copyWith(color: theme.colors.textTertiary),
             children: [
               TextSpan(
                 text: '368KB/1024KB',
@@ -1041,16 +1041,26 @@ class _MenuSectionState extends State<_MenuSection> {
     super.initState();
     if (kAutoOpen == 'menu') {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await Future.delayed(const Duration(milliseconds: 800));
-        final box =
-            _menuKey.currentContext?.findRenderObject() as RenderBox?;
-        if (box == null || !mounted) return;
-        final center = box.localToGlobal(box.size.center(Offset.zero));
-        GestureBinding.instance
-            .handlePointerEvent(PointerDownEvent(pointer: 99, position: center));
-        await Future.delayed(const Duration(milliseconds: 90));
-        GestureBinding.instance
-            .handlePointerEvent(PointerUpEvent(pointer: 99, position: center));
+        Future<void> tap(Offset at) async {
+          GestureBinding.instance
+              .handlePointerEvent(PointerDownEvent(pointer: 99, position: at));
+          await Future.delayed(const Duration(milliseconds: 90));
+          GestureBinding.instance
+              .handlePointerEvent(PointerUpEvent(pointer: 99, position: at));
+        }
+
+        // Open/close loop so captures can catch both morph directions.
+        while (mounted) {
+          await Future.delayed(const Duration(milliseconds: 800));
+          final box =
+              _menuKey.currentContext?.findRenderObject() as RenderBox?;
+          if (box == null || !mounted) return;
+          final center = box.localToGlobal(box.size.center(Offset.zero));
+          await tap(center);
+          await Future.delayed(const Duration(milliseconds: 1600));
+          await tap(center.translate(0, -420));
+          await Future.delayed(const Duration(milliseconds: 900));
+        }
       });
     }
   }

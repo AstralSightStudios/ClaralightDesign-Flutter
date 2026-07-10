@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../foundation/shape.dart';
 import '../surfaces/pressable.dart';
 import '../theme/theme.dart';
 
@@ -46,10 +47,10 @@ class CLColorSwatchItem extends StatelessWidget {
           width: outerWidth,
           height: outerHeight,
           padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
+          decoration: clSmoothDecoration(
             color: selected ? theme.colors.control : const Color(0x00000000),
             borderRadius: BorderRadius.circular(outerHeight / 2),
-            border: Border.all(
+            side: BorderSide(
               color: selected
                   ? theme.colors.textPrimary.withValues(alpha: 0.75)
                   : const Color(0x00000000),
@@ -57,7 +58,7 @@ class CLColorSwatchItem extends StatelessWidget {
             ),
           ),
           child: DecoratedBox(
-            decoration: BoxDecoration(
+            decoration: clSmoothDecoration(
               color: color,
               borderRadius: BorderRadius.circular(size / 2),
             ),

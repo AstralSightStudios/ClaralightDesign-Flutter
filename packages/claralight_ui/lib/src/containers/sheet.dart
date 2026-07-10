@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../foundation/shape.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
 
@@ -51,7 +52,7 @@ class CLSheet extends StatelessWidget {
                 width: 63,
                 height: 5,
                 margin: const EdgeInsets.only(top: 8),
-                decoration: BoxDecoration(
+                decoration: clSmoothDecoration(
                   color: theme.colors.textHint,
                   borderRadius: BorderRadius.circular(2.5),
                 ),

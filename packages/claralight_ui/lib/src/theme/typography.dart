@@ -17,7 +17,7 @@ class CLTypography {
   // `packages/<package>/` prefix, otherwise Flutter silently falls back
   // to system fonts (wrong weights, no mono).
 
-  /// The bundled UI family.
+  /// The bundled UI family (variable font).
   static const String uiFamily = 'packages/claralight_ui/MiSans';
 
   /// The bundled monospace family for values and units.
@@ -25,6 +25,20 @@ class CLTypography {
 
   /// The bundled display family for large headings.
   static const String displayFamily = 'packages/claralight_ui/ChillDINGothic';
+
+  /// Maps a [FontWeight] onto MiSans VF's non-standard `wght` axis
+  /// (Regular sits at 330, not 400; the axis spans 150–700).
+  static double miSansWght(FontWeight weight) => switch (weight) {
+        FontWeight.w100 => 150,
+        FontWeight.w200 => 200,
+        FontWeight.w300 => 250,
+        FontWeight.w400 => 330,
+        FontWeight.w500 => 380,
+        FontWeight.w600 => 450,
+        FontWeight.w700 => 520,
+        FontWeight.w800 => 630,
+        _ => 700,
+      };
 
   /// Font family used across the design language.
   final String fontFamily;
@@ -90,6 +104,7 @@ class CLTypography {
         fontFamilyFallback: fontFamilyFallback,
         fontSize: size,
         fontWeight: weight,
+        fontVariations: [FontVariation('wght', miSansWght(weight))],
         height: height / size,
         letterSpacing: letterSpacing,
         decoration: TextDecoration.none,
@@ -129,6 +144,12 @@ class CLTypography {
     );
   }
 
+  static final _wghtCache = <FontWeight, List<FontVariation>>{};
+
+  /// The [FontVariation] list matching [weight] on MiSans VF.
+  static List<FontVariation> variationsFor(FontWeight weight) =>
+      _wghtCache[weight] ??= [FontVariation('wght', miSansWght(weight))];
+
   CLTypography copyWith({
     String? fontFamily,
     List<String>? fontFamilyFallback,
@@ -154,6 +175,23 @@ class CLTypography {
       caption: caption ?? this.caption,
       mono: mono ?? this.mono,
       monoStrong: monoStrong ?? this.monoStrong,
+    );
+  }
+}
+
+/// Weight changes on ClaraLight text styles.
+///
+/// MiSans ships as a variable font, and a bare `copyWith(fontWeight:)`
+/// does not move a variable font's `wght` axis — use this instead:
+///
+/// ```dart
+/// theme.typography.body.withCLWeight(FontWeight.w600)
+/// ```
+extension CLTextStyleWeight on TextStyle {
+  TextStyle withCLWeight(FontWeight weight) {
+    return copyWith(
+      fontWeight: weight,
+      fontVariations: CLTypography.variationsFor(weight),
     );
   }
 }

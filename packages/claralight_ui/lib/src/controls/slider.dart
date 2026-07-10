@@ -1,6 +1,7 @@
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/shape.dart';
 import '../theme/theme.dart';
 
 /// A Claralight slider.
@@ -33,23 +34,49 @@ class CLSlider extends StatefulWidget {
   State<CLSlider> createState() => _CLSliderState();
 }
 
-class _CLSliderState extends State<CLSlider>
-    with SingleTickerProviderStateMixin {
+class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
   static const _spring = SpringDescription(mass: 1, stiffness: 520, damping: 18);
 
   late final AnimationController _press;
-  bool _dragging = false;
+
+  /// Animated track fraction. Follows the finger 1:1 while dragging and
+  /// springs to the new position when the value jumps (track taps,
+  /// programmatic changes).
+  late final AnimationController _visual;
+
+  /// Whether the pointer is actively tracking (drag) — jumps skip the
+  /// spring so the thumb never lags behind the finger.
+  bool _tracking = false;
 
   @override
   void initState() {
     super.initState();
     _press = AnimationController.unbounded(vsync: this)
       ..addListener(() => setState(() {}));
+    _visual = AnimationController.unbounded(
+      value: _fraction,
+      vsync: this,
+    )..addListener(() => setState(() {}));
+  }
+
+  @override
+  void didUpdateWidget(CLSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final target = _fraction;
+    if (_tracking) {
+      _visual.value = target;
+    } else if ((target - _visual.value).abs() > 0.0005) {
+      _visual.animateWith(
+        SpringSimulation(_spring, _visual.value, target, 0,
+            tolerance: Tolerance.defaultTolerance),
+      );
+    }
   }
 
   @override
   void dispose() {
     _press.dispose();
+    _visual.dispose();
     super.dispose();
   }
 
@@ -66,8 +93,8 @@ class _CLSliderState extends State<CLSlider>
     widget.onChanged!(widget.min + fraction * (widget.max - widget.min));
   }
 
-  void _setPressed(bool pressed) {
-    _dragging = pressed;
+  void _setPressed(bool pressed, {bool tracking = false}) {
+    _tracking = pressed && tracking;
     if (pressed) {
       _press.animateTo(
         1,
@@ -104,10 +131,12 @@ class _CLSliderState extends State<CLSlider>
           builder: (context, constraints) {
             final width = constraints.maxWidth;
             final usable = width - CLSlider.thumbSize;
-            final thumbLeft = usable * _fraction;
+            final thumbLeft = usable * _visual.value.clamp(0.0, 1.0);
 
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
+              // Track taps spring the thumb to the new position; drags
+              // keep it glued to the finger.
               onTapDown: (d) {
                 _setPressed(true);
                 _update(d.localPosition, width);
@@ -115,13 +144,13 @@ class _CLSliderState extends State<CLSlider>
               onTapUp: (_) => _setPressed(false),
               onTapCancel: () => _setPressed(false),
               onHorizontalDragStart: (d) {
-                _setPressed(true);
+                _setPressed(true, tracking: true);
                 _update(d.localPosition, width);
               },
               onHorizontalDragUpdate: (d) => _update(d.localPosition, width),
               onHorizontalDragEnd: (_) => _setPressed(false),
               onHorizontalDragCancel: () {
-                if (_dragging) _setPressed(false);
+                if (_tracking) _setPressed(false);
               },
               child: Stack(
                 alignment: Alignment.centerLeft,
@@ -133,7 +162,7 @@ class _CLSliderState extends State<CLSlider>
                     top: (CLSlider.hitHeight - CLSlider.trackHeight) / 2,
                     height: CLSlider.trackHeight,
                     child: DecoratedBox(
-                      decoration: BoxDecoration(
+                      decoration: clSmoothDecoration(
                         color: theme.colors.track,
                         borderRadius:
                             BorderRadius.circular(CLSlider.trackHeight / 2),
@@ -147,7 +176,7 @@ class _CLSliderState extends State<CLSlider>
                     height: CLSlider.trackHeight,
                     width: thumbLeft + CLSlider.thumbSize / 2,
                     child: DecoratedBox(
-                      decoration: BoxDecoration(
+                      decoration: clSmoothDecoration(
                         color: active,
                         borderRadius:
                             BorderRadius.circular(CLSlider.trackHeight / 2),

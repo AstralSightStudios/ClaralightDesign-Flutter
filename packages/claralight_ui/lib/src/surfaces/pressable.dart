@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import '../theme/theme.dart';
+
 /// The Claralight press interaction, independent of the surface it wraps.
 ///
 /// Adds the signature springy feel to any child — typically a [CLSurface]:
@@ -29,6 +31,12 @@ class CLPressable extends StatefulWidget {
   /// Whether the pointer-following highlight is drawn.
   final bool showHighlight;
 
+  /// Flat wash painted across the whole surface while pressed, under the
+  /// pointer glow, so even transparent (ghost) surfaces show a clear
+  /// pressed boundary. Null uses the theme's control fill; pass a fully
+  /// transparent color to disable.
+  final Color? pressedTint;
+
   /// Resistance applied to drag deformation. Higher = stiffer.
   final double dragTension;
 
@@ -47,6 +55,7 @@ class CLPressable extends StatefulWidget {
     this.pressedScale = 1 + 4 / 48,
     this.deformOnDrag = true,
     this.showHighlight = true,
+    this.pressedTint,
     this.dragTension = 1.8,
     this.spring = const SpringDescription(mass: 1, stiffness: 520, damping: 16),
     this.duration = const Duration(milliseconds: 170),
@@ -179,6 +188,8 @@ class _CLPressableState extends State<CLPressable>
             Widget result = widget.child;
 
             if (widget.showHighlight) {
+              final tint =
+                  widget.pressedTint ?? CLTheme.of(context).colors.control;
               result = Stack(
                 fit: StackFit.passthrough,
                 children: [
@@ -190,6 +201,7 @@ class _CLPressableState extends State<CLPressable>
                         child: CustomPaint(
                           painter: _HighlightPainter(
                             pointer: _pointerPosition,
+                            tint: tint,
                             press:
                                 Curves.easeOut.transform(_highlight.value),
                           ),
@@ -227,21 +239,32 @@ class _CLPressableState extends State<CLPressable>
 
 }
 
-/// A dim, wide light that sits exactly under the pointer.
+/// The pressed-state wash and the dim, wide light under the pointer.
 ///
-/// Painted as a true circle in pixel space (never stretched to the box
-/// like a box-fitted [RadialGradient]), with most of the energy in the
-/// outer falloff so it reads as light diffusing through the surface
-/// rather than a spotlight.
+/// The wash fills the whole surface so the pressed boundary stays legible
+/// even on transparent (ghost) fills. The glow is painted as a true circle
+/// in pixel space (never stretched to the box like a box-fitted
+/// [RadialGradient]), with most of the energy in the outer falloff so it
+/// reads as light diffusing through the surface rather than a spotlight.
 class _HighlightPainter extends CustomPainter {
   final Offset pointer;
+  final Color tint;
   final double press;
 
-  const _HighlightPainter({required this.pointer, required this.press});
+  const _HighlightPainter({
+    required this.pointer,
+    required this.tint,
+    required this.press,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (press <= 0.01 || size.isEmpty) return;
+
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = tint.withValues(alpha: tint.a * press),
+    );
 
     final radius = math.max(size.width, size.height) * 1.1;
     final alpha = 0.10 * press;
@@ -262,5 +285,7 @@ class _HighlightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_HighlightPainter oldDelegate) =>
-      pointer != oldDelegate.pointer || press != oldDelegate.press;
+      pointer != oldDelegate.pointer ||
+      press != oldDelegate.press ||
+      tint != oldDelegate.tint;
 }

@@ -3,6 +3,9 @@ import 'package:flutter/widgets.dart';
 import 'colors.dart';
 import 'typography.dart';
 
+export 'colors.dart';
+export 'typography.dart';
+
 /// Corner radii of the Claralight shape language.
 @immutable
 class CLRadii {

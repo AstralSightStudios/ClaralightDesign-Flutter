@@ -28,8 +28,11 @@ void main() {
       final track = tester.widget<Container>(
         find.byKey(const Key('cl-toggle-track')),
       );
+      final shape =
+          (track.decoration! as ShapeDecoration).shape
+              as RoundedSuperellipseBorder;
       expect(
-        (track.decoration! as BoxDecoration).borderRadius,
+        shape.borderRadius,
         BorderRadius.circular(CLToggle.trackHeight / 2),
       );
     });
@@ -264,7 +267,7 @@ void main() {
       final offTrack = tester.widget<Container>(
         find.byKey(const Key('cl-toggle-track')),
       );
-      final offColor = (offTrack.decoration! as BoxDecoration).color!;
+      final offColor = (offTrack.decoration! as ShapeDecoration).color!;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -279,7 +282,7 @@ void main() {
       final onTrack = tester.widget<Container>(
         find.byKey(const Key('cl-toggle-track')),
       );
-      final onColor = (onTrack.decoration! as BoxDecoration).color!;
+      final onColor = (onTrack.decoration! as ShapeDecoration).color!;
 
       expect(offColor, isNot(equals(onColor)));
     });

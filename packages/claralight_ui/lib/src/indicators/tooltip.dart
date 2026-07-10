@@ -145,10 +145,9 @@ class _CLTooltipState extends State<CLTooltip>
                   ),
                   child: Text(
                     widget.message,
-                    style: theme.typography.callout.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: theme.colors.textSecondary,
-                    ),
+                    style: theme.typography.callout
+                        .withCLWeight(FontWeight.w500)
+                        .copyWith(color: theme.colors.textSecondary),
                   ),
                 ),
               ),

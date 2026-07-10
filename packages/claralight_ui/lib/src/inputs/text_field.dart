@@ -33,6 +33,11 @@ class CLTextField extends StatefulWidget {
   /// the design's "X 12px" inspector inputs.
   final bool mono;
 
+  /// Corner radius override; null uses the theme's control radius. Use a
+  /// larger value inside large-radius containers so the corners stay
+  /// optically concentric.
+  final double? borderRadius;
+
   /// Fixed width; null fills the parent.
   final double? width;
 
@@ -51,6 +56,7 @@ class CLTextField extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.size = CLControlSize.large,
     this.mono = false,
+    this.borderRadius,
     this.width,
   });
 
@@ -143,7 +149,8 @@ class _CLTextFieldState extends State<CLTextField> {
           color: widget.enabled
               ? colors.control
               : colors.control.withValues(alpha: colors.control.a * 0.5),
-          borderRadius: BorderRadius.circular(theme.radii.control),
+          borderRadius:
+              BorderRadius.circular(widget.borderRadius ?? theme.radii.control),
           // Borderless at rest, per the design; the accent ring appears
           // only on focus.
           side: BorderSide(
@@ -177,10 +184,8 @@ class _CLTextFieldState extends State<CLTextField> {
       ),
       child: DefaultTextStyle.merge(
         style: (widget.mono ? theme.typography.mono : theme.typography.callout)
-            .copyWith(
-          fontWeight: FontWeight.w400,
-          color: theme.colors.textTertiary,
-        ),
+            .withCLWeight(FontWeight.w400)
+            .copyWith(color: theme.colors.textTertiary),
         child: child,
       ),
     );

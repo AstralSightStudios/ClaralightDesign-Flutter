@@ -83,10 +83,9 @@ class _CLStepperState extends State<CLStepper> {
     final unitStyle = theme.typography.mono.copyWith(
       color: _enabled ? colors.textTertiary : colors.textDisabled,
     );
-    final prefixStyle = theme.typography.callout.copyWith(
-      fontWeight: FontWeight.w400,
-      color: _enabled ? colors.textTertiary : colors.textDisabled,
-    );
+    final prefixStyle = theme.typography.callout
+        .withCLWeight(FontWeight.w400)
+        .copyWith(color: _enabled ? colors.textTertiary : colors.textDisabled);
 
     return SizedBox(
       width: widget.width,

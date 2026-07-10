@@ -24,16 +24,11 @@ flutter:
   # Claralight bundles its design fonts. See fonts/FONTS.md for sources
   # and licenses. All three are free for commercial use.
   fonts:
+    # Variable font; the wght axis is driven via TextStyle.fontVariations
+    # (see CLTypography.miSansWght — MiSans VF uses a non-standard axis).
     - family: MiSans
       fonts:
-        - asset: fonts/MiSans-Regular.ttf
-          weight: 400
-        - asset: fonts/MiSans-Medium.ttf
-          weight: 500
-        - asset: fonts/MiSans-Demibold.ttf
-          weight: 600
-        - asset: fonts/MiSans-Semibold.ttf
-          weight: 700
+        - asset: fonts/MiSansVF.ttf
     - family: Sarasa Mono SC
       fonts:
         - asset: fonts/SarasaMonoSC-Regular.ttf

@@ -18,6 +18,11 @@ class CLToolbar extends StatelessWidget {
   final double height;
 
   /// Horizontal padding inside the capsule.
+  ///
+  /// Optically compensated: the capsule's curved ends bow away from the
+  /// content, so an end inset equal to the vertical gap (4 for a 36px
+  /// control in the 44px capsule) still *reads* wider. One point tighter
+  /// makes all four sides look even.
   final double padding;
 
   /// Gap between children.
@@ -28,7 +33,7 @@ class CLToolbar extends StatelessWidget {
     required this.children,
     this.dividers = false,
     this.height = 44,
-    this.padding = 6,
+    this.padding = 3,
     this.spacing = 2,
   });
 

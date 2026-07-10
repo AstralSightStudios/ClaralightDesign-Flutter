@@ -26,12 +26,18 @@ class CLColorPicker extends StatefulWidget {
   /// Height of the saturation/value area.
   final double areaHeight;
 
+  /// Corner radius of the SV area, preview chip and hex field. Null uses
+  /// the theme's medium radius, which sits optically concentric inside a
+  /// [CLDialog] (36 outer − 24 content inset ≈ 12).
+  final double? cornerRadius;
+
   const CLColorPicker({
     super.key,
     required this.color,
     required this.onChanged,
     this.swatches = const [],
     this.areaHeight = 160,
+    this.cornerRadius,
   });
 
   /// Presents a picker in a [CLDialog] and resolves with the chosen color,
@@ -148,6 +154,7 @@ class _CLColorPickerState extends State<CLColorPicker> {
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final color = _hsv.toColor();
+    final radius = widget.cornerRadius ?? theme.radii.medium;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -155,7 +162,7 @@ class _CLColorPickerState extends State<CLColorPicker> {
       children: [
         SizedBox(
           height: widget.areaHeight,
-          child: _SVArea(hsv: _hsv, onChanged: _emit),
+          child: _SVArea(hsv: _hsv, cornerRadius: radius, onChanged: _emit),
         ),
         const SizedBox(height: 12),
         SizedBox(
@@ -168,11 +175,11 @@ class _CLColorPickerState extends State<CLColorPicker> {
         Row(
           children: [
             Container(
-              width: 30,
-              height: 30,
+              width: 36,
+              height: 36,
               decoration: clSmoothDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(radius),
                 side: BorderSide(color: theme.colors.outline),
               ),
             ),
@@ -190,6 +197,7 @@ class _CLColorPickerState extends State<CLColorPicker> {
                   controller: _hex,
                   mono: true,
                   size: CLControlSize.medium,
+                  borderRadius: radius,
                   prefix: const Text('#'),
                   onSubmitted: _submitHex,
                 ),
@@ -221,9 +229,14 @@ class _CLColorPickerState extends State<CLColorPicker> {
 /// Saturation (x) / value (y) area with a loupe thumb.
 class _SVArea extends StatelessWidget {
   final HSVColor hsv;
+  final double cornerRadius;
   final ValueChanged<HSVColor> onChanged;
 
-  const _SVArea({required this.hsv, required this.onChanged});
+  const _SVArea({
+    required this.hsv,
+    required this.cornerRadius,
+    required this.onChanged,
+  });
 
   void _pick(Offset local, Size size) {
     final s = (local.dx / size.width).clamp(0.0, 1.0);
@@ -234,7 +247,7 @@ class _SVArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
-    final radius = BorderRadius.circular(theme.radii.control);
+    final radius = BorderRadius.circular(cornerRadius);
 
     return LayoutBuilder(
       builder: (context, constraints) {
