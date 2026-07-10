@@ -1,14 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:flutter/widgets.dart';
 
-import '../surfaces/glass.dart';
+import '../theme/theme.dart';
 
-/// A liquid-style toggle switch inspired by the Android Compose
-/// [LiquidToggle] component.
+/// A Claralight toggle switch.
 ///
-/// The track is a 64x28 dp capsule whose color interpolates between a
-/// neutral track tint and the system accent color. The thumb is a 40x24 dp
-/// glass capsule that can be dragged or tapped to toggle [value].
+/// The track is a 48x24 outlined capsule; the wide 28x20 white thumb can be
+/// tapped or dragged, with the springy Claralight overshoot on release.
+/// Geometry and fills follow the ClaraLight design source.
 class CLToggle extends StatefulWidget {
   /// Whether the switch is currently on.
   final bool value;
@@ -16,25 +15,34 @@ class CLToggle extends StatefulWidget {
   /// Called when the user toggles the switch.
   final ValueChanged<bool>? onChanged;
 
-  const CLToggle({super.key, required this.value, this.onChanged});
+  /// Track color while on. Defaults to the theme success green.
+  final Color? activeColor;
+
+  const CLToggle({
+    super.key,
+    required this.value,
+    this.onChanged,
+    this.activeColor,
+  });
 
   /// Track width in logical pixels.
-  static const double trackWidth = 64;
+  static const double trackWidth = 48;
 
   /// Track height in logical pixels.
-  static const double trackHeight = 28;
+  static const double trackHeight = 24;
 
   /// Thumb width in logical pixels.
-  static const double thumbWidth = 40;
+  static const double thumbWidth = 28;
 
   /// Thumb height in logical pixels.
-  static const double thumbHeight = 24;
+  static const double thumbHeight = 20;
 
   /// Horizontal padding between the track edges and the thumb travel bounds.
   static const double thumbPadding = 2;
 
   /// Horizontal distance the thumb travels between on/off states.
-  static const double dragWidth = 20;
+  static const double dragWidth =
+      trackWidth - thumbWidth - 2 * thumbPadding;
 
   @override
   State<CLToggle> createState() => _CLToggleState();
@@ -43,7 +51,6 @@ class CLToggle extends StatefulWidget {
 class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
   static const Key _trackKey = Key('cl-toggle-track');
   static const Key _thumbKey = Key('cl-toggle-thumb');
-  static const Key _thumbSurfaceKey = Key('cl-toggle-thumb-surface');
 
   late final AnimationController _fractionController;
   late final AnimationController _pressController;
@@ -189,43 +196,31 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final isLight = brightness == Brightness.light;
-    final accentColor = isLight
-        ? const Color(0xFF34C759)
-        : const Color(0xFF30D158);
-    final trackColor = isLight
-        ? const Color(0xFF787878).withValues(alpha: 0.2)
-        : const Color(0xFF787880).withValues(alpha: 0.36);
+    final theme = CLTheme.of(context);
+    final enabled = widget.onChanged != null;
 
-    final animatedTrackColor = Color.lerp(
-      trackColor,
-      accentColor,
-      _currentFraction,
-    )!;
+    final activeColor = widget.activeColor ?? theme.colors.success;
+    final inactiveColor = theme.colors.controlHighlight;
+    var trackColor = Color.lerp(inactiveColor, activeColor, _currentFraction)!;
+    if (!enabled) trackColor = trackColor.withValues(alpha: trackColor.a * 0.5);
+
     final thumbOffset = _lerpDouble(
       CLToggle.thumbPadding,
       CLToggle.thumbPadding + CLToggle.dragWidth,
       _currentFraction,
     );
 
-    final pressedScale = _lerpDouble(1, 1.5, _pressProgress);
+    final pressedScale = _lerpDouble(1, 1.12, _pressProgress);
     final velocity = _dragVelocity / 50;
     final velocityScaleX = 1 - (velocity * 0.75).clamp(-0.2, 0.2);
     final velocityScaleY = 1 - (velocity * 0.25).clamp(-0.2, 0.2);
     final thumbScaleX = pressedScale / velocityScaleX;
     final thumbScaleY = pressedScale * velocityScaleY;
-    final thumbBlur = _lerpDouble(8, 0, _pressProgress);
-    final thumbLensThickness = 10 * _pressProgress;
-    final thumbRefractiveIndex = _lerpDouble(1, 1.2, _pressProgress);
-    final thumbChromaticAberration = 0.01 * _pressProgress;
-    final thumbSurfaceAlpha = _lerpDouble(1, 0, _pressProgress);
-    final innerShadowAlpha = _pressProgress;
 
     return Semantics(
       toggled: widget.value,
-      enabled: widget.onChanged != null,
-      onTap: widget.onChanged == null ? null : _handleSemanticTap,
+      enabled: enabled,
+      onTap: enabled ? _handleSemanticTap : null,
       child: Listener(
         behavior: HitTestBehavior.opaque,
         onPointerDown: _handlePointerDown,
@@ -244,8 +239,10 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
                 width: CLToggle.trackWidth,
                 height: CLToggle.trackHeight,
                 decoration: BoxDecoration(
-                  color: animatedTrackColor,
-                  borderRadius: BorderRadius.circular(CLToggle.trackHeight / 2),
+                  color: trackColor,
+                  borderRadius:
+                      BorderRadius.circular(CLToggle.trackHeight / 2),
+                  border: Border.all(color: theme.colors.outline),
                 ),
               ),
               // Thumb
@@ -263,38 +260,7 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
                     1,
                   ),
                   alignment: Alignment.center,
-                  child: Glass(
-                    blur: thumbBlur,
-                    thickness: thumbLensThickness,
-                    refractiveIndex: thumbRefractiveIndex,
-                    chromaticAberration: thumbChromaticAberration,
-                    lightIntensity: 0.5 * _pressProgress,
-                    ambientStrength: 0.1 * _pressProgress,
-                    useRoundedSuperellipse: false,
-                    borderRadius: BorderRadius.circular(
-                      CLToggle.thumbHeight / 2,
-                    ),
-                    backgroundColor: Colors.transparent,
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x0D000000),
-                        blurRadius: 4,
-                        offset: Offset(0, 0),
-                      ),
-                    ],
-                    child: CustomPaint(
-                      key: _thumbSurfaceKey,
-                      size: const Size(
-                        CLToggle.thumbWidth,
-                        CLToggle.thumbHeight,
-                      ),
-                      painter: _ThumbSurfacePainter(
-                        surfaceAlpha: thumbSurfaceAlpha,
-                        innerShadowAlpha: innerShadowAlpha,
-                        radius: CLToggle.thumbHeight / 2,
-                      ),
-                    ),
-                  ),
+                  child: _buildThumb(enabled),
                 ),
               ),
             ],
@@ -304,48 +270,26 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildThumb(bool enabled) {
+    // The design's resting thumb is 70% white; it solidifies as the
+    // toggle turns on. Disabled thumbs stay dimmer.
+    final alpha = enabled ? _lerpDouble(0.7, 1, _currentFraction) : 0.45;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Color.fromRGBO(255, 255, 255, alpha),
+        borderRadius: BorderRadius.circular(CLToggle.thumbHeight / 2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 6,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+    );
+  }
+
   static double _lerpDouble(double a, double b, double t) {
     return a + (b - a) * t;
-  }
-}
-
-/// Draws the Android-equivalent white surface and pressed inner shadow.
-class _ThumbSurfacePainter extends CustomPainter {
-  final double surfaceAlpha;
-  final double innerShadowAlpha;
-  final double radius;
-
-  const _ThumbSurfacePainter({
-    required this.surfaceAlpha,
-    required this.innerShadowAlpha,
-    required this.radius,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
-
-    if (surfaceAlpha > 0) {
-      canvas.drawRRect(
-        rrect,
-        Paint()..color = Colors.white.withValues(alpha: surfaceAlpha),
-      );
-    }
-
-    if (innerShadowAlpha <= 0) return;
-
-    final paint = Paint()
-      ..color = Colors.black.withValues(alpha: innerShadowAlpha * 0.05)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 4);
-
-    canvas.drawRRect(rrect, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _ThumbSurfacePainter oldDelegate) {
-    return oldDelegate.surfaceAlpha != surfaceAlpha ||
-        oldDelegate.innerShadowAlpha != innerShadowAlpha ||
-        oldDelegate.radius != radius;
   }
 }

@@ -3,26 +3,55 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:claralight_ui/claralight_ui.dart';
 
 void main() {
-  testWidgets('CLButton uses LiquidButton surface metrics', (
+  Widget host(Widget child) {
+    return MaterialApp(
+      home: Scaffold(body: Center(child: child)),
+    );
+  }
+
+  testWidgets('CLButton renders the flat Claralight base', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLButton(label: '继续', onPressed: () {}),
-        ),
-      ),
-    );
+    await tester.pumpWidget(host(CLButton(label: '继续', onPressed: () {})));
 
-    expect(find.byType(InteractiveGlass), findsOneWidget);
-    final glass = tester.widget<InteractiveGlass>(
-      find.byType(InteractiveGlass),
+    expect(find.byType(CLSurface), findsOneWidget);
+
+    final box = tester.getSize(find.byType(CLSurface));
+    expect(box.height, 48);
+  });
+
+  testWidgets('CLButton sizes follow the density steps', (
+    WidgetTester tester,
+  ) async {
+    for (final (size, height) in [
+      (CLControlSize.small, 28.0),
+      (CLControlSize.medium, 36.0),
+      (CLControlSize.large, 48.0),
+    ]) {
+      await tester.pumpWidget(
+        host(CLButton(label: '继续', size: size, onPressed: () {})),
+      );
+      expect(
+        tester.getSize(find.byType(CLSurface)).height,
+        height,
+        reason: 'height of $size',
+      );
+    }
+  });
+
+  testWidgets('CLButton hugs content by default and accepts fixed width', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(host(CLButton(label: '继续', onPressed: () {})));
+    final hugged = tester.getSize(find.byType(CLSurface)).width;
+
+    await tester.pumpWidget(
+      host(CLButton(label: '继续', width: 300, onPressed: () {})),
     );
-    expect(glass.width, CLButton.defaultWidth);
-    expect(glass.height, 48);
-    expect(glass.blur, 2);
-    expect(glass.pressedScale, moreOrLessEquals(1 + 4 / 48));
-    expect(glass.backgroundColor.a, moreOrLessEquals(0.75));
+    final fixed = tester.getSize(find.byType(CLSurface)).width;
+
+    expect(hugged, lessThan(300));
+    expect(fixed, 300);
   });
 
   testWidgets('CLButton centers icon and label group with 8px gaps', (
@@ -32,215 +61,89 @@ void main() {
     const rightKey = Key('right-icon');
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CLButton(
-              width: 260,
-              label: '继续',
-              leadingIcon: SizedBox(key: leftKey, width: 24, height: 24),
-              trailingIcon: SizedBox(key: rightKey, width: 24, height: 24),
-              onPressed: () {},
-            ),
-          ),
+      host(
+        CLButton(
+          width: 260,
+          label: '继续',
+          leadingIcon: SizedBox(key: leftKey, width: 22, height: 22),
+          trailingIcon: SizedBox(key: rightKey, width: 22, height: 22),
+          onPressed: () {},
         ),
       ),
     );
 
-    final buttonRect = tester.getRect(find.byType(Glass));
+    final buttonRect = tester.getRect(find.byType(CLSurface));
     final leftRect = tester.getRect(find.byKey(leftKey));
     final rightRect = tester.getRect(find.byKey(rightKey));
     final textRect = tester.getRect(find.text('继续'));
     final groupCenter = (leftRect.left + rightRect.right) / 2;
 
-    expect(buttonRect.height, 48);
     expect(textRect.left - leftRect.right, 8);
     expect(rightRect.left - textRect.right, 8);
     expect(groupCenter, moreOrLessEquals(buttonRect.center.dx));
-  });
-
-  testWidgets('CLButton centers leading icon and label as one group', (
-    WidgetTester tester,
-  ) async {
-    const leftKey = Key('left-icon');
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CLButton(
-              width: 220,
-              label: '继续',
-              leadingIcon: SizedBox(key: leftKey, width: 24, height: 24),
-              onPressed: () {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final buttonRect = tester.getRect(find.byType(Glass));
-    final leftRect = tester.getRect(find.byKey(leftKey));
-    final textRect = tester.getRect(find.text('继续'));
-    final groupCenter = (leftRect.left + textRect.right) / 2;
-
-    expect(textRect.left - leftRect.right, 8);
-    expect(groupCenter, moreOrLessEquals(buttonRect.center.dx));
-  });
-
-  testWidgets('CLButton centers label and trailing icon as one group', (
-    WidgetTester tester,
-  ) async {
-    const rightKey = Key('right-icon');
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CLButton(
-              width: 220,
-              label: '继续',
-              trailingIcon: SizedBox(key: rightKey, width: 24, height: 24),
-              onPressed: () {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final buttonRect = tester.getRect(find.byType(Glass));
-    final rightRect = tester.getRect(find.byKey(rightKey));
-    final textRect = tester.getRect(find.text('继续'));
-    final groupCenter = (textRect.left + rightRect.right) / 2;
-
-    expect(rightRect.left - textRect.right, 8);
-    expect(groupCenter, moreOrLessEquals(buttonRect.center.dx));
-  });
-
-  testWidgets('CLButton keeps label centered without icons', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CLButton(width: 220, label: '继续', onPressed: () {}),
-          ),
-        ),
-      ),
-    );
-
-    final buttonRect = tester.getRect(find.byType(Glass));
-    final textRect = tester.getRect(find.text('继续'));
-
-    expect(textRect.center.dx, moreOrLessEquals(buttonRect.center.dx));
   });
 
   testWidgets('CLButton reports taps', (WidgetTester tester) async {
     var tapped = false;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLButton(label: '继续', onPressed: () => tapped = true),
-        ),
-      ),
+      host(CLButton(label: '继续', onPressed: () => tapped = true)),
     );
 
     await tester.tap(find.byType(CLButton));
+    await tester.pumpAndSettle();
 
     expect(tapped, isTrue);
   });
 
-  testWidgets('CLButton disabled skips interactive press feedback', (
+  testWidgets('CLButton variants use the scheme fills', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: CLButton(label: '继续')),
-      ),
-    );
+    final theme = CLThemeData();
 
-    expect(find.byType(InteractiveGlass), findsNothing);
-    expect(find.byType(Glass), findsOneWidget);
+    Future<Color> fillFor(CLButtonVariant variant) async {
+      await tester.pumpWidget(
+        host(CLButton(label: '继续', variant: variant, onPressed: () {})),
+      );
+      final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+      return surface.fill!;
+    }
+
+    expect(await fillFor(CLButtonVariant.primary), theme.colors.accent);
+    expect(await fillFor(CLButtonVariant.secondary), theme.colors.control);
+    expect(await fillFor(CLButtonVariant.danger), theme.colors.danger);
   });
 
-  testWidgets('CLButton can use non-interactive material indication', (
-    WidgetTester tester,
-  ) async {
-    var tapped = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLButton(
-            label: '继续',
-            isInteractive: false,
-            onPressed: () => tapped = true,
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byType(InteractiveGlass), findsNothing);
-    expect(find.byType(Glass), findsOneWidget);
-    expect(find.byType(InkWell), findsOneWidget);
-
-    final overlayStacks = tester
-        .widgetList<Stack>(find.byType(Stack))
-        .where((stack) => stack.children.firstOrNull is Glass);
-    expect(overlayStacks, isNotEmpty);
-    expect(overlayStacks.single.clipBehavior, Clip.none);
-    expect(overlayStacks.single.children.last, isA<Positioned>());
-
-    await tester.tap(find.byType(CLButton));
-
-    expect(tapped, isTrue);
-  });
-
-  testWidgets('CLButton applies tint with LiquidButton surface alpha', (
+  testWidgets('CLButton tint overrides the variant fill', (
     WidgetTester tester,
   ) async {
     const tint = Color(0xFF00FF00);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLButton(label: '继续', tint: tint, onPressed: () {}),
-        ),
-      ),
+      host(CLButton(label: '继续', tint: tint, onPressed: () {})),
     );
 
-    final glass = tester.widget<InteractiveGlass>(
-      find.byType(InteractiveGlass),
-    );
-
-    expect(glass.backgroundColor, tint.withValues(alpha: 0.75));
+    final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    expect(surface.fill, tint);
   });
 
-  testWidgets('CLButton lets tint and surface color override variant', (
+  testWidgets('CLButton disabled dims the fill and blocks taps', (
     WidgetTester tester,
   ) async {
-    const tint = Color(0xFF00FF00);
-    const surfaceColor = Color(0x669900FF);
+    await tester.pumpWidget(host(const CLButton(label: '继续')));
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLButton(
-            label: '继续',
-            tint: tint,
-            surfaceColor: surfaceColor,
-            onPressed: () {},
-          ),
-        ),
-      ),
+    final theme = CLThemeData();
+    final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    expect(surface.fill!.a, lessThan(theme.colors.accent.a));
+
+    final semantics = tester.widget<Semantics>(
+      find
+          .descendant(
+            of: find.byType(CLButton),
+            matching: find.byType(Semantics),
+          )
+          .first,
     );
-
-    final glass = tester.widget<InteractiveGlass>(
-      find.byType(InteractiveGlass),
-    );
-
-    expect(glass.backgroundColor, surfaceColor);
+    expect(semantics.properties.enabled, isFalse);
   });
 }

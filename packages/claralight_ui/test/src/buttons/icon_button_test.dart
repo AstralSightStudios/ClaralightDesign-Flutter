@@ -3,105 +3,80 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:claralight_ui/claralight_ui.dart';
 
 void main() {
-  testWidgets(
-    'CLIconButton uses LiquidButton surface metrics and reports taps',
-    (WidgetTester tester) async {
-      var tapped = false;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: CLIconButton(icon: Icons.add, onPressed: () => tapped = true),
-          ),
-        ),
-      );
-
-      expect(find.byType(InteractiveGlass), findsOneWidget);
-      final glass = tester.widget<InteractiveGlass>(
-        find.byType(InteractiveGlass),
-      );
-      expect(glass.size, 48);
-      expect(glass.blur, 2);
-      expect(glass.pressedScale, moreOrLessEquals(1 + 4 / 48));
-      expect(glass.backgroundColor, Colors.transparent);
-
-      await tester.tap(find.byType(CLIconButton));
-      expect(tapped, isTrue);
-    },
-  );
-
-  testWidgets('CLIconButton applies tint and surface color', (
-    WidgetTester tester,
-  ) async {
-    const tint = Color(0xFF00FF00);
-    const surfaceColor = Color(0x669900FF);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLIconButton(
-            icon: Icons.add,
-            tint: tint,
-            surfaceColor: surfaceColor,
-            onPressed: () {},
-          ),
-        ),
-      ),
+  Widget host(Widget child) {
+    return MaterialApp(
+      home: Scaffold(body: Center(child: child)),
     );
+  }
 
-    final glass = tester.widget<InteractiveGlass>(
-      find.byType(InteractiveGlass),
-    );
-    expect(glass.backgroundColor, surfaceColor);
-  });
-
-  testWidgets('CLIconButton applies tint with LiquidButton surface alpha', (
-    WidgetTester tester,
-  ) async {
-    const tint = Color(0xFF00FF00);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLIconButton(icon: Icons.add, tint: tint, onPressed: () {}),
-        ),
-      ),
-    );
-
-    final glass = tester.widget<InteractiveGlass>(
-      find.byType(InteractiveGlass),
-    );
-    expect(glass.backgroundColor, tint.withValues(alpha: 0.75));
-  });
-
-  testWidgets('CLIconButton can use non-interactive material indication', (
+  testWidgets('CLIconButton renders flat circle with size steps and taps', (
     WidgetTester tester,
   ) async {
     var tapped = false;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLIconButton(
-            icon: Icons.add,
-            isInteractive: false,
-            onPressed: () => tapped = true,
-          ),
-        ),
-      ),
+      host(CLIconButton(icon: Icons.add, onPressed: () => tapped = true)),
     );
 
-    expect(find.byType(InteractiveGlass), findsNothing);
-    expect(find.byType(Glass), findsOneWidget);
-    expect(find.byType(InkWell), findsOneWidget);
-
-    final overlayStacks = tester
-        .widgetList<Stack>(find.byType(Stack))
-        .where((stack) => stack.children.firstOrNull is Glass);
-    expect(overlayStacks, isNotEmpty);
-    expect(overlayStacks.single.clipBehavior, Clip.none);
-    expect(overlayStacks.single.children.last, isA<Positioned>());
+    expect(tester.getSize(find.byType(CLSurface)), const Size(44, 44));
 
     await tester.tap(find.byType(CLIconButton));
+    await tester.pumpAndSettle();
     expect(tapped, isTrue);
+
+    for (final (size, extent) in [
+      (CLControlSize.small, 28.0),
+      (CLControlSize.medium, 36.0),
+      (CLControlSize.large, 44.0),
+    ]) {
+      await tester.pumpWidget(
+        host(CLIconButton(icon: Icons.add, size: size, onPressed: () {})),
+      );
+      expect(
+        tester.getSize(find.byType(CLSurface)),
+        Size.square(extent),
+        reason: 'extent of $size',
+      );
+    }
+  });
+
+  testWidgets('CLIconButton selected state uses the raised control fill', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+
+    await tester.pumpWidget(
+      host(CLIconButton(icon: Icons.add, selected: true, onPressed: () {})),
+    );
+    final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    expect(surface.fill, theme.colors.controlHighlight);
+  });
+
+  testWidgets('CLIconButton fill override wins', (WidgetTester tester) async {
+    const fill = Color(0x669900FF);
+
+    await tester.pumpWidget(
+      host(CLIconButton(icon: Icons.add, fill: fill, onPressed: () {})),
+    );
+    final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    expect(surface.fill, fill);
+  });
+
+  testWidgets('CLIconButton disabled blocks taps', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      host(const CLIconButton(icon: Icons.add, onPressed: null)),
+    );
+
+    final semantics = tester.widget<Semantics>(
+      find
+          .descendant(
+            of: find.byType(CLIconButton),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    expect(semantics.properties.enabled, isFalse);
   });
 }

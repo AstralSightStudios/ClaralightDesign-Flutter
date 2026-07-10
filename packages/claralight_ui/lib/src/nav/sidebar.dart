@@ -1,21 +1,40 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
-import 'package:claralight_ui/src/surfaces/glass.dart';
+import '../surfaces/surface.dart';
+import '../theme/theme.dart';
 
+/// A Claralight side panel — the left column of the desktop mockup.
+///
+/// A flat [CLSurface] at panel level with a hairline outline.
 class CLSideBar extends StatelessWidget {
-    final Widget child;
+  final Widget child;
 
-    const CLSideBar({
-        super.key,
-        required this.child,
-    });
+  /// Fixed width; null sizes to the parent.
+  final double? width;
 
-    @override
-    Widget build(BuildContext context) {
-        return Glass(
-            blur: 12,
-            borderRadius: BorderRadius.circular(24),
-            child: child,
-        );
-    }
+  /// Padding inside the panel.
+  final EdgeInsetsGeometry padding;
+
+  const CLSideBar({
+    super.key,
+    required this.child,
+    this.width,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = CLTheme.of(context);
+    return SizedBox(
+      width: width,
+      child: CLSurface(
+        level: CLSurfaceLevel.panel,
+        borderRadius: BorderRadius.circular(theme.radii.panel),
+        outlined: true,
+        outlineColor: theme.colors.outlineStrong,
+        padding: padding,
+        child: child,
+      ),
+    );
+  }
 }

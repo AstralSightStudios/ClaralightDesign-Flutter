@@ -1,45 +1,42 @@
-import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
 
-import 'package:flutter/material.dart';
+import '../foundation/control_size.dart';
+import '../surfaces/pressable.dart';
+import '../surfaces/surface.dart';
+import '../theme/theme.dart';
 
-import 'package:claralight_ui/src/surfaces/glass.dart';
-import 'package:claralight_ui/src/surfaces/interactive_glass.dart';
+/// Claralight button variants.
+enum CLButtonVariant {
+  /// Accent-filled call to action (the blue upload button in the mockups).
+  primary,
 
-/// Visual variants from the Figma button component.
-enum CLButtonVariant { primary, neutral, danger }
+  /// Neutral control-fill button (toolbar and inspector buttons).
+  secondary,
 
-class CLButton extends StatelessWidget {
-  static const double defaultHeight = 48;
-  static const double defaultWidth = 354;
-  static const double minWidth = 64;
-  static const double horizontalInset = 16;
-  static const double iconSize = 24;
-  static const double contentGap = 8;
+  /// No fill until hovered; for rows of quiet actions.
+  ghost,
 
+  /// Destructive action.
+  danger,
+}
+
+/// A Claralight capsule button.
+///
+/// Opaque layered fill per variant; press interaction is the springy
+/// Claralight scale + jelly drag.
+class CLButton extends StatefulWidget {
   final String label;
   final VoidCallback? onPressed;
   final Widget? leadingIcon;
   final Widget? trailingIcon;
   final CLButtonVariant variant;
+  final CLControlSize size;
 
-  /// Uses the liquid press and drag highlight when true.
-  ///
-  /// When false, the button keeps the same glass surface and uses Material's
-  /// regular tap indication instead.
-  final bool isInteractive;
-
-  /// Optional hue/tint color for the glass surface.
-  ///
-  /// Mirrors the Android LiquidButton tint pass with a 75% surface tint.
-  final Color? tint;
-
-  /// Optional solid surface color drawn above [tint] and [variant].
-  final Color? surfaceColor;
-
-  /// Button width. Pass any finite width, or null to use the Figma width.
-  ///
-  /// The Figma minimum width is still enforced by [minWidth].
+  /// Optional fixed width. Null hugs the content.
   final double? width;
+
+  /// Overrides the variant fill.
+  final Color? tint;
 
   const CLButton({
     super.key,
@@ -48,167 +45,142 @@ class CLButton extends StatelessWidget {
     this.leadingIcon,
     this.trailingIcon,
     this.variant = CLButtonVariant.primary,
-    this.isInteractive = true,
+    this.size = CLControlSize.large,
+    this.width,
     this.tint,
-    this.surfaceColor,
-    this.width = defaultWidth,
-  }) : assert(width == null || (width > 0 && width < double.infinity));
-
-  @override
-  Widget build(BuildContext context) {
-    final surfaceWidth = math.max(width ?? defaultWidth, minWidth);
-    final radius = BorderRadius.circular(defaultHeight / 2);
-    final content = _ButtonContent(
-      label: label,
-      leadingIcon: leadingIcon,
-      trailingIcon: trailingIcon,
-      foregroundColor: _foregroundColor,
-    );
-
-    final usesLiquidInteraction = isInteractive && onPressed != null;
-
-    return Semantics(
-      button: true,
-      enabled: onPressed != null,
-      child: usesLiquidInteraction
-          ? InteractiveGlass(
-              onTap: onPressed,
-              width: surfaceWidth,
-              height: defaultHeight,
-              borderRadius: radius,
-              backgroundColor: _surfaceTint,
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 10,
-                  offset: Offset(0, 2),
-                ),
-              ],
-              child: SizedBox.expand(child: content),
-            )
-          : SizedBox(
-              width: surfaceWidth,
-              height: defaultHeight,
-              child: Stack(
-                clipBehavior: Clip.none,
-                fit: StackFit.expand,
-                children: [
-                  Glass(
-                    blur: 2,
-                    borderRadius: radius,
-                    backgroundColor: _surfaceTint,
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x33000000),
-                        blurRadius: 10,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                    child: SizedBox.expand(child: content),
-                  ),
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: radius,
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: InkWell(onTap: onPressed, borderRadius: radius),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  Color get _foregroundColor => const Color(0xFFF7F7F2);
-
-  Color get _surfaceTint =>
-      surfaceColor ?? (tint ?? _variantTint).withValues(alpha: 0.75);
-
-  Color get _variantTint => switch (variant) {
-    CLButtonVariant.primary => const Color(0xFF2482C5),
-    CLButtonVariant.neutral => const Color(0xFF575757),
-    CLButtonVariant.danger => const Color(0xFFC93442),
-  };
-}
-
-class _ButtonContent extends StatelessWidget {
-  final String label;
-  final Widget? leadingIcon;
-  final Widget? trailingIcon;
-  final Color foregroundColor;
-
-  const _ButtonContent({
-    required this.label,
-    required this.leadingIcon,
-    required this.trailingIcon,
-    required this.foregroundColor,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: CLButton.horizontalInset),
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (leadingIcon != null) ...[
-            _IconSlot(icon: leadingIcon, foregroundColor: foregroundColor),
-            const SizedBox(width: CLButton.contentGap),
-          ],
-          _Label(label: label, foregroundColor: foregroundColor),
-          if (trailingIcon != null) ...[
-            const SizedBox(width: CLButton.contentGap),
-            _IconSlot(icon: trailingIcon, foregroundColor: foregroundColor),
-          ],
-        ],
-      ),
-    );
-  }
+  State<CLButton> createState() => _CLButtonState();
 }
 
-class _IconSlot extends StatelessWidget {
-  final Widget? icon;
-  final Color foregroundColor;
+class _CLButtonState extends State<CLButton> {
+  bool _hovered = false;
 
-  const _IconSlot({required this.icon, required this.foregroundColor});
+  double get _height => switch (widget.size) {
+    CLControlSize.small => 28,
+    CLControlSize.medium => 36,
+    CLControlSize.large => 48,
+  };
+
+  double get _hPadding => switch (widget.size) {
+    CLControlSize.small => 12,
+    CLControlSize.medium => 16,
+    CLControlSize.large => 20,
+  };
+
+  double get _iconSize => switch (widget.size) {
+    CLControlSize.small => 15,
+    CLControlSize.medium => 18,
+    CLControlSize.large => 22,
+  };
+
+  bool get _enabled => widget.onPressed != null;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: CLButton.iconSize,
-      height: CLButton.iconSize,
-      child: Center(
-        child: IconTheme.merge(
-          data: IconThemeData(color: foregroundColor, size: CLButton.iconSize),
-          child: icon ?? const SizedBox.shrink(),
+    final theme = CLTheme.of(context);
+    final radius = BorderRadius.circular(theme.radii.capsule);
+    final foreground = _foregroundColor(theme);
+    final textStyle = (widget.size == CLControlSize.large
+            ? theme.typography.title
+            : theme.typography.label)
+        .copyWith(color: foreground);
+
+    final row = Row(
+      mainAxisSize: widget.width == null ? MainAxisSize.min : MainAxisSize.max,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (widget.leadingIcon != null) ...[
+          _iconSlot(widget.leadingIcon!, foreground),
+          SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
+        ],
+        Flexible(
+          child: Text(
+            widget.label,
+            softWrap: false,
+            overflow: TextOverflow.fade,
+            style: textStyle,
+          ),
+        ),
+        if (widget.trailingIcon != null) ...[
+          SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
+          _iconSlot(widget.trailingIcon!, foreground),
+        ],
+      ],
+    );
+
+    return Semantics(
+      button: true,
+      enabled: _enabled,
+      label: widget.label,
+      child: MouseRegion(
+        cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: CLPressable(
+          onTap: widget.onPressed,
+          borderRadius: radius,
+          pressedScale: 1 + 4 / _height / 2,
+          child: SizedBox(
+            width: widget.width,
+            height: _height,
+            child: CLSurface(
+              fill: _fillColor(theme, pressedHover: _hovered && _enabled),
+              borderRadius: radius,
+              padding: EdgeInsets.symmetric(horizontal: _hPadding),
+              // widthFactor 1 hugs the content when no width is given;
+              // with a fixed width the Align expands and centers instead.
+              child: Align(
+                widthFactor: widget.width == null ? 1 : null,
+                child: row,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
-}
 
-class _Label extends StatelessWidget {
-  final String label;
-  final Color foregroundColor;
-
-  const _Label({required this.label, required this.foregroundColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTextStyle.merge(
-      style: TextStyle(
-        color: foregroundColor,
-        fontFamily: 'MiSans VF',
-        fontSize: 17,
-        fontWeight: FontWeight.w500,
-        height: 22 / 17,
-        letterSpacing: -0.43,
-        shadows: const [Shadow(color: Color(0x78000000), blurRadius: 14.2)],
-      ),
-      child: Text(label, softWrap: false),
+  Widget _iconSlot(Widget icon, Color color) {
+    return IconTheme.merge(
+      data: IconThemeData(color: color, size: _iconSize),
+      child: icon,
     );
+  }
+
+  Color _fillColor(CLThemeData theme, {required bool pressedHover}) {
+    final colors = theme.colors;
+    final tint = widget.tint;
+    var fill = switch (widget.variant) {
+      CLButtonVariant.primary => tint ?? colors.accent,
+      CLButtonVariant.secondary =>
+        tint ?? (pressedHover ? colors.controlHighlight : colors.control),
+      CLButtonVariant.ghost =>
+        tint ?? (pressedHover ? colors.controlHighlight : const Color(0x00000000)),
+      CLButtonVariant.danger => tint ?? colors.danger,
+    };
+    if (pressedHover &&
+        (widget.variant == CLButtonVariant.primary ||
+            widget.variant == CLButtonVariant.danger)) {
+      fill = Color.lerp(fill, const Color(0xFFFFFFFF), 0.08)!;
+    }
+    if (!_enabled) {
+      // Disabled buttons drop their variant color entirely — a colored
+      // button reads as tappable no matter how dim.
+      fill = colors.control;
+    }
+    return fill;
+  }
+
+  Color _foregroundColor(CLThemeData theme) {
+    final colors = theme.colors;
+    final color = switch (widget.variant) {
+      CLButtonVariant.primary => colors.onAccent,
+      CLButtonVariant.secondary => colors.textPrimary,
+      CLButtonVariant.ghost => colors.textPrimary,
+      CLButtonVariant.danger => colors.onDanger,
+    };
+    return _enabled ? color : colors.textDisabled;
   }
 }

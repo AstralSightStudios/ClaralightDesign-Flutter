@@ -1,11 +1,10 @@
-import 'package:claralight_ui/src/buttons/toggle.dart';
-import 'package:claralight_ui/src/surfaces/glass.dart';
+import 'package:claralight_ui/claralight_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('CLToggle', () {
-    testWidgets('renders track and thumb with default metrics', (
+    testWidgets('renders flat track and thumb with default metrics', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(
@@ -33,23 +32,6 @@ void main() {
         (track.decoration! as BoxDecoration).borderRadius,
         BorderRadius.circular(CLToggle.trackHeight / 2),
       );
-
-      final glass = tester.widget<Glass>(
-        find.descendant(
-          of: find.byType(CLToggle),
-          matching: find.byType(Glass),
-        ),
-      );
-      expect(
-        glass.borderRadius,
-        BorderRadius.circular(CLToggle.thumbHeight / 2),
-      );
-      expect(glass.refractiveIndex, 1);
-
-      final surfacePaint = tester.widget<CustomPaint>(
-        find.byKey(const Key('cl-toggle-thumb-surface')),
-      );
-      expect((surfacePaint.painter! as dynamic).surfaceAlpha, 1);
     });
 
     testWidgets('thumb starts at left padding when value is false', (
@@ -143,8 +125,8 @@ void main() {
 
       final center = tester.getCenter(find.byType(CLToggle));
       final gesture = await tester.startGesture(center);
-      // Android LiquidToggle marks didDrag as soon as dragAmount.x != 0f,
-      // so this settles below the midpoint instead of toggling like a tap.
+      // Any horizontal movement marks the gesture as a drag, so this
+      // settles below the midpoint instead of toggling like a tap.
       await gesture.moveBy(const Offset(4, 0));
       await gesture.up();
       await tester.pumpAndSettle();
@@ -302,7 +284,7 @@ void main() {
       expect(offColor, isNot(equals(onColor)));
     });
 
-    testWidgets('thumb uses Android press scale and lens values', (
+    testWidgets('flat thumb press scale stays subtle', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(
@@ -324,29 +306,7 @@ void main() {
           matching: find.byType(Transform),
         ),
       );
-      final matrix = transform.transform.storage;
-      expect(matrix[0], closeTo(1.5, 0.001));
-      expect(matrix[5], closeTo(1.5, 0.001));
-
-      final glass = tester.widget<Glass>(
-        find.descendant(
-          of: find.byType(CLToggle),
-          matching: find.byType(Glass),
-        ),
-      );
-      expect(glass.blur, closeTo(0, 0.001));
-      expect(glass.backgroundColor.a, closeTo(0, 0.001));
-      final surfacePaint = tester.widget<CustomPaint>(
-        find.byKey(const Key('cl-toggle-thumb-surface')),
-      );
-      expect(
-        (surfacePaint.painter! as dynamic).surfaceAlpha,
-        closeTo(0, 0.001),
-      );
-      expect(glass.thickness, closeTo(10, 0.001));
-      expect(glass.refractiveIndex, closeTo(1.2, 0.001));
-      expect(glass.chromaticAberration, closeTo(0.01, 0.001));
-      expect(glass.useRoundedSuperellipse, isFalse);
+      expect(transform.transform.storage[0], closeTo(1.12, 0.001));
 
       await gesture.up();
       await tester.pumpAndSettle();
