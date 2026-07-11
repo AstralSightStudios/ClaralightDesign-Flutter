@@ -94,6 +94,7 @@ class CLPopover extends StatefulWidget {
 
 class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   final _anchorKey = GlobalKey();
+  final _tapRegionGroupId = Object();
   final _portal = OverlayPortalController();
   final _focusScopeNode = FocusScopeNode(
     debugLabel: 'CLPopover',
@@ -237,9 +238,12 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: _buildOverlay,
-      child: KeyedSubtree(
-        key: _anchorKey,
-        child: widget.anchorBuilder(context, _controller),
+      child: TapRegion(
+        groupId: _tapRegionGroupId,
+        child: KeyedSubtree(
+          key: _anchorKey,
+          child: widget.anchorBuilder(context, _controller),
+        ),
       ),
     );
   }
@@ -261,6 +265,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
           child: FocusScope(
             node: _focusScopeNode,
             child: TapRegion(
+              groupId: _tapRegionGroupId,
               consumeOutsideTaps: false,
               onTapOutside: (_) => _controller.close(),
               child: AnimatedBuilder(

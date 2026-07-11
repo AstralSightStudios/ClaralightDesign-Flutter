@@ -20,6 +20,7 @@ class CLTooltip extends StatefulWidget {
     this.delay = const Duration(milliseconds: 450),
     this.position = CLPopoverPosition.top,
     this.showArrow = true,
+    this.enableLongPress = true,
   });
 
   /// Tooltip text ("这按钮是干嘛的").
@@ -35,6 +36,9 @@ class CLTooltip extends StatefulWidget {
 
   /// Whether the tooltip surface includes its pointing arrow.
   final bool showArrow;
+
+  /// Whether touch and stylus long presses show the tooltip.
+  final bool enableLongPress;
 
   @override
   State<CLTooltip> createState() => _CLTooltipState();
@@ -116,8 +120,8 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
           onEnter: (_) => _scheduleShow(),
           onExit: (_) => _hide(),
           child: GestureDetector(
-            onLongPress: _show,
-            onLongPressEnd: (_) => _hide(),
+            onLongPress: widget.enableLongPress ? _show : null,
+            onLongPressEnd: widget.enableLongPress ? (_) => _hide() : null,
             child: widget.child,
           ),
         ),

@@ -6,6 +6,10 @@ import '../scrolling/types.dart';
 import '../surfaces/pressable.dart';
 import '../theme/theme.dart';
 
+/// Wraps one swatch in a [CLColorSwatchGroup].
+typedef CLColorSwatchItemBuilder =
+    Widget Function(BuildContext context, int index, Widget child);
+
 /// A single Claralight color swatch — the 表盘配色 dots of the design source.
 ///
 /// Circular at rest; the selected swatch stretches into a wide capsule
@@ -76,6 +80,10 @@ class CLColorSwatchGroup extends StatefulWidget {
   final List<Color> colors;
   final int? selectedIndex;
   final ValueChanged<int>? onChanged;
+
+  /// Optionally wraps each swatch with caller-owned behavior or decoration.
+  final CLColorSwatchItemBuilder? itemBuilder;
+
   final double swatchSize;
   final double spacing;
 
@@ -84,6 +92,7 @@ class CLColorSwatchGroup extends StatefulWidget {
     required this.colors,
     required this.selectedIndex,
     required this.onChanged,
+    this.itemBuilder,
     this.swatchSize = 23,
     this.spacing = 8,
   });
@@ -190,15 +199,16 @@ class _CLColorSwatchGroupState extends State<CLColorSwatchGroup> {
         itemCount: widget.colors.length,
         separatorBuilder: (context, index) => SizedBox(width: widget.spacing),
         itemBuilder: (context, index) {
+          final swatch = CLColorSwatchItem(
+            color: widget.colors[index],
+            selected: index == widget.selectedIndex,
+            size: widget.swatchSize,
+            onTap: widget.onChanged == null
+                ? null
+                : () => widget.onChanged!(index),
+          );
           return Align(
-            child: CLColorSwatchItem(
-              color: widget.colors[index],
-              selected: index == widget.selectedIndex,
-              size: widget.swatchSize,
-              onTap: widget.onChanged == null
-                  ? null
-                  : () => widget.onChanged!(index),
-            ),
+            child: widget.itemBuilder?.call(context, index, swatch) ?? swatch,
           );
         },
       ),

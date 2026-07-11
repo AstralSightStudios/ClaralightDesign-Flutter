@@ -29,6 +29,35 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('CLTooltip can disable its long-press trigger', (
+    WidgetTester tester,
+  ) async {
+    const anchorKey = Key('hover-only-anchor');
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CLTooltip(
+              message: 'Hover only',
+              enableLongPress: false,
+              child: SizedBox(
+                key: anchorKey,
+                width: 40,
+                height: 40,
+                child: ColoredBox(color: Colors.transparent),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.longPress(find.byKey(anchorKey));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Hover only'), findsNothing);
+  });
+
   testWidgets('CLTooltip does not re-enter mouse tracking while animating', (
     WidgetTester tester,
   ) async {

@@ -62,6 +62,34 @@ void main() {
     expect(swatchCenters.map((center) => center.dy).toSet(), hasLength(1));
   });
 
+  testWidgets('CLColorSwatchGroup lets callers wrap individual swatches', (
+    tester,
+  ) async {
+    final wrappedIndexes = <int>[];
+    int? selected;
+
+    await tester.pumpWidget(
+      host(
+        CLColorSwatchGroup(
+          colors: colors.take(3).toList(),
+          selectedIndex: 0,
+          onChanged: (index) => selected = index,
+          itemBuilder: (context, index, child) {
+            wrappedIndexes.add(index);
+            return KeyedSubtree(key: ValueKey('wrapper-$index'), child: child);
+          },
+        ),
+        width: 240,
+      ),
+    );
+
+    expect(wrappedIndexes, [0, 1, 2]);
+    expect(find.byKey(const ValueKey('wrapper-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('wrapper-1')));
+    expect(selected, 1);
+  });
+
   testWidgets('CLColorSwatchGroup reveals its initial selection immediately', (
     tester,
   ) async {
