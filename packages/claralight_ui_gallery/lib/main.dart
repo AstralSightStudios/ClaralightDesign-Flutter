@@ -125,7 +125,7 @@ class _GalleryHomeState extends State<GalleryHome> {
                   _SegmentedSection(),
                   _SliderSection(),
                   _InputsSection(),
-                  _SelectStepperSection(),
+                  _SelectSection(),
                   _ScrollableSection(),
                   _LazyListSection(),
                   _ListsSection(),
@@ -434,14 +434,14 @@ class _InputsSection extends StatelessWidget {
   }
 }
 
-class _SelectStepperSection extends StatefulWidget {
-  const _SelectStepperSection();
+class _SelectSection extends StatefulWidget {
+  const _SelectSection();
 
   @override
-  State<_SelectStepperSection> createState() => _SelectStepperSectionState();
+  State<_SelectSection> createState() => _SelectSectionState();
 }
 
-class _SelectStepperSectionState extends State<_SelectStepperSection> {
+class _SelectSectionState extends State<_SelectSection> {
   static final _largeOptionSet = List.generate(
     500,
     (index) => CLSelectOption(
@@ -453,13 +453,20 @@ class _SelectStepperSectionState extends State<_SelectStepperSection> {
 
   String _fillMode = '数字填充';
   int _selectedItem = 249;
-  double _w = 78;
-  double _h = 91;
+  final _widthController = TextEditingController(text: '78');
+  final _heightController = TextEditingController(text: '91');
+
+  @override
+  void dispose() {
+    _widthController.dispose();
+    _heightController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
-      title: 'CLSelect / CLStepper',
+      title: 'CLSelect / numeric CLTextField',
       child: Column(
         children: [
           CLSelect<String>(
@@ -484,24 +491,28 @@ class _SelectStepperSectionState extends State<_SelectStepperSection> {
           Row(
             children: [
               Expanded(
-                child: CLStepper(
-                  prefix: 'W',
-                  unit: 'px',
-                  value: _w,
+                child: CLTextField(
+                  controller: _widthController,
+                  keyboardType: TextInputType.number,
+                  prefix: const Text('W'),
+                  suffix: const Text('px'),
+                  step: 1,
                   min: 1,
                   max: 480,
-                  onChanged: (v) => setState(() => _w = v),
+                  size: CLControlSize.small,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: CLStepper(
-                  prefix: 'H',
-                  unit: 'px',
-                  value: _h,
+                child: CLTextField(
+                  controller: _heightController,
+                  keyboardType: TextInputType.number,
+                  prefix: const Text('H'),
+                  suffix: const Text('px'),
+                  step: 1,
                   min: 1,
                   max: 480,
-                  onChanged: (v) => setState(() => _h = v),
+                  size: CLControlSize.small,
                 ),
               ),
             ],

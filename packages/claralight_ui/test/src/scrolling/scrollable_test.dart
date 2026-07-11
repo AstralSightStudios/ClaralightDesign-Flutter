@@ -38,7 +38,7 @@ void main() {
 
     expect(scrollable.direction, CLScrollDirection.both);
     expect(scrollable.blurExtent, const EdgeInsets.all(24));
-    expect(scrollable.blurSigma, const EdgeInsets.all(16));
+    expect(scrollable.blurSigma, const EdgeInsets.all(5));
     expect(scrollable.padding, EdgeInsets.zero);
     expect(scrollable.horizontalScrollbar, CLScrollbarVisibility.auto);
     expect(scrollable.verticalScrollbar, CLScrollbarVisibility.auto);

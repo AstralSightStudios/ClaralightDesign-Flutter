@@ -27,7 +27,6 @@ export "src/controls/slider.dart";
 export "src/inputs/color_picker.dart";
 export "src/inputs/search_field.dart";
 export "src/inputs/select.dart";
-export "src/inputs/stepper.dart";
 export "src/inputs/text_field.dart";
 
 // Containers & lists

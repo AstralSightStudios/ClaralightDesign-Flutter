@@ -36,7 +36,7 @@ void main() {
     expect(list.scrollDirection, Axis.vertical);
     expect(list.scrollbarVisibility, CLScrollbarVisibility.auto);
     expect(list.blurExtent, const EdgeInsets.all(24));
-    expect(list.blurSigma, const EdgeInsets.all(16));
+    expect(list.blurSigma, const EdgeInsets.all(5));
     expect(list.padding, EdgeInsets.zero);
     expect(list.borderRadius, BorderRadius.zero);
     expect(list.controller, isNull);
