@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
-import '../scrolling/scrollable.dart';
+import '../scrolling/cl_list.dart';
 import '../surfaces/pressable.dart';
 import '../theme/theme.dart';
 
@@ -296,11 +296,12 @@ class _CLTreeViewState extends State<CLTreeView> {
           constraints.hasBoundedHeight,
           'CLTreeView requires a bounded height.',
         );
-        return CLScrollable(
-          direction: CLScrollDirection.vertical,
-          verticalController: _controller,
+        return CLList.separated(
+          controller: _controller,
           padding: const EdgeInsets.only(top: 4, right: 10, bottom: 4),
-          child: CLListSection(spacing: 4, children: widget.children),
+          itemCount: widget.children.length,
+          itemBuilder: (context, index) => widget.children[index],
+          separatorBuilder: (context, index) => const SizedBox(height: 4),
         );
       },
     );

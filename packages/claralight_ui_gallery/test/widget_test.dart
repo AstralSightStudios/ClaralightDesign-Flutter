@@ -26,8 +26,9 @@ void main() {
     expect(find.byType(CLMenu), findsWidgets);
     expect(find.byType(CLTreeView), findsOneWidget);
 
-    final subtreeLeaf = tester.widget<CLListTile>(
-      find.widgetWithText(CLListTile, '矩形 1'),
+    final tree = tester.widget<CLTreeView>(find.byType(CLTreeView));
+    final subtreeLeaf = tree.children.singleWhere(
+      (tile) => tile.label == '矩形 1',
     );
     expect(subtreeLeaf.depth, 2);
   });
@@ -39,8 +40,20 @@ void main() {
     await tester.pump();
 
     expect(find.text('CLScrollable'), findsOneWidget);
-    expect(find.text('双轴'), findsOneWidget);
-    expect(find.text('自动'), findsOneWidget);
+    final directionControl = find.byKey(
+      const Key('scrollable-direction-control'),
+    );
+    final visibilityControl = find.byKey(
+      const Key('scrollable-visibility-control'),
+    );
+    expect(
+      find.descendant(of: directionControl, matching: find.text('双轴')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: visibilityControl, matching: find.text('自动')),
+      findsOneWidget,
+    );
     final demo = tester.widget<CLScrollable>(
       find.byKey(const Key('scrollable-demo')),
     );
@@ -48,10 +61,17 @@ void main() {
     expect(demo.horizontalScrollbar, CLScrollbarVisibility.auto);
     expect(demo.verticalScrollbar, CLScrollbarVisibility.auto);
 
-    await tester.ensureVisible(find.text('横向'));
-    await tester.tap(find.text('横向'));
+    await tester.ensureVisible(directionControl);
     await tester.pump();
-    await tester.tap(find.text('始终'));
+    await tester.tap(
+      find.descendant(of: directionControl, matching: find.text('横向')),
+    );
+    await tester.pump();
+    await tester.ensureVisible(visibilityControl);
+    await tester.pump();
+    await tester.tap(
+      find.descendant(of: visibilityControl, matching: find.text('始终')),
+    );
     await tester.pump();
 
     final updatedDemo = tester.widget<CLScrollable>(
@@ -60,5 +80,44 @@ void main() {
     expect(updatedDemo.direction, CLScrollDirection.horizontal);
     expect(updatedDemo.horizontalScrollbar, CLScrollbarVisibility.always);
     expect(updatedDemo.verticalScrollbar, CLScrollbarVisibility.always);
+  });
+
+  testWidgets('Gallery exposes the interactive CLList demo', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GalleryApp());
+    await tester.pump();
+
+    await tester.ensureVisible(find.byKey(const Key('list-demo')));
+    final demo = tester.widget<CLList>(find.byKey(const Key('list-demo')));
+    expect(demo.scrollDirection, Axis.vertical);
+    expect(demo.scrollbarVisibility, CLScrollbarVisibility.auto);
+    expect(find.text('#001'), findsOneWidget);
+
+    final directionControl = find.byKey(
+      const Key('list-direction-control'),
+    );
+    await tester.ensureVisible(directionControl);
+    await tester.pump();
+    await tester.tap(
+      find.descendant(of: directionControl, matching: find.text('横向')),
+    );
+    await tester.pump();
+
+    final visibilityControl = find.byKey(
+      const Key('list-visibility-control'),
+    );
+    await tester.ensureVisible(visibilityControl);
+    await tester.pump();
+    await tester.tap(
+      find.descendant(of: visibilityControl, matching: find.text('始终')),
+    );
+    await tester.pump();
+
+    final updatedDemo = tester.widget<CLList>(
+      find.byKey(const Key('list-demo')),
+    );
+    expect(updatedDemo.scrollDirection, Axis.horizontal);
+    expect(updatedDemo.scrollbarVisibility, CLScrollbarVisibility.always);
   });
 }

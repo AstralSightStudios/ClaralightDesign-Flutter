@@ -13,6 +13,7 @@ export "src/surfaces/surface.dart";
 
 // Scrolling
 export "src/scrolling/scrollable.dart";
+export "src/scrolling/cl_list.dart";
 
 // Buttons & controls
 export "src/buttons/button.dart";

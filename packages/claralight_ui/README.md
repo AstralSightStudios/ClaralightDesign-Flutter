@@ -24,7 +24,8 @@ default dark theme.
 
 ## Progressive scrolling
 
-Precache the `CLScrollable` shader before the first frame:
+Precache the shader shared by `CLScrollable` and `CLList` before the first
+frame:
 
 ```dart
 Future<void> main() async {
@@ -52,11 +53,29 @@ SizedBox(
 )
 ```
 
-Every enabled axis must receive bounded constraints. If both controllers are
-provided, use a distinct `ScrollController` for each axis. A zero side in
-`blurExtent` disables both blur and masking on that physical edge; a zero side
-in `blurSigma` disables blur only. For Flutter web, prefer the Skwasm renderer
-for this shader-backed effect.
+Use `CLList`, `CLList.builder`, or `CLList.separated` when the content should
+retain `ListView`'s lazy sliver construction:
+
+```dart
+SizedBox(
+  height: 320,
+  child: CLList.builder(
+    itemCount: 1000,
+    itemExtent: 44,
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    scrollbarVisibility: CLScrollbarVisibility.auto,
+    borderRadius: BorderRadius.circular(12),
+    itemBuilder: (context, index) => Text('Item $index'),
+  ),
+)
+```
+
+Every enabled axis must receive bounded constraints unless a `CLList` uses
+`shrinkWrap`. If both `CLScrollable` controllers are provided, use a distinct
+`ScrollController` for each axis. A zero side in `blurExtent` disables both
+blur and masking on that physical edge; a zero side in `blurSigma` disables
+blur only. For Flutter web, prefer the Skwasm renderer for this shader-backed
+effect.
 
 ## Bundled fonts
 
@@ -85,7 +104,7 @@ Three free-for-commercial-use families ship with the package (see
   `CLRadii`, `CLSpacing`
 - **Surfaces** — `CLSurface` (layered fills), `CLPressable` (springy press
   scale, jelly drag, pointer highlight)
-- **Scrolling** — `CLScrollable`, `CLScrollDirection`,
+- **Scrolling** — `CLScrollable`, `CLList`, `CLScrollDirection`,
   `CLScrollbarVisibility`
 - **Buttons** — `CLButton`, `CLIconButton`
 - **Controls** — `CLToggle`, `CLSegmentedControl`, `CLSlider`,

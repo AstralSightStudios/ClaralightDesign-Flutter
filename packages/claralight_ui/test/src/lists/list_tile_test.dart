@@ -178,7 +178,7 @@ void main() {
     expect(secondRect.top - firstRect.bottom, 2);
   });
 
-  testWidgets('CLTreeView keeps its layout through CLScrollable', (
+  testWidgets('CLTreeView keeps its layout through CLList', (
     WidgetTester tester,
   ) async {
     final controller = ScrollController();
@@ -211,19 +211,19 @@ void main() {
     final treeRect = tester.getRect(find.byKey(treeKey));
     final firstRect = tester.getRect(find.byKey(firstKey));
     final secondRect = tester.getRect(find.byKey(secondKey));
-    final scrollable = tester.widget<CLScrollable>(find.byType(CLScrollable));
+    final list = tester.widget<CLList>(find.byType(CLList));
 
     expect(treeRect.size, const Size(282, 316));
     expect(firstRect, Rect.fromLTWH(treeRect.left, treeRect.top + 4, 272, 35));
     expect(secondRect.top - firstRect.bottom, 4);
-    expect(scrollable.direction, CLScrollDirection.vertical);
-    expect(scrollable.verticalController, same(controller));
+    expect(list.scrollDirection, Axis.vertical);
+    expect(list.controller, same(controller));
     expect(
-      scrollable.padding,
+      list.padding,
       const EdgeInsets.only(top: 4, right: 10, bottom: 4),
     );
-    expect(scrollable.verticalScrollbar, CLScrollbarVisibility.auto);
-    expect(scrollable.blurExtent, const EdgeInsets.all(24));
-    expect(scrollable.blurSigma, const EdgeInsets.all(16));
+    expect(list.scrollbarVisibility, CLScrollbarVisibility.auto);
+    expect(list.blurExtent, const EdgeInsets.all(24));
+    expect(list.blurSigma, const EdgeInsets.all(16));
   });
 }
