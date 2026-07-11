@@ -11,6 +11,9 @@ export "src/foundation/shape.dart";
 export "src/surfaces/pressable.dart";
 export "src/surfaces/surface.dart";
 
+// Scrolling
+export "src/scrolling/scrollable.dart";
+
 // Buttons & controls
 export "src/buttons/button.dart";
 export "src/buttons/icon_button.dart";

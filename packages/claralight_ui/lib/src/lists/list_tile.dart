@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
+import '../scrolling/scrollable.dart';
 import '../surfaces/pressable.dart';
 import '../theme/theme.dart';
 
@@ -243,8 +244,8 @@ class CLListSection extends StatelessWidget {
   }
 }
 
-/// A scrollable layer tree with the spacing, viewport padding, and scrollbar
-/// treatment from the ClaraLight design source.
+/// A progressively blurred layer tree with the spacing, viewport padding, and
+/// automatic scrollbar treatment from the ClaraLight design source.
 ///
 /// The parent must provide a bounded height. Use [CLListTile.depth] to encode
 /// nesting and [CLListTile.expanded] for disclosure controls.
@@ -289,34 +290,17 @@ class _CLTreeViewState extends State<CLTreeView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = CLTheme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         assert(
           constraints.hasBoundedHeight,
           'CLTreeView requires a bounded height.',
         );
-        return RawScrollbar(
-          controller: _controller,
-          thumbVisibility: true,
-          interactive: true,
-          thickness: 4,
-          radius: const Radius.circular(17),
-          thumbColor: theme.colors.selection,
-          minThumbLength: 49,
-          mainAxisMargin: 2,
-          scrollbarOrientation: ScrollbarOrientation.right,
-          padding: EdgeInsets.zero,
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(
-              context,
-            ).copyWith(scrollbars: false),
-            child: SingleChildScrollView(
-              controller: _controller,
-              padding: const EdgeInsets.only(top: 4, right: 10, bottom: 4),
-              child: CLListSection(spacing: 4, children: widget.children),
-            ),
-          ),
+        return CLScrollable(
+          direction: CLScrollDirection.vertical,
+          verticalController: _controller,
+          padding: const EdgeInsets.only(top: 4, right: 10, bottom: 4),
+          child: CLListSection(spacing: 4, children: widget.children),
         );
       },
     );

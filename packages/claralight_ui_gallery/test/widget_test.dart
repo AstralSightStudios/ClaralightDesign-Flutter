@@ -1,8 +1,11 @@
 import 'package:claralight_ui/claralight_ui.dart';
 import 'package:claralight_ui_gallery/main.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  setUpAll(CLScrollable.precache);
+
   testWidgets('Gallery shows the Claralight component sections', (
     WidgetTester tester,
   ) async {
@@ -27,5 +30,35 @@ void main() {
       find.widgetWithText(CLListTile, '矩形 1'),
     );
     expect(subtreeLeaf.depth, 2);
+  });
+
+  testWidgets('Gallery exposes the interactive CLScrollable demo', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GalleryApp());
+    await tester.pump();
+
+    expect(find.text('CLScrollable'), findsOneWidget);
+    expect(find.text('双轴'), findsOneWidget);
+    expect(find.text('自动'), findsOneWidget);
+    final demo = tester.widget<CLScrollable>(
+      find.byKey(const Key('scrollable-demo')),
+    );
+    expect(demo.direction, CLScrollDirection.both);
+    expect(demo.horizontalScrollbar, CLScrollbarVisibility.auto);
+    expect(demo.verticalScrollbar, CLScrollbarVisibility.auto);
+
+    await tester.ensureVisible(find.text('横向'));
+    await tester.tap(find.text('横向'));
+    await tester.pump();
+    await tester.tap(find.text('始终'));
+    await tester.pump();
+
+    final updatedDemo = tester.widget<CLScrollable>(
+      find.byKey(const Key('scrollable-demo')),
+    );
+    expect(updatedDemo.direction, CLScrollDirection.horizontal);
+    expect(updatedDemo.horizontalScrollbar, CLScrollbarVisibility.always);
+    expect(updatedDemo.verticalScrollbar, CLScrollbarVisibility.always);
   });
 }

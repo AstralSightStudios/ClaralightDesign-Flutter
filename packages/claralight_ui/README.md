@@ -22,6 +22,42 @@ CLTheme(
 Widgets also work without an ancestor `CLTheme` by falling back to the
 default dark theme.
 
+## Progressive scrolling
+
+Precache the `CLScrollable` shader before the first frame:
+
+```dart
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await CLScrollable.precache();
+  runApp(const App());
+}
+```
+
+`CLScrollable` supports one or two axes, content padding, per-edge blur and
+mask extents, rounded clipping, and independent scrollbar policies:
+
+```dart
+SizedBox(
+  width: 320,
+  height: 240,
+  child: CLScrollable(
+    direction: CLScrollDirection.both,
+    horizontalScrollbar: CLScrollbarVisibility.auto,
+    verticalScrollbar: CLScrollbarVisibility.auto,
+    padding: const EdgeInsets.all(16),
+    borderRadius: BorderRadius.circular(12),
+    child: const SizedBox(width: 640, height: 480),
+  ),
+)
+```
+
+Every enabled axis must receive bounded constraints. If both controllers are
+provided, use a distinct `ScrollController` for each axis. A zero side in
+`blurExtent` disables both blur and masking on that physical edge; a zero side
+in `blurSigma` disables blur only. For Flutter web, prefer the Skwasm renderer
+for this shader-backed effect.
+
 ## Bundled fonts
 
 Three free-for-commercial-use families ship with the package (see
@@ -49,6 +85,8 @@ Three free-for-commercial-use families ship with the package (see
   `CLRadii`, `CLSpacing`
 - **Surfaces** — `CLSurface` (layered fills), `CLPressable` (springy press
   scale, jelly drag, pointer highlight)
+- **Scrolling** — `CLScrollable`, `CLScrollDirection`,
+  `CLScrollbarVisibility`
 - **Buttons** — `CLButton`, `CLIconButton`
 - **Controls** — `CLToggle`, `CLSegmentedControl`, `CLSlider`,
   `CLChipTabs`
@@ -57,8 +95,8 @@ Three free-for-commercial-use families ship with the package (see
   (+`CLColorPicker.show`)
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
   `CLToolbar`, `CLSideBar`
-- **Lists** — `CLTreeView`, `CLListSection`, `CLListTile` (scrolling,
-  selection, tree guides, disclosure, tint, `outlined:` add-rows)
+- **Lists** — `CLTreeView`, `CLListSection`, `CLListTile` (progressive
+  scrolling, selection, tree guides, disclosure, tint, `outlined:` add-rows)
 - **Menus** — `CLMenu` (morphs out of its anchor with the jelly spring;
   pointer-following glow)
 - **Indicators** — `CLProgressBar`, `CLProgressRing`, `CLColorSwatchGroup`,

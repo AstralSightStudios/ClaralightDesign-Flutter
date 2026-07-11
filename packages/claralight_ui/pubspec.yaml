@@ -5,11 +5,12 @@ homepage:
 
 environment:
   sdk: ^3.11.5
-  flutter: ">=1.17.0"
+  flutter: ">=3.30.0"
 
 dependencies:
   flutter:
     sdk: flutter
+  progressive_blur: ^0.0.2
 
 dev_dependencies:
   flutter_test:

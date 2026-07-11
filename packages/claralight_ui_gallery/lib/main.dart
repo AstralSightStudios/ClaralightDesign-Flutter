@@ -13,7 +13,9 @@ const double kInitialScroll =
 /// --dart-define=AUTO_OPEN=dialog|sheet|menu.
 const String kAutoOpen = String.fromEnvironment('AUTO_OPEN');
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await CLScrollable.precache();
   runApp(const GalleryApp());
 }
 
@@ -120,6 +122,7 @@ class _GalleryHomeState extends State<GalleryHome> {
                   _SliderSection(),
                   _InputsSection(),
                   _SelectStepperSection(),
+                  _ScrollableSection(),
                   _ListsSection(),
                   _SwatchesSection(),
                   _ProgressSection(),
@@ -487,6 +490,202 @@ class _SelectStepperSectionState extends State<_SelectStepperSection> {
         ],
       ),
     );
+  }
+}
+
+class _ScrollableSection extends StatefulWidget {
+  const _ScrollableSection();
+
+  @override
+  State<_ScrollableSection> createState() => _ScrollableSectionState();
+}
+
+class _ScrollableSectionState extends State<_ScrollableSection> {
+  static const _directions = [
+    CLScrollDirection.both,
+    CLScrollDirection.horizontal,
+    CLScrollDirection.vertical,
+  ];
+  static const _visibilities = [
+    CLScrollbarVisibility.auto,
+    CLScrollbarVisibility.always,
+    CLScrollbarVisibility.hidden,
+  ];
+
+  int _directionIndex = 0;
+  int _visibilityIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = CLTheme.of(context);
+    final visibility = _visibilities[_visibilityIndex];
+    final labelStyle = theme.typography.caption.copyWith(
+      color: theme.colors.textTertiary,
+    );
+
+    return _SectionCard(
+      title: 'CLScrollable',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              SizedBox(width: 52, child: Text('方向', style: labelStyle)),
+              Expanded(
+                child: CLSegmentedControl(
+                  segments: const ['双轴', '横向', '纵向'],
+                  size: CLControlSize.small,
+                  selectedIndex: _directionIndex,
+                  onChanged: (index) =>
+                      setState(() => _directionIndex = index),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(width: 52, child: Text('滚动条', style: labelStyle)),
+              Expanded(
+                child: CLSegmentedControl(
+                  segments: const ['自动', '始终', '隐藏'],
+                  size: CLControlSize.small,
+                  selectedIndex: _visibilityIndex,
+                  onChanged: (index) =>
+                      setState(() => _visibilityIndex = index),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 220,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: theme.colors.panel,
+                border: Border.all(color: theme.colors.outline),
+                borderRadius: BorderRadius.circular(theme.radii.control),
+              ),
+              child: CLScrollable(
+                key: const Key('scrollable-demo'),
+                direction: _directions[_directionIndex],
+                horizontalScrollbar: visibility,
+                verticalScrollbar: visibility,
+                borderRadius: BorderRadius.circular(theme.radii.control),
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: 620,
+                  height: 380,
+                  child: CustomPaint(
+                    painter: _ScrollableDemoPainter(
+                      gridColor: theme.colors.separator,
+                      axisColor: theme.colors.outlineStrong,
+                      nodeColor: theme.colors.accentBackground,
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 20,
+                          top: 20,
+                          child: CLBadge(
+                            '0,0',
+                            color: theme.colors.controlHighlight,
+                            foreground: theme.colors.textSecondary,
+                          ),
+                        ),
+                        Positioned(
+                          left: 258,
+                          top: 148,
+                          child: CLBadge(
+                            '320×180',
+                            unit: 'px',
+                            color: theme.colors.accentBackground,
+                            foreground: theme.colors.textPrimary,
+                          ),
+                        ),
+                        Positioned(
+                          right: 20,
+                          bottom: 20,
+                          child: CLBadge(
+                            '620×380',
+                            unit: 'px',
+                            color: theme.colors.controlHighlight,
+                            foreground: theme.colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '拖动、滚轮，或按住 Shift 使用滚轮',
+            style: labelStyle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScrollableDemoPainter extends CustomPainter {
+  const _ScrollableDemoPainter({
+    required this.gridColor,
+    required this.axisColor,
+    required this.nodeColor,
+  });
+
+  final Color gridColor;
+  final Color axisColor;
+  final Color nodeColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+    for (var x = 0.0; x <= size.width; x += 24) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+    for (var y = 0.0; y <= size.height; y += 24) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    final axisPaint = Paint()
+      ..color = axisColor
+      ..strokeWidth = 1.5;
+    canvas.drawLine(
+      Offset(size.width / 2, 0),
+      Offset(size.width / 2, size.height),
+      axisPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      axisPaint,
+    );
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: size.center(Offset.zero),
+          width: 112,
+          height: 72,
+        ),
+        const Radius.circular(12),
+      ),
+      Paint()..color = nodeColor,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ScrollableDemoPainter oldDelegate) {
+    return gridColor != oldDelegate.gridColor ||
+        axisColor != oldDelegate.axisColor ||
+        nodeColor != oldDelegate.nodeColor;
   }
 }
 

@@ -178,9 +178,11 @@ void main() {
     expect(secondRect.top - firstRect.bottom, 2);
   });
 
-  testWidgets('CLTreeView uses the framework scrollbar', (
+  testWidgets('CLTreeView keeps its layout through CLScrollable', (
     WidgetTester tester,
   ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
     const treeKey = Key('tree');
     const firstKey = Key('first');
     const secondKey = Key('second');
@@ -193,8 +195,9 @@ void main() {
               key: treeKey,
               width: 282,
               height: 316,
-              child: const CLTreeView(
-                children: [
+              child: CLTreeView(
+                controller: controller,
+                children: const [
                   CLListTile(key: firstKey, label: 'Frame 114'),
                   CLListTile(key: secondKey, label: '图组 1'),
                 ],
@@ -208,18 +211,19 @@ void main() {
     final treeRect = tester.getRect(find.byKey(treeKey));
     final firstRect = tester.getRect(find.byKey(firstKey));
     final secondRect = tester.getRect(find.byKey(secondKey));
-    final scrollbar = tester.widget<RawScrollbar>(find.byType(RawScrollbar));
+    final scrollable = tester.widget<CLScrollable>(find.byType(CLScrollable));
 
     expect(treeRect.size, const Size(282, 316));
     expect(firstRect, Rect.fromLTWH(treeRect.left, treeRect.top + 4, 272, 35));
     expect(secondRect.top - firstRect.bottom, 4);
-    expect(scrollbar.thumbVisibility, isTrue);
-    expect(scrollbar.interactive, isTrue);
-    expect(scrollbar.thickness, 4);
-    expect(scrollbar.radius, const Radius.circular(17));
-    expect(scrollbar.thumbColor, CLThemeData().colors.selection);
-    expect(scrollbar.minThumbLength, 49);
-    expect(scrollbar.mainAxisMargin, 2);
-    expect(scrollbar.scrollbarOrientation, ScrollbarOrientation.right);
+    expect(scrollable.direction, CLScrollDirection.vertical);
+    expect(scrollable.verticalController, same(controller));
+    expect(
+      scrollable.padding,
+      const EdgeInsets.only(top: 4, right: 10, bottom: 4),
+    );
+    expect(scrollable.verticalScrollbar, CLScrollbarVisibility.auto);
+    expect(scrollable.blurExtent, const EdgeInsets.all(24));
+    expect(scrollable.blurSigma, const EdgeInsets.all(16));
   });
 }
