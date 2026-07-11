@@ -500,12 +500,14 @@ class _ListsSection extends StatefulWidget {
 class _ListsSectionState extends State<_ListsSection> {
   int _selectedStyle = 0;
   bool _groupExpanded = true;
+  bool _containerExpanded = true;
+  bool _subtreeExpanded = true;
 
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     return _SectionCard(
-      title: 'CLListSection / CLListTile',
+      title: 'CLTreeView / CLListSection / CLListTile',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -527,32 +529,95 @@ class _ListsSectionState extends State<_ListsSection> {
             ],
           ),
           CLDivider(indent: theme.spacing.xs),
-          CLListSection(
-            header: '图层',
-            children: [
-              CLListTile(
-                label: '组 2',
-                leading: const Icon(Icons.crop_free_rounded),
-                expanded: _groupExpanded,
-                onExpandedChanged: (v) => setState(() => _groupExpanded = v),
-                onTap: () =>
-                    setState(() => _groupExpanded = !_groupExpanded),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 282,
+              height: 316,
+              child: CLTreeView(
+                children: [
+                  CLListTile(
+                    label: 'Frame 114',
+                    leading: const Icon(Icons.image_outlined),
+                    selected: true,
+                    onTap: () {},
+                  ),
+                  CLListTile(
+                    label: '图组 1',
+                    leading: const Icon(Icons.collections_outlined),
+                    onTap: () {},
+                  ),
+                  CLListTile(
+                    label: '文字 1',
+                    leading: const Icon(Icons.text_fields_rounded),
+                    onTap: () {},
+                  ),
+                  CLListTile(
+                    label: '组 2',
+                    leading: const Icon(Icons.crop_free_rounded),
+                    expanded: _groupExpanded,
+                    onExpandedChanged: (v) =>
+                        setState(() => _groupExpanded = v),
+                    onTap: () =>
+                        setState(() => _groupExpanded = !_groupExpanded),
+                  ),
+                  if (_groupExpanded) ...[
+                    CLListTile(
+                      label: '进度条 1',
+                      depth: 1,
+                      leading: const Icon(Icons.data_usage_rounded),
+                      onTap: () {},
+                    ),
+                    CLListTile(
+                      label: '序列帧 1',
+                      depth: 1,
+                      leading: const Icon(Icons.auto_awesome_rounded),
+                      onTap: () {},
+                    ),
+                  ],
+                  CLListTile(
+                    label: '容器 1',
+                    tint: const Color(0xFFBE93E4),
+                    leading: const Icon(Icons.grid_view_rounded),
+                    expanded: _containerExpanded,
+                    onExpandedChanged: (v) =>
+                        setState(() => _containerExpanded = v),
+                    onTap: () => setState(
+                      () => _containerExpanded = !_containerExpanded,
+                    ),
+                  ),
+                  if (_containerExpanded) ...[
+                    CLListTile(
+                      label: '组 1',
+                      tint: const Color(0xFFBE93E4),
+                      depth: 1,
+                      leading: const Icon(Icons.crop_free_rounded),
+                      expanded: _subtreeExpanded,
+                      onExpandedChanged: (v) =>
+                          setState(() => _subtreeExpanded = v),
+                      onTap: () =>
+                          setState(() => _subtreeExpanded = !_subtreeExpanded),
+                    ),
+                    if (_subtreeExpanded) ...[
+                      CLListTile(
+                        label: '矩形 1',
+                        tint: const Color(0xFFBE93E4),
+                        depth: 2,
+                        leading: const Icon(Icons.rectangle_outlined),
+                        onTap: () {},
+                      ),
+                      CLListTile(
+                        label: '文字 2',
+                        tint: const Color(0xFFBE93E4),
+                        depth: 2,
+                        leading: const Icon(Icons.text_fields_rounded),
+                        onTap: () {},
+                      ),
+                    ],
+                  ],
+                ],
               ),
-              if (_groupExpanded) ...[
-                CLListTile(
-                  label: '进度条 1',
-                  depth: 1,
-                  leading: const Icon(Icons.data_usage_rounded),
-                  onTap: () {},
-                ),
-                CLListTile(
-                  label: '序列帧 1',
-                  depth: 1,
-                  leading: const Icon(Icons.auto_awesome_rounded),
-                  onTap: () {},
-                ),
-              ],
-            ],
+            ),
           ),
         ],
       ),

@@ -57,8 +57,8 @@ Three free-for-commercial-use families ship with the package (see
   (+`CLColorPicker.show`)
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
   `CLToolbar`, `CLSideBar`
-- **Lists** — `CLListSection`, `CLListTile` (selection, tree indent,
-  disclosure, `outlined:` add-rows)
+- **Lists** — `CLTreeView`, `CLListSection`, `CLListTile` (scrolling,
+  selection, tree guides, disclosure, tint, `outlined:` add-rows)
 - **Menus** — `CLMenu` (morphs out of its anchor with the jelly spring;
   pointer-following glow)
 - **Indicators** — `CLProgressBar`, `CLProgressRing`, `CLColorSwatchGroup`,

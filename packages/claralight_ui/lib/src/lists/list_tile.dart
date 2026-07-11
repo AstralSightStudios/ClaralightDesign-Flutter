@@ -18,17 +18,21 @@ class CLListTile extends StatefulWidget {
   final Widget? leading;
   final Widget? trailing;
   final bool selected;
+
+  /// Optional color for the label and leading icon.
+  final Color? tint;
+
   final CLControlSize size;
 
-  /// Tree indentation level; each level indents by 16.
+  /// Tree indentation level. Each level adds a 14px guide and a 10px gap.
   final int depth;
 
   /// Renders the row as a 2px-outlined hint row instead of a filled one —
   /// the "新增样式 / 新建表盘" add rows of the design.
   final bool outlined;
 
-  /// Non-null renders a disclosure chevron: `true` pointing down,
-  /// `false` pointing right. [onExpandedChanged] toggles it.
+  /// Non-null renders a disclosure chevron: `true` pointing up,
+  /// `false` pointing down. [onExpandedChanged] toggles it.
   final bool? expanded;
   final ValueChanged<bool>? onExpandedChanged;
 
@@ -39,6 +43,7 @@ class CLListTile extends StatefulWidget {
     this.leading,
     this.trailing,
     this.selected = false,
+    this.tint,
     this.size = CLControlSize.medium,
     this.depth = 0,
     this.outlined = false,
@@ -55,7 +60,7 @@ class _CLListTileState extends State<CLListTile> {
 
   double get _height => switch (widget.size) {
     CLControlSize.small => 28,
-    CLControlSize.medium => 36,
+    CLControlSize.medium => 35,
     CLControlSize.large => 40,
   };
 
@@ -69,24 +74,24 @@ class _CLListTileState extends State<CLListTile> {
     final fill = widget.outlined
         ? const Color(0x00000000)
         : widget.selected
-            ? colors.control
-            : _hovered && interactive
-                ? colors.controlHighlight
-                : const Color(0x00000000);
+        ? colors.control
+        : _hovered && interactive
+        ? colors.controlHighlight
+        : const Color(0x00000000);
     final side = widget.outlined
         ? BorderSide(color: colors.control, width: 2)
         : BorderSide.none;
 
-    final textStyle = (widget.size == CLControlSize.large
-            ? theme.typography.body
-            : theme.typography.callout.withCLWeight(FontWeight.w500))
-        .copyWith(
-      color: widget.outlined
-          ? colors.textHint
-          : widget.selected
-              ? colors.textPrimary
-              : colors.textSecondary,
-    );
+    final labelColor =
+        widget.tint ??
+        (widget.outlined ? colors.textHint : colors.textSecondary);
+    final leadingColor =
+        widget.tint ?? (widget.outlined ? colors.textHint : colors.textPrimary);
+    final textStyle =
+        (widget.size == CLControlSize.large
+                ? theme.typography.body
+                : theme.typography.callout.withCLWeight(FontWeight.w400))
+            .copyWith(color: labelColor);
 
     return Semantics(
       button: interactive,
@@ -105,10 +110,7 @@ class _CLListTileState extends State<CLListTile> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             height: _height,
-            padding: EdgeInsets.only(
-              left: 8.0 + widget.depth * 16.0,
-              right: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: clSmoothDecoration(
               color: fill,
               borderRadius: radius,
@@ -116,42 +118,28 @@ class _CLListTileState extends State<CLListTile> {
             ),
             child: Row(
               children: [
-                if (widget.expanded != null)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.onExpandedChanged == null
-                        ? null
-                        : () => widget.onExpandedChanged!(!widget.expanded!),
-                    child: SizedBox(
-                      width: 20,
-                      height: _height,
-                      child: Center(
-                        child: AnimatedRotation(
-                          duration: const Duration(milliseconds: 160),
-                          turns: widget.expanded! ? 0.25 : 0,
-                          child: CustomPaint(
-                            size: const Size(6, 10),
-                            painter: _DisclosurePainter(
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        ),
+                for (var i = 0; i < widget.depth; i++) ...[
+                  SizedBox(
+                    width: 14,
+                    height: 18,
+                    child: CustomPaint(
+                      painter: _DepthGuidePainter(
+                        color: colors.textPrimary.withValues(alpha: 0.18),
+                        rowHeight: _height,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 10),
+                ],
                 if (widget.leading != null) ...[
                   IconTheme.merge(
                     data: IconThemeData(
                       size: widget.size == CLControlSize.small ? 14 : 18,
-                      color: widget.outlined
-                          ? colors.textHint
-                          : widget.selected
-                              ? colors.textPrimary
-                              : colors.textSecondary,
+                      color: leadingColor,
                     ),
                     child: widget.leading!,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                 ],
                 Expanded(
                   child: Text(
@@ -162,13 +150,35 @@ class _CLListTileState extends State<CLListTile> {
                   ),
                 ),
                 if (widget.trailing != null) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   IconTheme.merge(
                     data: IconThemeData(
                       size: widget.size == CLControlSize.small ? 14 : 17,
                       color: colors.textSecondary,
                     ),
                     child: widget.trailing!,
+                  ),
+                ],
+                if (widget.expanded != null) ...[
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: widget.onExpandedChanged == null
+                        ? null
+                        : () => widget.onExpandedChanged!(!widget.expanded!),
+                    child: SizedBox.square(
+                      dimension: 16,
+                      child: Center(
+                        child: AnimatedRotation(
+                          duration: const Duration(milliseconds: 160),
+                          turns: widget.expanded! ? 0.5 : 0,
+                          child: CustomPaint(
+                            size: const Size(11.5, 6.5),
+                            painter: _DisclosurePainter(color: colors.textHint),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ],
@@ -215,8 +225,9 @@ class CLListSection extends StatelessWidget {
                 Expanded(
                   child: Text(
                     header!,
-                    style: theme.typography.label
-                        .copyWith(color: theme.colors.textHint),
+                    style: theme.typography.label.copyWith(
+                      color: theme.colors.textHint,
+                    ),
                   ),
                 ),
                 ?headerTrailing,
@@ -232,6 +243,109 @@ class CLListSection extends StatelessWidget {
   }
 }
 
+/// A scrollable layer tree with the spacing, viewport padding, and scrollbar
+/// treatment from the ClaraLight design source.
+///
+/// The parent must provide a bounded height. Use [CLListTile.depth] to encode
+/// nesting and [CLListTile.expanded] for disclosure controls.
+class CLTreeView extends StatefulWidget {
+  final List<CLListTile> children;
+  final ScrollController? controller;
+
+  const CLTreeView({super.key, required this.children, this.controller});
+
+  @override
+  State<CLTreeView> createState() => _CLTreeViewState();
+}
+
+class _CLTreeViewState extends State<CLTreeView> {
+  late ScrollController _controller;
+  late bool _ownsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _setController(widget.controller);
+  }
+
+  @override
+  void didUpdateWidget(CLTreeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    if (_ownsController) _controller.dispose();
+    _setController(widget.controller);
+  }
+
+  void _setController(ScrollController? controller) {
+    _ownsController = controller == null;
+    _controller = controller ?? ScrollController();
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController) _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = CLTheme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        assert(
+          constraints.hasBoundedHeight,
+          'CLTreeView requires a bounded height.',
+        );
+        return RawScrollbar(
+          controller: _controller,
+          thumbVisibility: true,
+          interactive: true,
+          thickness: 4,
+          radius: const Radius.circular(17),
+          thumbColor: theme.colors.selection,
+          minThumbLength: 49,
+          mainAxisMargin: 2,
+          scrollbarOrientation: ScrollbarOrientation.right,
+          padding: EdgeInsets.zero,
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              controller: _controller,
+              padding: const EdgeInsets.only(top: 4, right: 10, bottom: 4),
+              child: CLListSection(spacing: 4, children: widget.children),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DepthGuidePainter extends CustomPainter {
+  final Color color;
+  final double rowHeight;
+
+  const _DepthGuidePainter({required this.color, required this.rowHeight});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final overhang = (rowHeight - size.height) / 2 + 2;
+    canvas.drawLine(
+      Offset(size.width - 5, -overhang),
+      Offset(size.width - 5, size.height + overhang),
+      Paint()
+        ..color = color
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DepthGuidePainter oldDelegate) =>
+      color != oldDelegate.color || rowHeight != oldDelegate.rowHeight;
+}
+
 class _DisclosurePainter extends CustomPainter {
   final Color color;
 
@@ -242,15 +356,15 @@ class _DisclosurePainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
+      ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
     canvas.drawPath(
       Path()
-        ..moveTo(0, 0)
-        ..lineTo(size.width, size.height / 2)
-        ..lineTo(0, size.height),
+        ..moveTo(0, 0.5)
+        ..lineTo(size.width / 2, size.height - 0.5)
+        ..lineTo(size.width, 0.5),
       paint,
     );
   }

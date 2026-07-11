@@ -21,5 +21,11 @@ void main() {
     expect(find.byType(CLColorSwatchGroup), findsWidgets);
     expect(find.byType(CLProgressBar), findsWidgets);
     expect(find.byType(CLMenu), findsWidgets);
+    expect(find.byType(CLTreeView), findsOneWidget);
+
+    final subtreeLeaf = tester.widget<CLListTile>(
+      find.widgetWithText(CLListTile, '矩形 1'),
+    );
+    expect(subtreeLeaf.depth, 2);
   });
 }
