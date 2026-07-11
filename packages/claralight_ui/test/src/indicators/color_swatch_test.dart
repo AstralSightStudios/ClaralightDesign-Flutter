@@ -41,15 +41,9 @@ void main() {
   testWidgets('CLColorSwatchGroup uses one horizontal CLList row', (
     tester,
   ) async {
-    var addCount = 0;
     await tester.pumpWidget(
       host(
-        CLColorSwatchGroup(
-          colors: colors,
-          selectedIndex: 0,
-          onChanged: (_) {},
-          onAdd: () => addCount++,
-        ),
+        CLColorSwatchGroup(colors: colors, selectedIndex: 0, onChanged: (_) {}),
       ),
     );
     await tester.pump();
@@ -66,11 +60,6 @@ void main() {
         .toList();
     expect(swatchCenters, isNotEmpty);
     expect(swatchCenters.map((center) => center.dy).toSet(), hasLength(1));
-
-    list.controller!.jumpTo(list.controller!.position.maxScrollExtent);
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('cl-color-swatch-add')));
-    expect(addCount, 1);
   });
 
   testWidgets('CLColorSwatchGroup reveals its initial selection immediately', (

@@ -1013,8 +1013,7 @@ class _SwatchesSectionState extends State<_SwatchesSection> {
           Color(0xFFC2504B),
         ],
         selectedIndex: _selected,
-        onChanged: (i) => setState(() => _selected = i),
-        onAdd: () {},
+        onChanged: (i) => setState(() => _selected = i)
       ),
     );
   }
@@ -1394,7 +1393,6 @@ class _SheetDemoContentState extends State<_SheetDemoContent> {
           ],
           selectedIndex: _swatch,
           onChanged: (i) => setState(() => _swatch = i),
-          onAdd: () {},
         ),
         const SizedBox(height: 12),
         CLDivider(),

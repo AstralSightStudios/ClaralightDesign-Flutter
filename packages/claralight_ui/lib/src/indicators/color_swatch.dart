@@ -71,16 +71,11 @@ class CLColorSwatchItem extends StatelessWidget {
   }
 }
 
-/// A row of selectable [CLColorSwatchItem]s with an optional trailing
-/// "add" affordance.
+/// A horizontal row of selectable [CLColorSwatchItem]s.
 class CLColorSwatchGroup extends StatefulWidget {
   final List<Color> colors;
   final int? selectedIndex;
   final ValueChanged<int>? onChanged;
-
-  /// Called when the trailing "+" swatch is tapped; hidden when null.
-  final VoidCallback? onAdd;
-
   final double swatchSize;
   final double spacing;
 
@@ -89,7 +84,6 @@ class CLColorSwatchGroup extends StatefulWidget {
     required this.colors,
     required this.selectedIndex,
     required this.onChanged,
-    this.onAdd,
     this.swatchSize = 23,
     this.spacing = 8,
   });
@@ -150,12 +144,12 @@ class _CLColorSwatchGroupState extends State<CLColorSwatchGroup> {
       target = selectedEnd - position.viewportDimension;
     }
 
-    final itemCount = widget.colors.length + (widget.onAdd == null ? 0 : 1);
     final contentWidth =
         widget.colors.length * itemWidth +
         (selectedWidth - itemWidth) +
-        (widget.onAdd == null ? 0 : widget.swatchSize) +
-        (itemCount > 1 ? (itemCount - 1) * widget.spacing : 0);
+        (widget.colors.length > 1
+            ? (widget.colors.length - 1) * widget.spacing
+            : 0);
     final maxOffset = (contentWidth - position.viewportDimension).clamp(
       0.0,
       double.infinity,
@@ -187,86 +181,27 @@ class _CLColorSwatchGroupState extends State<CLColorSwatchGroup> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = CLTheme.of(context);
-    final itemCount = widget.colors.length + (widget.onAdd == null ? 0 : 1);
-
     return SizedBox(
       height: widget.swatchSize + 8,
       child: CLList.separated(
         controller: _controller,
         scrollDirection: Axis.horizontal,
         scrollbarVisibility: CLScrollbarVisibility.hidden,
-        itemCount: itemCount,
+        itemCount: widget.colors.length,
         separatorBuilder: (context, index) => SizedBox(width: widget.spacing),
         itemBuilder: (context, index) {
-          if (index < widget.colors.length) {
-            return Align(
-              child: CLColorSwatchItem(
-                color: widget.colors[index],
-                selected: index == widget.selectedIndex,
-                size: widget.swatchSize,
-                onTap: widget.onChanged == null
-                    ? null
-                    : () => widget.onChanged!(index),
-              ),
-            );
-          }
-
           return Align(
-            child: CLPressable(
-              key: const ValueKey('cl-color-swatch-add'),
-              onTap: widget.onAdd,
-              borderRadius: BorderRadius.circular(widget.swatchSize / 2),
-              pressedScale: 1.1,
-              deformOnDrag: false,
-              showHighlight: false,
-              child: Container(
-                width: widget.swatchSize,
-                height: widget.swatchSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: theme.colors.control, width: 2),
-                ),
-                child: Center(
-                  child: CustomPaint(
-                    size: Size.square(widget.swatchSize * 0.55),
-                    painter: _PlusPainter(color: theme.colors.textSecondary),
-                  ),
-                ),
-              ),
+            child: CLColorSwatchItem(
+              color: widget.colors[index],
+              selected: index == widget.selectedIndex,
+              size: widget.swatchSize,
+              onTap: widget.onChanged == null
+                  ? null
+                  : () => widget.onChanged!(index),
             ),
           );
         },
       ),
     );
   }
-}
-
-class _PlusPainter extends CustomPainter {
-  final Color color;
-
-  const _PlusPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(
-      Offset(size.width / 2, 0),
-      Offset(size.width / 2, size.height),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(0, size.height / 2),
-      Offset(size.width, size.height / 2),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_PlusPainter oldDelegate) => color != oldDelegate.color;
 }
