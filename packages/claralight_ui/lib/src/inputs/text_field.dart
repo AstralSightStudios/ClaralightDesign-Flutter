@@ -26,6 +26,12 @@ class CLTextField extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
   final TextInputType? keyboardType;
   final bool enabled;
+
+  /// Whether to render the field with error-state colors.
+  ///
+  /// Numeric validation errors are combined with this external state.
+  final bool error;
+
   final bool obscureText;
   final TextAlign textAlign;
   final CLControlSize size;
@@ -67,6 +73,7 @@ class CLTextField extends StatefulWidget {
     this.onSubmitted,
     this.keyboardType,
     this.enabled = true,
+    this.error = false,
     this.obscureText = false,
     this.textAlign = TextAlign.start,
     this.size = CLControlSize.large,
@@ -178,7 +185,8 @@ class _CLTextFieldState extends State<CLTextField> {
   }
 
   bool get _showsError =>
-      widget.enabled && _isNumeric && _showValidationError && !_isValidNumber;
+      widget.enabled &&
+      (widget.error || (_isNumeric && _showValidationError && !_isValidNumber));
 
   bool _canStep(double direction) {
     if (!widget.enabled || !_showsStepper) return false;

@@ -109,9 +109,8 @@ Three free-for-commercial-use families ship with the package (see
 - **Buttons** — `CLButton`, `CLIconButton`
 - **Controls** — `CLToggle`, `CLSegmentedControl`, `CLSlider`,
   `CLChipTabs`
-- **Inputs** — `CLTextField` (`mono:` for numeric fields),
+- **Inputs** — `CLTextField` (`mono:` and external `error:` states),
   `CLSearchField`, `CLSelect`, `CLStepper`, `CLColorPicker`
-  (+`CLColorPicker.show`)
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
   `CLToolbar`, `CLSideBar`
 - **Lists** — `CLTreeView`, `CLListSection`, `CLListTile` (progressive

@@ -1,11 +1,8 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
-import '../buttons/button.dart';
-import '../containers/dialog.dart';
 import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
-import '../indicators/color_swatch.dart';
 import '../theme/theme.dart';
 import 'text_field.dart';
 
@@ -19,18 +16,14 @@ const _directManipulationDevices = {
 
 /// A ClaraLight color picker.
 ///
-/// A saturation/value area with a draggable loupe, a hue bar, a hex field
-/// and optional preset [swatches] — all in the flat layered style. Embed it
-/// inline or present it modally with [CLColorPicker.show].
+/// An inline saturation/value area with a draggable loupe, a hue bar, and a
+/// hex field in the flat layered style.
 class CLColorPicker extends StatefulWidget {
   /// Currently selected color.
   final Color color;
 
   /// Called continuously while the user picks.
   final ValueChanged<Color> onChanged;
-
-  /// Optional preset swatch row shown under the hex field.
-  final List<Color> swatches;
 
   /// Height of the saturation/value area.
   final double areaHeight;
@@ -44,59 +37,9 @@ class CLColorPicker extends StatefulWidget {
     super.key,
     required this.color,
     required this.onChanged,
-    this.swatches = const [],
     this.areaHeight = 160,
     this.cornerRadius,
   });
-
-  /// Presents a picker in a [CLDialog] and resolves with the chosen color,
-  /// or null when dismissed.
-  static Future<Color?> show(
-    BuildContext context, {
-    required Color color,
-    List<Color> swatches = const [],
-    String title = '选择颜色',
-  }) async {
-    var current = color;
-    return CLDialog.show<Color>(
-      context,
-      title: title,
-      maxWidth: 360,
-      child: StatefulBuilder(
-        builder: (context, setState) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CLColorPicker(
-              color: current,
-              swatches: swatches,
-              onChanged: (c) => setState(() => current = c),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: CLButton(
-                    label: '确定',
-                    size: CLControlSize.medium,
-                    onPressed: () => Navigator.of(context).pop(current),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: CLButton(
-                    label: '取消',
-                    variant: CLButtonVariant.secondary,
-                    size: CLControlSize.medium,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   State<CLColorPicker> createState() => _CLColorPickerState();
@@ -106,6 +49,7 @@ class _CLColorPickerState extends State<CLColorPicker> {
   late HSVColor _hsv;
   late final TextEditingController _hex;
   bool _editingHex = false;
+  bool _showHexError = false;
 
   @override
   void initState() {
@@ -117,8 +61,7 @@ class _CLColorPickerState extends State<CLColorPicker> {
   @override
   void didUpdateWidget(CLColorPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.color != oldWidget.color &&
-        widget.color != _hsv.toColor()) {
+    if (widget.color != oldWidget.color && widget.color != _hsv.toColor()) {
       _hsv = HSVColor.fromColor(widget.color);
       _syncHex();
     }
@@ -140,23 +83,41 @@ class _CLColorPickerState extends State<CLColorPicker> {
   }
 
   void _emit(HSVColor hsv) {
-    setState(() => _hsv = hsv);
+    setState(() {
+      _hsv = hsv;
+      _editingHex = false;
+      _showHexError = false;
+    });
     _syncHex();
     widget.onChanged(hsv.toColor());
   }
 
-  void _submitHex(String raw) {
+  Color? _parseHex(String raw) {
     var text = raw.trim().replaceFirst('#', '');
     if (text.length == 3) {
       text = text.split('').map((c) => '$c$c').join();
     }
     final value = int.tryParse(text, radix: 16);
+    return text.length == 6 && value != null ? Color(0xFF000000 | value) : null;
+  }
+
+  void _submitHex(String raw) {
     _editingHex = false;
-    if (text.length == 6 && value != null) {
-      _emit(HSVColor.fromColor(Color(0xFF000000 | value)));
-    } else {
-      _syncHex();
+    final color = _parseHex(raw);
+    if (color == null) {
+      setState(() => _showHexError = true);
+      return;
     }
+    _showHexError = false;
+    _emit(HSVColor.fromColor(color));
+  }
+
+  void _handleHexChanged(String raw) {
+    if (!_showHexError) return;
+    final color = _parseHex(raw);
+    if (color == null) return;
+    _showHexError = false;
+    _emit(HSVColor.fromColor(color));
   }
 
   @override
@@ -176,9 +137,12 @@ class _CLColorPickerState extends State<CLColorPicker> {
         const SizedBox(height: 12),
         SizedBox(
           height: 16,
-          child: _HueBar(hue: _hsv.hue, onChanged: (h) {
-            _emit(_hsv.withHue(h));
-          }),
+          child: _HueBar(
+            hue: _hsv.hue,
+            onChanged: (h) {
+              _emit(_hsv.withHue(h));
+            },
+          ),
         ),
         const SizedBox(height: 12),
         Row(
@@ -208,30 +172,16 @@ class _CLColorPickerState extends State<CLColorPicker> {
                   size: CLControlSize.medium,
                   borderRadius: radius,
                   prefix: const Text('#'),
+                  error: _showHexError,
+                  onChanged: _handleHexChanged,
                   onSubmitted: _submitHex,
                 ),
               ),
             ),
           ],
         ),
-        if (widget.swatches.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          CLColorSwatchGroup(
-            colors: widget.swatches,
-            selectedIndex: _swatchIndex(color),
-            onChanged: (i) =>
-                _emit(HSVColor.fromColor(widget.swatches[i])),
-          ),
-        ],
       ],
     );
-  }
-
-  int? _swatchIndex(Color color) {
-    for (var i = 0; i < widget.swatches.length; i++) {
-      if (widget.swatches[i].toARGB32() == color.toARGB32()) return i;
-    }
-    return null;
   }
 }
 
@@ -377,18 +327,14 @@ class _HueBar extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: ShapeDecoration(
                     gradient: const LinearGradient(colors: _hues),
-                    shape: clSmoothShape(
-                      BorderRadius.circular(height / 2),
-                    ),
+                    shape: clSmoothShape(BorderRadius.circular(height / 2)),
                   ),
                 ),
               ),
               Positioned(
                 left: (x - 9).clamp(-2.0, width - 16),
                 top: (height - 18) / 2,
-                child: _Loupe(
-                  color: HSVColor.fromAHSV(1, hue, 1, 1).toColor(),
-                ),
+                child: _Loupe(color: HSVColor.fromAHSV(1, hue, 1, 1).toColor()),
               ),
             ],
           ),
@@ -424,4 +370,3 @@ class _Loupe extends StatelessWidget {
     );
   }
 }
-

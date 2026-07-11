@@ -49,14 +49,10 @@ class _GalleryHomeState extends State<GalleryHome> {
   @override
   void initState() {
     super.initState();
-    if (kAutoOpen == 'dialog' ||
-        kAutoOpen == 'sheet' ||
-        kAutoOpen == 'picker') {
+    if (kAutoOpen == 'dialog' || kAutoOpen == 'sheet') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (kAutoOpen == 'picker') {
-          CLColorPicker.show(context, color: const Color(0xFF297E7B));
-        } else if (kAutoOpen == 'dialog') {
+        if (kAutoOpen == 'dialog') {
           CLDialog.show(
             context,
             title: '导出表盘',
@@ -1227,29 +1223,7 @@ class _ColorPickerSectionState extends State<_ColorPickerSection> {
         children: [
           CLColorPicker(
             color: _color,
-            swatches: const [
-              Color(0xFF297E7B),
-              Color(0xFF3F80A6),
-              Color(0xFF808080),
-              Color(0xFFD98C0B),
-              Color(0xFFAF5356),
-            ],
             onChanged: (c) => setState(() => _color = c),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: CLButton(
-              label: '弹窗选色',
-              variant: CLButtonVariant.secondary,
-              size: CLControlSize.medium,
-              onPressed: () async {
-                final picked = await CLColorPicker.show(context, color: _color);
-                if (picked != null && mounted) {
-                  setState(() => _color = picked);
-                }
-              },
-            ),
           ),
         ],
       ),

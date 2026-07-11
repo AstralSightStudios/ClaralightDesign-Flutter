@@ -211,6 +211,22 @@ void main() {
     expect(controller.text, '6');
   });
 
+  testWidgets('external error state turns text red', (tester) async {
+    await tester.pumpWidget(host(const CLTextField(error: true)));
+
+    Color? textColor() => tester
+        .widget<CupertinoTextField>(find.byType(CupertinoTextField))
+        .style
+        ?.color;
+
+    expect(textColor(), CLThemeData().colors.danger);
+
+    await tester.pumpWidget(host(const CLTextField()));
+    await tester.pumpAndSettle();
+
+    expect(textColor(), isNot(CLThemeData().colors.danger));
+  });
+
   testWidgets('invalid numeric input turns red after losing focus', (
     tester,
   ) async {
