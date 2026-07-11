@@ -33,6 +33,34 @@ void main() {
     expect(subtreeLeaf.depth, 2);
   });
 
+  testWidgets('Gallery exposes a 500-option aligned select demo', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GalleryApp());
+    await tester.pump();
+
+    final selectFinder = find.byKey(const Key('large-select-demo'));
+    final select = tester.widget<CLSelect<int>>(selectFinder);
+    expect(select.options, hasLength(500));
+    expect(select.value, 249);
+    expect(select.alignSelectedOption, isTrue);
+    expect(select.options.first.label, '项目 001 / 500');
+    expect(select.options.last.label, '项目 500 / 500');
+
+    await tester.ensureVisible(selectFinder);
+    await tester.pump();
+    final triggerCenter = tester.getCenter(selectFinder);
+    await tester.tap(selectFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final selectedLabel = find.descendant(
+      of: find.byType(CLList),
+      matching: find.text('项目 250 / 500'),
+    );
+    expect(selectedLabel, findsOneWidget);
+    expect(tester.getCenter(selectedLabel).dy, closeTo(triggerCenter.dy, 0.01));
+  });
+
   testWidgets('Gallery exposes the interactive CLScrollable demo', (
     WidgetTester tester,
   ) async {
@@ -94,9 +122,7 @@ void main() {
     expect(demo.scrollbarVisibility, CLScrollbarVisibility.auto);
     expect(find.text('#001'), findsOneWidget);
 
-    final directionControl = find.byKey(
-      const Key('list-direction-control'),
-    );
+    final directionControl = find.byKey(const Key('list-direction-control'));
     await tester.ensureVisible(directionControl);
     await tester.pump();
     await tester.tap(
@@ -104,9 +130,7 @@ void main() {
     );
     await tester.pump();
 
-    final visibilityControl = find.byKey(
-      const Key('list-visibility-control'),
-    );
+    final visibilityControl = find.byKey(const Key('list-visibility-control'));
     await tester.ensureVisible(visibilityControl);
     await tester.pump();
     await tester.tap(

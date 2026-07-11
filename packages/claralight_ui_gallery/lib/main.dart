@@ -49,7 +49,9 @@ class _GalleryHomeState extends State<GalleryHome> {
   @override
   void initState() {
     super.initState();
-    if (kAutoOpen == 'dialog' || kAutoOpen == 'sheet' || kAutoOpen == 'picker') {
+    if (kAutoOpen == 'dialog' ||
+        kAutoOpen == 'sheet' ||
+        kAutoOpen == 'picker') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (kAutoOpen == 'picker') {
@@ -101,14 +103,16 @@ class _GalleryHomeState extends State<GalleryHome> {
             children: [
               Text(
                 'Claralight UI',
-                style: theme.typography.display
-                    .copyWith(color: theme.colors.textPrimary),
+                style: theme.typography.display.copyWith(
+                  color: theme.colors.textPrimary,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 'ClaraLight 设计语言 · 扁平分层 · 弹性交互',
-                style: theme.typography.callout
-                    .copyWith(color: theme.colors.textTertiary),
+                style: theme.typography.callout.copyWith(
+                  color: theme.colors.textTertiary,
+                ),
               ),
               const SizedBox(height: 24),
               const Wrap(
@@ -165,8 +169,9 @@ class _SectionCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: theme.typography.label
-                  .copyWith(color: theme.colors.textSecondary),
+              style: theme.typography.label.copyWith(
+                color: theme.colors.textSecondary,
+              ),
             ),
             const SizedBox(height: 12),
             child,
@@ -306,10 +311,7 @@ class _TogglesSectionState extends State<_TogglesSection> {
       title: 'CLToggle',
       child: Row(
         children: [
-          CLToggle(
-            value: _value,
-            onChanged: (v) => setState(() => _value = v),
-          ),
+          CLToggle(value: _value, onChanged: (v) => setState(() => _value = v)),
           const SizedBox(width: 16),
           const CLToggle(value: false, onChanged: null),
           const SizedBox(width: 16),
@@ -373,15 +375,13 @@ class _SliderSectionState extends State<_SliderSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CLSlider(
-            value: _value,
-            onChanged: (v) => setState(() => _value = v),
-          ),
+          CLSlider(value: _value, onChanged: (v) => setState(() => _value = v)),
           const SizedBox(height: 4),
           Text(
             '${(_value * 100).round()}%',
-            style: theme.typography.caption
-                .copyWith(color: theme.colors.textSecondary),
+            style: theme.typography.caption.copyWith(
+              color: theme.colors.textSecondary,
+            ),
           ),
           const SizedBox(height: 8),
           const CLSlider(value: 0.3, onChanged: null),
@@ -442,7 +442,17 @@ class _SelectStepperSection extends StatefulWidget {
 }
 
 class _SelectStepperSectionState extends State<_SelectStepperSection> {
+  static final _largeOptionSet = List.generate(
+    500,
+    (index) => CLSelectOption(
+      index,
+      '项目 ${(index + 1).toString().padLeft(3, '0')} / 500',
+    ),
+    growable: false,
+  );
+
   String _fillMode = '数字填充';
+  int _selectedItem = 249;
   double _w = 78;
   double _h = 91;
 
@@ -461,6 +471,14 @@ class _SelectStepperSectionState extends State<_SelectStepperSection> {
               CLSelectOption('序列帧', '序列帧'),
             ],
             onChanged: (v) => setState(() => _fillMode = v),
+          ),
+          const SizedBox(height: 10),
+          CLSelect<int>(
+            key: const Key('large-select-demo'),
+            size: CLControlSize.medium,
+            value: _selectedItem,
+            options: _largeOptionSet,
+            onChanged: (value) => setState(() => _selectedItem = value),
           ),
           const SizedBox(height: 10),
           Row(
@@ -538,8 +556,7 @@ class _ScrollableSectionState extends State<_ScrollableSection> {
                   segments: const ['双轴', '横向', '纵向'],
                   size: CLControlSize.small,
                   selectedIndex: _directionIndex,
-                  onChanged: (index) =>
-                      setState(() => _directionIndex = index),
+                  onChanged: (index) => setState(() => _directionIndex = index),
                 ),
               ),
             ],
@@ -624,10 +641,7 @@ class _ScrollableSectionState extends State<_ScrollableSection> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            '拖动、滚轮，或按住 Shift 使用滚轮',
-            style: labelStyle,
-          ),
+          Text('拖动、滚轮，或按住 Shift 使用滚轮', style: labelStyle),
         ],
       ),
     );
@@ -733,8 +747,7 @@ class _LazyListSectionState extends State<_LazyListSection> {
                   segments: const ['纵向', '横向'],
                   size: CLControlSize.small,
                   selectedIndex: _directionIndex,
-                  onChanged: (index) =>
-                      setState(() => _directionIndex = index),
+                  onChanged: (index) => setState(() => _directionIndex = index),
                 ),
               ),
             ],
@@ -1030,8 +1043,9 @@ class _ProgressSectionState extends State<_ProgressSection> {
               children: [
                 TextSpan(
                   text: '${(_progress * 1024).round()}KB/1024KB',
-                  style: theme.typography.mono
-                      .copyWith(color: theme.colors.textPrimary),
+                  style: theme.typography.mono.copyWith(
+                    color: theme.colors.textPrimary,
+                  ),
                 ),
               ],
             ),
@@ -1045,8 +1059,9 @@ class _ProgressSectionState extends State<_ProgressSection> {
                 value: _progress,
                 child: Text(
                   '${(_progress * 100).round()}',
-                  style: theme.typography.caption
-                      .copyWith(color: theme.colors.textPrimary),
+                  style: theme.typography.caption.copyWith(
+                    color: theme.colors.textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -1212,10 +1227,7 @@ class _ColorPickerSectionState extends State<_ColorPickerSection> {
               variant: CLButtonVariant.secondary,
               size: CLControlSize.medium,
               onPressed: () async {
-                final picked = await CLColorPicker.show(
-                  context,
-                  color: _color,
-                );
+                final picked = await CLColorPicker.show(context, color: _color);
                 if (picked != null && mounted) {
                   setState(() => _color = picked);
                 }
@@ -1248,10 +1260,9 @@ class _TooltipSection extends StatelessWidget {
           Expanded(
             child: Text(
               '悬停或长按查看提示',
-              style: CLTheme.of(context)
-                  .typography
-                  .caption
-                  .copyWith(color: CLTheme.of(context).colors.textHint),
+              style: CLTheme.of(context).typography.caption.copyWith(
+                color: CLTheme.of(context).colors.textHint,
+              ),
             ),
           ),
         ],
@@ -1273,10 +1284,8 @@ class _SheetSection extends StatelessWidget {
           label: '弹出 Sheet',
           variant: CLButtonVariant.secondary,
           size: CLControlSize.medium,
-          onPressed: () => CLSheet.show(
-            context,
-            child: const _SheetDemoContent(),
-          ),
+          onPressed: () =>
+              CLSheet.show(context, child: const _SheetDemoContent()),
         ),
       ),
     );
@@ -1307,25 +1316,31 @@ class _SheetDemoContentState extends State<_SheetDemoContent> {
           children: [
             Text(
               '神秘表盘',
-              style: theme.typography.headline
-                  .copyWith(color: theme.colors.textPrimary),
+              style: theme.typography.headline.copyWith(
+                color: theme.colors.textPrimary,
+              ),
             ),
             const SizedBox(width: 6),
-            Icon(Icons.edit_outlined,
-                size: 16, color: theme.colors.textSecondary),
+            Icon(
+              Icons.edit_outlined,
+              size: 16,
+              color: theme.colors.textSecondary,
+            ),
           ],
         ),
         const SizedBox(height: 4),
         Text.rich(
           TextSpan(
             text: '小米手环 9 Pro  ',
-            style: theme.typography.callout
-                .copyWith(color: theme.colors.textTertiary),
+            style: theme.typography.callout.copyWith(
+              color: theme.colors.textTertiary,
+            ),
             children: [
               TextSpan(
                 text: '已保存',
-                style: theme.typography.callout
-                    .copyWith(color: theme.colors.textHint),
+                style: theme.typography.callout.copyWith(
+                  color: theme.colors.textHint,
+                ),
               ),
             ],
           ),
@@ -1381,8 +1396,9 @@ class _SheetDemoContentState extends State<_SheetDemoContent> {
             children: [
               TextSpan(
                 text: '368KB/1024KB',
-                style: theme.typography.mono
-                    .copyWith(color: theme.colors.textPrimary),
+                style: theme.typography.mono.copyWith(
+                  color: theme.colors.textPrimary,
+                ),
               ),
             ],
           ),
@@ -1448,18 +1464,19 @@ class _MenuSectionState extends State<_MenuSection> {
     if (kAutoOpen == 'menu') {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         Future<void> tap(Offset at) async {
-          GestureBinding.instance
-              .handlePointerEvent(PointerDownEvent(pointer: 99, position: at));
+          GestureBinding.instance.handlePointerEvent(
+            PointerDownEvent(pointer: 99, position: at),
+          );
           await Future.delayed(const Duration(milliseconds: 90));
-          GestureBinding.instance
-              .handlePointerEvent(PointerUpEvent(pointer: 99, position: at));
+          GestureBinding.instance.handlePointerEvent(
+            PointerUpEvent(pointer: 99, position: at),
+          );
         }
 
         // Open/close loop so captures can catch both morph directions.
         while (mounted) {
           await Future.delayed(const Duration(milliseconds: 800));
-          final box =
-              _menuKey.currentContext?.findRenderObject() as RenderBox?;
+          final box = _menuKey.currentContext?.findRenderObject() as RenderBox?;
           if (box == null || !mounted) return;
           final center = box.localToGlobal(box.size.center(Offset.zero));
           await tap(center);
@@ -1531,10 +1548,9 @@ class _MenuSectionState extends State<_MenuSection> {
           Expanded(
             child: Text(
               '按住行拖动可看到光晕跟随',
-              style: CLTheme.of(context)
-                  .typography
-                  .caption
-                  .copyWith(color: CLTheme.of(context).colors.textHint),
+              style: CLTheme.of(context).typography.caption.copyWith(
+                color: CLTheme.of(context).colors.textHint,
+              ),
             ),
           ),
         ],
@@ -1542,4 +1558,3 @@ class _MenuSectionState extends State<_MenuSection> {
     );
   }
 }
-

@@ -1,0 +1,251 @@
+import 'package:claralight_ui/claralight_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+const _viewportSize = Size(400, 800);
+
+List<CLSelectOption<int>> _options(int count) => [
+  for (var index = 0; index < count; index++)
+    CLSelectOption(index, 'Option $index'),
+];
+
+Widget _testApp({
+  required List<CLSelectOption<int>> options,
+  required int value,
+  Alignment alignment = Alignment.center,
+  EdgeInsets safePadding = EdgeInsets.zero,
+  CLControlSize size = CLControlSize.large,
+  bool alignSelectedOption = true,
+}) {
+  return MaterialApp(
+    home: MediaQuery(
+      data: MediaQueryData(size: _viewportSize, padding: safePadding),
+      child: Scaffold(
+        body: Align(
+          alignment: alignment,
+          child: CLSelect<int>(
+            width: 180,
+            size: size,
+            options: options,
+            value: value,
+            onChanged: (_) {},
+            alignSelectedOption: alignSelectedOption,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+  });
+
+  Future<void> setViewport(WidgetTester tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = _viewportSize;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+  }
+
+  Future<void> openSelect(WidgetTester tester) async {
+    await tester.tap(find.byType(CLSelect<int>));
+    await tester.pumpAndSettle();
+  }
+
+  test('selected option alignment is enabled by default', () {
+    final select = CLSelect<int>(
+      options: const [CLSelectOption(0, 'Option 0')],
+      value: 0,
+      onChanged: null,
+    );
+
+    expect(select.alignSelectedOption, isTrue);
+  });
+
+  for (final (size, expectedHeight) in [
+    (CLControlSize.small, 28.0),
+    (CLControlSize.medium, 36.0),
+    (CLControlSize.large, 44.0),
+  ]) {
+    testWidgets('$size option items match the trigger size', (tester) async {
+      await setViewport(tester);
+      await tester.pumpWidget(
+        _testApp(options: _options(5), value: 2, size: size),
+      );
+
+      final triggerRect = tester.getRect(find.byType(CLSelect<int>));
+      await openSelect(tester);
+
+      final selectedLabel = find.descendant(
+        of: find.byType(CLList),
+        matching: find.text('Option 2'),
+      );
+      final selectedItem = find.ancestor(
+        of: selectedLabel,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is MouseRegion &&
+              widget.cursor == SystemMouseCursors.click,
+        ),
+      );
+      expect(selectedItem, findsOneWidget);
+
+      final itemRect = tester.getRect(selectedItem);
+      expect(itemRect.width, triggerRect.width);
+      expect(itemRect.left, triggerRect.left);
+      expect(itemRect.right, triggerRect.right);
+      expect(itemRect.height, expectedHeight);
+      expect(itemRect.height, triggerRect.height);
+    });
+  }
+
+  testWidgets('selected option is centered on the field when opened', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    await tester.pumpWidget(_testApp(options: _options(5), value: 2));
+
+    final fieldCenter = tester.getCenter(find.byType(CLSelect<int>));
+    await openSelect(tester);
+
+    final selectedLabel = find.descendant(
+      of: find.byType(CLList),
+      matching: find.text('Option 2'),
+    );
+    expect(selectedLabel, findsOneWidget);
+    expect(tester.getCenter(selectedLabel).dy, closeTo(fieldCenter.dy, 0.01));
+  });
+
+  testWidgets('long list stays inside safe area and scrolls to selection', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    const safePadding = EdgeInsets.only(top: 24, bottom: 34);
+    await tester.pumpWidget(
+      _testApp(options: _options(50), value: 25, safePadding: safePadding),
+    );
+
+    final fieldCenter = tester.getCenter(find.byType(CLSelect<int>));
+    await openSelect(tester);
+
+    final listFinder = find.byType(CLList);
+    final listRect = tester.getRect(listFinder);
+    expect(listRect.top, greaterThanOrEqualTo(safePadding.top + 8));
+    expect(
+      listRect.bottom,
+      lessThanOrEqualTo(_viewportSize.height - safePadding.bottom - 8),
+    );
+
+    final list = tester.widget<CLList>(listFinder);
+    expect(list.controller, isNotNull);
+    expect(list.controller!.offset, greaterThan(0));
+
+    final selectedLabel = find.descendant(
+      of: listFinder,
+      matching: find.text('Option 25'),
+    );
+    expect(selectedLabel, findsOneWidget);
+    expect(tester.getCenter(selectedLabel).dy, closeTo(fieldCenter.dy, 0.01));
+  });
+
+  testWidgets('panel is shifted inside horizontal safe bounds', (tester) async {
+    await setViewport(tester);
+    const safePadding = EdgeInsets.only(left: 20, right: 30);
+    await tester.pumpWidget(
+      _testApp(
+        options: _options(5),
+        value: 2,
+        alignment: Alignment.centerRight,
+        safePadding: safePadding,
+      ),
+    );
+
+    await openSelect(tester);
+
+    final listRect = tester.getRect(find.byType(CLList));
+    expect(listRect.left, greaterThanOrEqualTo(safePadding.left + 8));
+    expect(
+      listRect.right,
+      lessThanOrEqualTo(_viewportSize.width - safePadding.right - 8),
+    );
+  });
+
+  testWidgets('safe area wins when exact selected alignment is impossible', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    const safePadding = EdgeInsets.only(top: 24, bottom: 34);
+    await tester.pumpWidget(
+      _testApp(
+        options: _options(10),
+        value: 8,
+        alignment: Alignment.bottomCenter,
+        safePadding: safePadding,
+      ),
+    );
+
+    final fieldCenter = tester.getCenter(find.byType(CLSelect<int>));
+    await openSelect(tester);
+
+    final listFinder = find.byType(CLList);
+    final listRect = tester.getRect(listFinder);
+    expect(
+      listRect.bottom,
+      lessThanOrEqualTo(_viewportSize.height - safePadding.bottom - 8),
+    );
+
+    final selectedLabel = find.descendant(
+      of: listFinder,
+      matching: find.text('Option 8'),
+    );
+    expect(selectedLabel, findsOneWidget);
+    expect(tester.getCenter(selectedLabel).dy, lessThan(fieldCenter.dy));
+  });
+
+  testWidgets('disabled alignment opens below for a valid value', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    await tester.pumpWidget(
+      _testApp(options: _options(3), value: 1, alignSelectedOption: false),
+    );
+
+    final fieldRect = tester.getRect(find.byType(CLSelect<int>));
+    await openSelect(tester);
+
+    final listRect = tester.getRect(find.byType(CLList));
+    expect(listRect.top, closeTo(fieldRect.bottom + 5, 0.01));
+  });
+
+  testWidgets('disabled alignment opens above near the bottom', (tester) async {
+    await setViewport(tester);
+    await tester.pumpWidget(
+      _testApp(
+        options: _options(3),
+        value: 1,
+        alignment: Alignment.bottomCenter,
+        alignSelectedOption: false,
+      ),
+    );
+
+    final fieldRect = tester.getRect(find.byType(CLSelect<int>));
+    await openSelect(tester);
+
+    final listRect = tester.getRect(find.byType(CLList));
+    expect(listRect.bottom, closeTo(fieldRect.top - 5, 0.01));
+  });
+
+  testWidgets('invalid value keeps the below-field fallback', (tester) async {
+    await setViewport(tester);
+    await tester.pumpWidget(_testApp(options: _options(3), value: 99));
+
+    final fieldRect = tester.getRect(find.byType(CLSelect<int>));
+    await openSelect(tester);
+
+    final listRect = tester.getRect(find.byType(CLList));
+    // CLList sits one pixel inside the outlined panel.
+    expect(listRect.top, closeTo(fieldRect.bottom + 5, 0.01));
+  });
+}

@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
+import '../scrolling/cl_list.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
@@ -27,6 +30,12 @@ class CLSelect<T> extends StatefulWidget {
   final CLControlSize size;
   final double? width;
 
+  /// Whether the selected option is centered over the trigger when opened.
+  ///
+  /// When false, the panel opens below the trigger, or above it when there is
+  /// not enough room below.
+  final bool alignSelectedOption;
+
   const CLSelect({
     super.key,
     required this.options,
@@ -34,6 +43,7 @@ class CLSelect<T> extends StatefulWidget {
     required this.onChanged,
     this.size = CLControlSize.large,
     this.width,
+    this.alignSelectedOption = true,
   }) : assert(options.length > 0);
 
   @override
@@ -48,28 +58,39 @@ class _CLSelectState<T> extends State<CLSelect<T>>
 
   bool _open = false;
   bool _hovered = false;
-  bool _dropUp = false;
-  double _fieldWidth = 0;
+  ScrollController? _scrollController;
+  Offset _panelOffset = Offset.zero;
+  double _panelWidth = 0;
+  double _panelHeight = 0;
+  AlignmentGeometry _revealAlignment = Alignment.topCenter;
 
-  static const double _rowHeight = 36;
+  static const double _panelPadding = 6;
+  static const double _panelHorizontalPadding = 6;
+  static const double _panelOutlineWidth = 1;
+  static const double _screenMargin = 8;
+  static const double _fieldGap = 4;
 
   @override
   void initState() {
     super.initState();
-    _reveal = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 240),
-      reverseDuration: const Duration(milliseconds: 140),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.dismissed) {
-          _portal.hide();
-          setState(() {});
-        }
-      });
+    _reveal =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 240),
+          reverseDuration: const Duration(milliseconds: 140),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.dismissed) {
+            _portal.hide();
+            _scrollController?.dispose();
+            _scrollController = null;
+            if (mounted) setState(() {});
+          }
+        });
   }
 
   @override
   void dispose() {
+    _scrollController?.dispose();
     _reveal.dispose();
     super.dispose();
   }
@@ -79,6 +100,8 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     CLControlSize.medium => 36,
     CLControlSize.large => 44,
   };
+
+  double get _rowHeight => _height;
 
   bool get _enabled => widget.onChanged != null;
 
@@ -95,12 +118,91 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         Overlay.of(context).context.findRenderObject()! as RenderBox;
     final fieldBox = context.findRenderObject()! as RenderBox;
     final origin = fieldBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-    final panelHeight = widget.options.length * _rowHeight + 12;
-    _dropUp = origin.dy + fieldBox.size.height + 4 + panelHeight >
-            overlayBox.size.height - 8 &&
-        origin.dy - 4 - panelHeight > 8;
-    _fieldWidth = fieldBox.size.width;
+    final mediaPadding = MediaQuery.maybePaddingOf(context) ?? EdgeInsets.zero;
+    final safeLeft = mediaPadding.left + _screenMargin;
+    final safeTop = mediaPadding.top + _screenMargin;
+    final safeRight =
+        overlayBox.size.width - mediaPadding.right - _screenMargin;
+    final safeBottom =
+        overlayBox.size.height - mediaPadding.bottom - _screenMargin;
+    final availableWidth = math.max(0.0, safeRight - safeLeft);
+    final availableHeight = math.max(0.0, safeBottom - safeTop);
+    final listContentHeight =
+        widget.options.length * _rowHeight + _panelPadding * 2;
+    final panelContentHeight = listContentHeight + _panelOutlineWidth * 2;
+    final selectedIndex = widget.options.indexWhere(
+      (option) => option.value == widget.value,
+    );
+    final fieldCenterY = origin.dy + fieldBox.size.height / 2;
 
+    _panelWidth = math.min(
+      fieldBox.size.width +
+          _panelHorizontalPadding * 2 +
+          _panelOutlineWidth * 2,
+      availableWidth,
+    );
+    final desiredPanelLeft =
+        origin.dx - _panelHorizontalPadding - _panelOutlineWidth;
+    final panelLeft = desiredPanelLeft.clamp(
+      safeLeft,
+      math.max(safeLeft, safeRight - _panelWidth),
+    );
+
+    double panelTop;
+    double initialScrollOffset = 0;
+    if (widget.alignSelectedOption && selectedIndex >= 0) {
+      _panelHeight = math.min(panelContentHeight, availableHeight);
+      final selectedPanelCenter =
+          _panelOutlineWidth +
+          _panelPadding +
+          selectedIndex * _rowHeight +
+          _rowHeight / 2;
+      final desiredTop = fieldCenterY - selectedPanelCenter;
+      panelTop = desiredTop.clamp(
+        safeTop,
+        math.max(safeTop, safeBottom - _panelHeight),
+      );
+      final listViewportHeight = math.max(
+        0.0,
+        _panelHeight - _panelOutlineWidth * 2,
+      );
+      final maxScrollOffset = math.max(
+        0.0,
+        listContentHeight - listViewportHeight,
+      );
+      initialScrollOffset = (panelTop + selectedPanelCenter - fieldCenterY)
+          .clamp(0.0, maxScrollOffset);
+      final selectedViewportCenter = selectedPanelCenter - initialScrollOffset;
+      final revealY = _panelHeight == 0
+          ? 0.5
+          : (selectedViewportCenter / _panelHeight).clamp(0.0, 1.0);
+      _revealAlignment = FractionalOffset(0.5, revealY);
+    } else {
+      final spaceBelow = math.max(
+        0.0,
+        safeBottom - (origin.dy + fieldBox.size.height + _fieldGap),
+      );
+      final spaceAbove = math.max(0.0, origin.dy - _fieldGap - safeTop);
+      final dropUp = panelContentHeight > spaceBelow && spaceAbove > spaceBelow;
+      _panelHeight = math.min(
+        panelContentHeight,
+        dropUp ? spaceAbove : spaceBelow,
+      );
+      panelTop = dropUp
+          ? origin.dy - _fieldGap - _panelHeight
+          : origin.dy + fieldBox.size.height + _fieldGap;
+      panelTop = panelTop.clamp(
+        safeTop,
+        math.max(safeTop, safeBottom - _panelHeight),
+      );
+      _revealAlignment = dropUp ? Alignment.bottomCenter : Alignment.topCenter;
+    }
+
+    _panelOffset = Offset(panelLeft - origin.dx, panelTop - origin.dy);
+    _scrollController?.dispose();
+    _scrollController = ScrollController(
+      initialScrollOffset: initialScrollOffset,
+    );
     _open = true;
     _portal.show();
     _reveal.forward(from: _reveal.value);
@@ -127,12 +229,13 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         .where((o) => o.value == widget.value)
         .toList();
     final label = selected.isEmpty ? '' : selected.first.label;
-    final textStyle = (widget.size == CLControlSize.large
-            ? theme.typography.body
-            : theme.typography.callout)
-        .copyWith(
-      color: _enabled ? colors.textPrimary : colors.textDisabled,
-    );
+    final textStyle =
+        (widget.size == CLControlSize.large
+                ? theme.typography.body
+                : theme.typography.callout)
+            .copyWith(
+              color: _enabled ? colors.textPrimary : colors.textDisabled,
+            );
     final radius = BorderRadius.circular(theme.radii.control);
 
     return OverlayPortal(
@@ -194,30 +297,27 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       children: [
         Positioned.fill(
           child: Listener(
-            behavior:
-                _open ? HitTestBehavior.opaque : HitTestBehavior.translucent,
+            behavior: _open
+                ? HitTestBehavior.opaque
+                : HitTestBehavior.translucent,
             onPointerDown: (_) => _close(),
           ),
         ),
         CompositedTransformFollower(
           link: _link,
           showWhenUnlinked: false,
-          targetAnchor:
-              _dropUp ? Alignment.topLeft : Alignment.bottomLeft,
-          followerAnchor:
-              _dropUp ? Alignment.bottomLeft : Alignment.topLeft,
-          offset: Offset(0, _dropUp ? -4 : 4),
+          targetAnchor: Alignment.topLeft,
+          followerAnchor: Alignment.topLeft,
+          offset: _panelOffset,
           child: AnimatedBuilder(
             animation: _reveal,
             builder: (context, child) {
-              final t = Curves.easeOutBack.transform(_reveal.value);
+              final t = Curves.easeOutCubic.transform(_reveal.value);
               return Opacity(
                 opacity: _reveal.value.clamp(0.0, 1.0),
                 child: Transform.scale(
                   scale: 0.94 + 0.06 * t,
-                  alignment: _dropUp
-                      ? Alignment.bottomCenter
-                      : Alignment.topCenter,
+                  alignment: _revealAlignment,
                   child: child,
                 ),
               );
@@ -225,7 +325,8 @@ class _CLSelectState<T> extends State<CLSelect<T>>
             child: IgnorePointer(
               ignoring: !_open,
               child: SizedBox(
-                width: _fieldWidth,
+                width: _panelWidth,
+                height: _panelHeight,
                 child: CLSurface(
                   frosted: true,
                   borderRadius: BorderRadius.circular(theme.radii.medium),
@@ -237,19 +338,25 @@ class _CLSelectState<T> extends State<CLSelect<T>>
                       offset: Offset(0, 10),
                     ),
                   ],
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final option in widget.options)
-                        _OptionRow<T>(
-                          option: option,
-                          checked: option.value == widget.value,
-                          height: _rowHeight,
-                          onTap: () => _select(option),
-                        ),
-                    ],
+                  child: CLList.builder(
+                    controller: _scrollController,
+                    itemCount: widget.options.length,
+                    itemExtent: _rowHeight,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: _panelHorizontalPadding,
+                      vertical: _panelPadding,
+                    ),
+                    blurExtent: const EdgeInsets.symmetric(vertical: 16),
+                    borderRadius: BorderRadius.circular(theme.radii.medium),
+                    itemBuilder: (context, index) {
+                      final option = widget.options[index];
+                      return _OptionRow<T>(
+                        option: option,
+                        checked: option.value == widget.value,
+                        height: _rowHeight,
+                        onTap: () => _select(option),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -295,7 +402,6 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
         onTap: widget.onTap,
         child: Container(
           height: widget.height,
-          margin: const EdgeInsets.symmetric(horizontal: 6),
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: clSmoothDecoration(
             color: _hovered ? colors.control : const Color(0x00000000),
@@ -320,8 +426,9 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
                   widget.option.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.typography.callout
-                      .copyWith(color: colors.textPrimary),
+                  style: theme.typography.callout.copyWith(
+                    color: colors.textPrimary,
+                  ),
                 ),
               ),
             ],
