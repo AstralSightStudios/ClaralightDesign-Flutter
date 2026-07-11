@@ -36,7 +36,8 @@ export "src/containers/sheet.dart";
 export "src/containers/toolbar.dart";
 export "src/lists/list_tile.dart";
 
-// Menus & navigation
+// Overlays, menus & navigation
+export "src/overlays/popover.dart";
 export "src/menus/menu.dart";
 export "src/nav/sidebar.dart";
 

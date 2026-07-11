@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:claralight_ui/claralight_ui.dart';
@@ -35,6 +36,35 @@ void main() {
     expect((argb >> 16) & 0xFF, greaterThan(0xF0));
     expect((argb >> 8) & 0xFF, lessThan(0x10));
     expect(argb & 0xFF, lessThan(0x10));
+  });
+
+  testWidgets('CLColorPicker ignores trackpad scrolling over pick areas', (
+    WidgetTester tester,
+  ) async {
+    var changeCount = 0;
+
+    await tester.pumpWidget(
+      host(
+        CLColorPicker(
+          color: const Color(0xFFFF0000),
+          onChanged: (_) => changeCount++,
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(const Key('cl-color-picker-sv')),
+      const Offset(60, 60),
+      kind: PointerDeviceKind.trackpad,
+    );
+    await tester.drag(
+      find.byKey(const Key('cl-color-picker-hue')),
+      const Offset(60, 0),
+      kind: PointerDeviceKind.trackpad,
+    );
+    await tester.pump();
+
+    expect(changeCount, 0);
   });
 
   testWidgets('CLColorPicker hex field applies submitted values', (

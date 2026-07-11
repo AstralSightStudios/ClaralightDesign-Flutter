@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../buttons/button.dart';
@@ -7,6 +8,14 @@ import '../foundation/shape.dart';
 import '../indicators/color_swatch.dart';
 import '../theme/theme.dart';
 import 'text_field.dart';
+
+const _directManipulationDevices = {
+  PointerDeviceKind.touch,
+  PointerDeviceKind.mouse,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+  PointerDeviceKind.unknown,
+};
 
 /// A ClaraLight color picker.
 ///
@@ -260,6 +269,7 @@ class _SVArea extends StatelessWidget {
         return GestureDetector(
           key: const Key('cl-color-picker-sv'),
           behavior: HitTestBehavior.opaque,
+          supportedDevices: _directManipulationDevices,
           onPanDown: (d) => _pick(d.localPosition, size),
           onPanUpdate: (d) => _pick(d.localPosition, size),
           child: Stack(
@@ -357,6 +367,7 @@ class _HueBar extends StatelessWidget {
         return GestureDetector(
           key: const Key('cl-color-picker-hue'),
           behavior: HitTestBehavior.opaque,
+          supportedDevices: _directManipulationDevices,
           onPanDown: (d) => _pick(d.localPosition, width),
           onPanUpdate: (d) => _pick(d.localPosition, width),
           child: Stack(

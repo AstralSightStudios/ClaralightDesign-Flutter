@@ -294,6 +294,125 @@ void main() {
     expect(vertical.position.maxScrollExtent, 120);
   });
 
+  testWidgets('a touch drag does not overscroll a locked axis', (tester) async {
+    final horizontal = ScrollController();
+    final vertical = ScrollController();
+    addTearDown(horizontal.dispose);
+    addTearDown(vertical.dispose);
+    const viewportKey = Key('locked-axis-viewport');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          physics: const BouncingScrollPhysics(),
+        ),
+        home: Center(
+          child: SizedBox(
+            key: viewportKey,
+            width: 100,
+            height: 80,
+            child: CLScrollable(
+              direction: CLScrollDirection.vertical,
+              horizontalController: horizontal,
+              verticalController: vertical,
+              child: const SizedBox(width: 240, height: 200),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(viewportKey)),
+    );
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+
+    expect(horizontal.offset, 0);
+    expect(vertical.offset, 0);
+
+    await gesture.up();
+  });
+
+  testWidgets('a touch drag does not overscroll non-scrollable content', (
+    tester,
+  ) async {
+    final horizontal = ScrollController();
+    final vertical = ScrollController();
+    addTearDown(horizontal.dispose);
+    addTearDown(vertical.dispose);
+    const viewportKey = Key('non-scrollable-viewport');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          physics: const BouncingScrollPhysics(),
+        ),
+        home: Center(
+          child: SizedBox(
+            key: viewportKey,
+            width: 100,
+            height: 80,
+            child: CLScrollable(
+              horizontalController: horizontal,
+              verticalController: vertical,
+              child: const SizedBox(width: 100, height: 200),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(viewportKey)),
+    );
+    await gesture.moveBy(const Offset(30, -30));
+    await tester.pump();
+
+    expect(horizontal.offset, 0);
+    expect(vertical.offset, greaterThan(0));
+
+    await gesture.up();
+  });
+
+  testWidgets('scrollable content keeps platform overscroll physics', (
+    tester,
+  ) async {
+    final horizontal = ScrollController();
+    addTearDown(horizontal.dispose);
+    const viewportKey = Key('scrollable-bounce-viewport');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          physics: const BouncingScrollPhysics(),
+        ),
+        home: Center(
+          child: SizedBox(
+            key: viewportKey,
+            width: 100,
+            height: 80,
+            child: CLScrollable(
+              direction: CLScrollDirection.horizontal,
+              horizontalController: horizontal,
+              child: const SizedBox(width: 200, height: 80),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(viewportKey)),
+    );
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+
+    expect(horizontal.offset, lessThan(0));
+
+    await gesture.up();
+  });
+
   testWidgets('horizontal direction starts from the right in RTL', (
     tester,
   ) async {

@@ -10,7 +10,7 @@ const double kInitialScroll =
     1.0 * int.fromEnvironment('GALLERY_SCROLL');
 
 /// Auto-opens a popup demo after launch for hands-free screenshots:
-/// --dart-define=AUTO_OPEN=dialog|sheet|menu.
+/// --dart-define=AUTO_OPEN=dialog|sheet|menu|popover.
 const String kAutoOpen = String.fromEnvironment('AUTO_OPEN');
 
 Future<void> main() async {
@@ -141,6 +141,7 @@ class _GalleryHomeState extends State<GalleryHome> {
                     _ChipTabsSection(),
                     _ColorPickerSection(),
                     _TooltipSection(),
+                    _PopoverSection(),
                     _SheetSection(),
                     _DialogSection(),
                     _MenuSection(),
@@ -1019,7 +1020,7 @@ class _SwatchesSectionState extends State<_SwatchesSection> {
           Color(0xFFC2504B),
         ],
         selectedIndex: _selected,
-        onChanged: (i) => setState(() => _selected = i)
+        onChanged: (i) => setState(() => _selected = i),
       ),
     );
   }
@@ -1278,6 +1279,104 @@ class _TooltipSection extends StatelessWidget {
               '悬停或长按查看提示',
               style: CLTheme.of(context).typography.caption.copyWith(
                 color: CLTheme.of(context).colors.textHint,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PopoverSection extends StatefulWidget {
+  const _PopoverSection();
+
+  @override
+  State<_PopoverSection> createState() => _PopoverSectionState();
+}
+
+class _PopoverSectionState extends State<_PopoverSection> {
+  static const _positions = CLPopoverPosition.values;
+  final _controller = CLPopoverController();
+  int _positionIndex = 0;
+  bool _showArrow = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kAutoOpen == 'popover') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.open();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = CLTheme.of(context);
+
+    return _SectionCard(
+      title: 'CLPopover',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CLSegmentedControl(
+            segments: const ['上', '下', '左', '右'],
+            selectedIndex: _positionIndex,
+            onChanged: (value) => setState(() => _positionIndex = value),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              CLToggle(
+                value: _showArrow,
+                onChanged: (value) => setState(() => _showArrow = value),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '显示小尾巴',
+                style: theme.typography.callout.copyWith(
+                  color: theme.colors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: CLPopover(
+              controller: _controller,
+              position: _positions[_positionIndex],
+              showArrow: _showArrow,
+              anchorBuilder: (context, controller) => CLButton(
+                label: controller.isOpen ? '收起 Popover' : '打开 Popover',
+                variant: CLButtonVariant.secondary,
+                onPressed: controller.toggle,
+              ),
+              popoverBuilder: (context, controller) => SizedBox(
+                width: 240,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '快速设置',
+                      style: theme.typography.label.copyWith(
+                        color: theme.colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const CLTextField(placeholder: '输入名称'),
+                    const SizedBox(height: 10),
+                    CLButton(label: '完成', onPressed: controller.close),
+                  ],
+                ),
               ),
             ),
           ),

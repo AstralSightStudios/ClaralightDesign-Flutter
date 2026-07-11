@@ -1,15 +1,27 @@
 import 'dart:async';
 
+import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
-import '../surfaces/surface.dart';
+import '../overlays/anchored_overlay.dart';
 import '../theme/theme.dart';
+
+export '../overlays/anchored_overlay.dart' show CLPopoverPosition;
 
 /// A ClaraLight tooltip.
 ///
 /// Wrap any widget; hovering (desktop) or long-pressing (touch) reveals a
-/// frosted label above it, popping in with a soft scale.
+/// frosted label near it, popping in from the pointing arrow.
 class CLTooltip extends StatefulWidget {
+  const CLTooltip({
+    super.key,
+    required this.message,
+    required this.child,
+    this.delay = const Duration(milliseconds: 450),
+    this.position = CLPopoverPosition.top,
+    this.showArrow = true,
+  });
+
   /// Tooltip text ("这按钮是干嘛的").
   final String message;
 
@@ -18,46 +30,44 @@ class CLTooltip extends StatefulWidget {
   /// Hover dwell time before the tooltip appears.
   final Duration delay;
 
-  /// Preferred side: above (default) or below the child.
-  final bool preferBelow;
+  /// Preferred physical side. The tooltip may flip to remain visible.
+  final CLPopoverPosition position;
 
-  const CLTooltip({
-    super.key,
-    required this.message,
-    required this.child,
-    this.delay = const Duration(milliseconds: 450),
-    this.preferBelow = false,
-  });
+  /// Whether the tooltip surface includes its pointing arrow.
+  final bool showArrow;
 
   @override
   State<CLTooltip> createState() => _CLTooltipState();
 }
 
-class _CLTooltipState extends State<CLTooltip>
-    with SingleTickerProviderStateMixin {
-  final _link = LayerLink();
+class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
+  final _anchorKey = GlobalKey();
   final _portal = OverlayPortalController();
   late final AnimationController _reveal;
+  late final AnimationController _spring;
   Timer? _dwell;
 
   @override
   void initState() {
     super.initState();
-    _reveal = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-      reverseDuration: const Duration(milliseconds: 120),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.dismissed && _portal.isShowing) {
-          _portal.hide();
-        }
-      });
+    _reveal =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 140),
+          reverseDuration: const Duration(milliseconds: 110),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.dismissed && _portal.isShowing) {
+            _portal.hide();
+          }
+        });
+    _spring = AnimationController.unbounded(vsync: this);
   }
 
   @override
   void dispose() {
     _dwell?.cancel();
     _reveal.dispose();
+    _spring.dispose();
     super.dispose();
   }
 
@@ -70,11 +80,29 @@ class _CLTooltipState extends State<CLTooltip>
     if (!mounted) return;
     if (!_portal.isShowing) _portal.show();
     _reveal.forward();
+    _spring.animateWith(
+      SpringSimulation(
+        const SpringDescription(mass: 1, stiffness: 560, damping: 27),
+        _spring.value,
+        1,
+        0,
+      ),
+    );
   }
 
   void _hide() {
     _dwell?.cancel();
-    if (_reveal.value > 0) _reveal.reverse();
+    if (_reveal.value > 0) {
+      _reveal.reverse();
+      _spring.animateWith(
+        SpringSimulation(
+          const SpringDescription(mass: 1, stiffness: 620, damping: 40),
+          _spring.value,
+          0,
+          0,
+        ),
+      );
+    }
   }
 
   @override
@@ -82,8 +110,8 @@ class _CLTooltipState extends State<CLTooltip>
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: _buildOverlay,
-      child: CompositedTransformTarget(
-        link: _link,
+      child: KeyedSubtree(
+        key: _anchorKey,
         child: MouseRegion(
           onEnter: (_) => _scheduleShow(),
           onExit: (_) => _hide(),
@@ -99,60 +127,34 @@ class _CLTooltipState extends State<CLTooltip>
 
   Widget _buildOverlay(BuildContext context) {
     final theme = CLTheme.of(context);
-    final below = widget.preferBelow;
 
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Stack(
-          children: [
-            CompositedTransformFollower(
-              link: _link,
-              showWhenUnlinked: false,
-              targetAnchor:
-                  below ? Alignment.bottomCenter : Alignment.topCenter,
-              followerAnchor:
-                  below ? Alignment.topCenter : Alignment.bottomCenter,
-              offset: Offset(0, below ? 6 : -6),
-              child: AnimatedBuilder(
-                animation: _reveal,
-                builder: (context, child) {
-                  final t = Curves.easeOutBack.transform(_reveal.value);
-                  return Opacity(
-                    opacity: _reveal.value.clamp(0.0, 1.0),
-                    child: Transform.scale(
-                      scale: 0.9 + 0.1 * t,
-                      alignment: below
-                          ? Alignment.topCenter
-                          : Alignment.bottomCenter,
-                      child: child,
-                    ),
-                  );
-                },
-                child: CLSurface(
-                  frosted: true,
-                  borderRadius: BorderRadius.circular(theme.radii.control),
-                  outlined: true,
-                  shadow: const [
-                    BoxShadow(
-                      color: Color(0x40000000),
-                      blurRadius: 18,
-                      offset: Offset(0, 6),
-                    ),
-                  ],
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  child: Text(
-                    widget.message,
-                    style: theme.typography.callout
-                        .withCLWeight(FontWeight.w500)
-                        .copyWith(color: theme.colors.textSecondary),
-                  ),
-                ),
-              ),
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_reveal, _spring]),
+        builder: (context, child) {
+          return CLAnchoredOverlay(
+            anchorKey: _anchorKey,
+            position: widget.position,
+            showArrow: widget.showArrow,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            borderRadius: theme.radii.medium,
+            fill: theme.colors.frost.withValues(
+              alpha: theme.colors.frost.a * 0.68,
             ),
-          ],
+            outlineColor: theme.colors.outline,
+            shadowColor: const Color(0x40000000),
+            shadowBlur: 18,
+            shadowOffset: const Offset(0, 6),
+            opacity: Curves.easeOutCubic.transform(_reveal.value),
+            scale: 0.92 + 0.08 * _spring.value,
+            child: child!,
+          );
+        },
+        child: Text(
+          widget.message,
+          style: theme.typography.callout
+              .withCLWeight(FontWeight.w500)
+              .copyWith(color: theme.colors.textSecondary),
         ),
       ),
     );

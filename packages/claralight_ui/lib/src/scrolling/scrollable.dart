@@ -19,6 +19,38 @@ bool _isFinite(EdgeInsets value) =>
     value.right.isFinite &&
     value.bottom.isFinite;
 
+class _CLScrollPhysics extends ScrollPhysics {
+  const _CLScrollPhysics({required this.axisEnabled, super.parent});
+
+  final bool axisEnabled;
+
+  @override
+  _CLScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _CLScrollPhysics(
+      axisEnabled: axisEnabled,
+      parent: buildParent(ancestor),
+    );
+  }
+
+  @override
+  bool get allowUserScrolling => axisEnabled && super.allowUserScrolling;
+
+  @override
+  bool get allowImplicitScrolling =>
+      axisEnabled && super.allowImplicitScrolling;
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    if (!axisEnabled || position.minScrollExtent == position.maxScrollExtent) {
+      return const ClampingScrollPhysics().applyBoundaryConditions(
+        position,
+        value,
+      );
+    }
+    return super.applyBoundaryConditions(position, value);
+  }
+}
+
 /// A one- or two-dimensional Claralight viewport.
 ///
 /// Content approaching an edge with more scrollable content behind it is
@@ -128,16 +160,12 @@ class CLScrollable extends StatefulWidget {
           horizontalDetails: ScrollableDetails(
             direction: horizontalDirection,
             controller: effectiveHorizontalController,
-            physics: _horizontalEnabled
-                ? null
-                : const NeverScrollableScrollPhysics(),
+            physics: _CLScrollPhysics(axisEnabled: _horizontalEnabled),
           ),
           verticalDetails: ScrollableDetails(
             direction: AxisDirection.down,
             controller: effectiveVerticalController,
-            physics: _verticalEnabled
-                ? null
-                : const NeverScrollableScrollPhysics(),
+            physics: _CLScrollPhysics(axisEnabled: _verticalEnabled),
           ),
           diagonalDragBehavior: DiagonalDragBehavior.free,
           viewportBuilder: (context, verticalOffset, horizontalOffset) {
