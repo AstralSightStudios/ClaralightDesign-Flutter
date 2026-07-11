@@ -35,7 +35,7 @@ class CLScrollbarOverlay extends StatefulWidget {
 class _CLScrollbarOverlayState extends State<CLScrollbarOverlay>
     with SingleTickerProviderStateMixin {
   static const _fadeInDuration = Duration(milliseconds: 160);
-  static const _fadeOutDelay = Duration(seconds: 1);
+  static const _fadeOutDelay = Duration(milliseconds: 300);
   static const _fadeOutDuration = Duration(milliseconds: 300);
 
   late final AnimationController _opacity;
