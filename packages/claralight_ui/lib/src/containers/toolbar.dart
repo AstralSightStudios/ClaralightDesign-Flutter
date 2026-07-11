@@ -28,6 +28,14 @@ class CLToolbar extends StatelessWidget {
   /// Gap between children.
   final double spacing;
 
+  /// Overrides the control-level fill — the dark floating pills over the
+  /// editor canvas use `Colors/Gray Alpha/11` instead.
+  final Color? fill;
+
+  /// Whether the capsule draws its hairline outline. Floating pills over
+  /// imagery drop it and rely on their shadow.
+  final bool outlined;
+
   const CLToolbar({
     super.key,
     required this.children,
@@ -35,6 +43,8 @@ class CLToolbar extends StatelessWidget {
     this.height = 44,
     this.padding = 3,
     this.spacing = 2,
+    this.fill,
+    this.outlined = true,
   });
 
   @override
@@ -66,8 +76,9 @@ class CLToolbar extends StatelessWidget {
       height: height,
       child: CLSurface(
         level: CLSurfaceLevel.control,
+        fill: fill,
         borderRadius: BorderRadius.circular(height / 2),
-        outlined: true,
+        outlined: outlined,
         shadow: const [
           BoxShadow(
             color: Color(0x40000000),
