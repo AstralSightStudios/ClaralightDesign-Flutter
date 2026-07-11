@@ -260,6 +260,12 @@ class _IconButtonsSectionState extends State<_IconButtonsSection> {
               CLIconButton(icon: Icons.favorite_rounded, onPressed: () {}),
               const SizedBox(width: 8),
               CLIconButton(
+                icon: Icons.more_horiz_rounded,
+                variant: CLIconButtonVariant.ghost,
+                onPressed: () {},
+              ),
+              const SizedBox(width: 8),
+              CLIconButton(
                 icon: Icons.ios_share_rounded,
                 fill: CLTheme.of(context).colors.accent,
                 iconColor: CLTheme.of(context).colors.onAccent,

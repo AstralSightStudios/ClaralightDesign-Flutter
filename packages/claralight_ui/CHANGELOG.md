@@ -2,6 +2,8 @@
 
 Aligned with the ClaraLight Figma design source (Facetory demo).
 
+* `CLIconButton` gained `CLIconButtonVariant.ghost`: transparent at rest,
+  with the standard control highlight on hover.
 * Fixed bundled fonts not loading: package fonts must be referenced as
   `packages/claralight_ui/<family>`; without the prefix every style fell
   back to system fonts (wrong weights, no monospace).

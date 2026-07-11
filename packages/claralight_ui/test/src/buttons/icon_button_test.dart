@@ -62,6 +62,37 @@ void main() {
     expect(surface.fill, fill);
   });
 
+  testWidgets('CLIconButton ghost is transparent until hovered', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+
+    await tester.pumpWidget(
+      host(
+        CLIconButton(
+          icon: Icons.more_horiz,
+          variant: CLIconButtonVariant.ghost,
+          onPressed: () {},
+        ),
+      ),
+    );
+
+    expect(
+      tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+      const Color(0x00000000),
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byType(CLIconButton)));
+    await tester.pump();
+
+    expect(
+      tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+      theme.colors.controlHighlight,
+    );
+  });
+
   testWidgets('CLIconButton disabled blocks taps', (
     WidgetTester tester,
   ) async {

@@ -14,15 +14,25 @@ enum CLIconButtonShape {
   rounded,
 }
 
+/// Visual treatment of a [CLIconButton].
+enum CLIconButtonVariant {
+  /// Neutral control fill, used by toolbars and inspectors.
+  secondary,
+
+  /// Transparent until hovered, for quiet contextual actions.
+  ghost,
+}
+
 /// A Claralight icon button.
 ///
-/// Flat control-fill circle or rounded rectangle, with hover raise and a
+/// A circle or rounded rectangle with a secondary or ghost treatment and a
 /// [selected] accent state.
 class CLIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onPressed;
   final CLControlSize size;
   final CLIconButtonShape shape;
+  final CLIconButtonVariant variant;
 
   /// Selected buttons use the selection fill (or [selectedFill]).
   final bool selected;
@@ -45,6 +55,7 @@ class CLIconButton extends StatefulWidget {
     required this.onPressed,
     this.size = CLControlSize.large,
     this.shape = CLIconButtonShape.circle,
+    this.variant = CLIconButtonVariant.secondary,
     this.selected = false,
     this.fill,
     this.selectedFill,
@@ -82,12 +93,10 @@ class _CLIconButtonState extends State<CLIconButton> {
           : theme.radii.control,
     );
 
+    final isHovered = _hovered && _enabled;
     var fill = widget.selected
         ? (widget.selectedFill ?? theme.colors.controlHighlight)
-        : (widget.fill ??
-            (_hovered && _enabled
-                ? theme.colors.controlHighlight
-                : theme.colors.control));
+        : (widget.fill ?? _fillColor(theme, isHovered: isHovered));
     if (!_enabled) fill = fill.withValues(alpha: fill.a * 0.45);
 
     final iconColor = !_enabled
@@ -124,5 +133,14 @@ class _CLIconButtonState extends State<CLIconButton> {
         ),
       ),
     );
+  }
+
+  Color _fillColor(CLThemeData theme, {required bool isHovered}) {
+    if (isHovered) return theme.colors.controlHighlight;
+
+    return switch (widget.variant) {
+      CLIconButtonVariant.secondary => theme.colors.control,
+      CLIconButtonVariant.ghost => const Color(0x00000000),
+    };
   }
 }
