@@ -1551,6 +1551,7 @@ class _MenuSectionState extends State<_MenuSection> {
   bool _listView = true;
   String _sortKey = '名称';
   final GlobalKey _menuKey = GlobalKey();
+  final CLMenuController _menuController = CLMenuController();
 
   @override
   void initState() {
@@ -1583,67 +1584,85 @@ class _MenuSectionState extends State<_MenuSection> {
   }
 
   @override
+  void dispose() {
+    _menuController.dispose();
+    super.dispose();
+  }
+
+  void _select(VoidCallback action) {
+    action();
+    _menuController.close();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = CLTheme.of(context);
+    Widget? checkmark(bool selected) =>
+        selected ? Icon(Icons.check, color: theme.colors.textSecondary) : null;
+
     return _SectionCard(
       title: 'CLMenu',
       child: Row(
         children: [
           CLMenu(
             key: _menuKey,
-            groups: [
-              CLMenuGroup(
-                actions: [
-                  const CLMenuAction(
-                    label: '选择',
-                    icon: Icons.check_circle_outline,
-                    enabled: false,
-                  ),
-                  CLMenuAction(
-                    label: '连接服务器',
-                    icon: Icons.desktop_windows_outlined,
-                    onSelected: () {},
-                  ),
-                ],
+            controller: _menuController,
+            anchor: Icon(Icons.more_horiz, color: theme.colors.textSecondary),
+            children: [
+              const CLListTile(
+                label: '选择',
+                leading: Icon(Icons.check_circle_outline),
               ),
-              CLMenuGroup(
-                actions: [
-                  CLMenuAction(
-                    label: '图标',
-                    icon: Icons.grid_view_outlined,
-                    checked: !_listView,
-                    onSelected: () => setState(() => _listView = false),
-                  ),
-                  CLMenuAction(
-                    label: '列表',
-                    icon: Icons.format_list_bulleted,
-                    checked: _listView,
-                    onSelected: () => setState(() => _listView = true),
-                  ),
-                ],
+              CLListTile(
+                label: '连接服务器',
+                leading: const Icon(Icons.desktop_windows_outlined),
+                onTap: () => _select(() {}),
               ),
-              CLMenuGroup(
-                actions: [
-                  for (final key in const ['名称', '种类', '日期', '标签'])
-                    CLMenuAction(
-                      label: key,
-                      checked: _sortKey == key,
-                      subtitle: _sortKey == key ? '升序' : null,
-                      onSelected: () => setState(() => _sortKey = key),
-                    ),
-                ],
+              const CLDivider(),
+              CLListTile(
+                label: '图标',
+                leading: const Icon(Icons.grid_view_outlined),
+                trailing: checkmark(!_listView),
+                onTap: () => _select(() => setState(() => _listView = false)),
               ),
+              CLListTile(
+                label: '列表',
+                leading: const Icon(Icons.format_list_bulleted),
+                trailing: checkmark(_listView),
+                onTap: () => _select(() => setState(() => _listView = true)),
+              ),
+              const CLDivider(),
+              for (final key in const ['名称', '种类', '日期', '标签'])
+                CLListTile(
+                  label: key,
+                  trailing: _sortKey == key
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '升序',
+                              style: theme.typography.caption.copyWith(
+                                color: theme.colors.textTertiary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.check,
+                              color: theme.colors.textSecondary,
+                            ),
+                          ],
+                        )
+                      : null,
+                  onTap: () => _select(() => setState(() => _sortKey = key)),
+                ),
             ],
-            child: Icon(
-              Icons.more_horiz,
-              color: CLTheme.of(context).colors.textSecondary,
-            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '按住行拖动可看到光晕跟随',
-              style: CLTheme.of(context).typography.caption.copyWith(
-                color: CLTheme.of(context).colors.textHint,
+              '菜单内容由 CLList 与自定义行构建',
+              style: theme.typography.caption.copyWith(
+                color: theme.colors.textHint,
               ),
             ),
           ),

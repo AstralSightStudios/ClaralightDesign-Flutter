@@ -115,8 +115,8 @@ Three free-for-commercial-use families ship with the package (see
   `CLToolbar`, `CLSideBar`
 - **Lists** — `CLTreeView`, `CLListSection`, `CLListTile` (progressive
   scrolling, selection, tree guides, disclosure, tint, `outlined:` add-rows)
-- **Menus** — `CLMenu` (morphs out of its anchor with the jelly spring;
-  pointer-following glow)
+- **Menus** — `CLMenu` (morphs out of its anchor with the jelly spring and
+  hosts caller-built rows in an internal `CLList`)
 - **Indicators** — `CLProgressBar`, `CLProgressRing`, `CLColorSwatchGroup`,
   `CLBanner`, `CLBadge`, `CLDivider` (solid/dashed), `CLTooltip`
 

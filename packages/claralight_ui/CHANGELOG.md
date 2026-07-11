@@ -16,10 +16,11 @@ Aligned with the ClaraLight Figma design source (Facetory demo).
   field and preset swatches.
 * New `CLTooltip` (hover / long-press frosted label) and `CLChipTabs`
   (the "时间日期 / 运动健康 / 工具数据" filter chips).
-* Reworked the `CLMenu` morph: content is pinned at final size and
-  revealed by the unfurling panel (uniform scale, never squashed), and
-  the panel starts/ends exactly on the anchor button with a synchronized
-  crossfade — open and close read as one surface morphing.
+* Reworked `CLMenu` as an animated shell around an internal `CLList`.
+  Callers now provide arbitrary `children` instead of `CLMenuAction` /
+  `CLMenuGroup`, and can use `CLMenuController` for explicit open/close
+  behavior. Content is measured before the existing unfurling morph, so
+  custom rows stay at their final size and are never squashed.
 * Fonts slimmed from 86MB to 26MB: MiSans ships as a single variable
   font (`CLTypography.miSansWght` maps `FontWeight` onto its
   non-standard wght axis; use `style.withCLWeight(...)` to change
