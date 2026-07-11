@@ -93,55 +93,61 @@ class _GalleryHomeState extends State<GalleryHome> {
     return Scaffold(
       backgroundColor: theme.colors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          controller: _scroll,
-          // Extra top inset keeps the heading clear of the macOS traffic
-          // lights (the window content extends into the title bar).
-          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Claralight UI',
-                style: theme.typography.display.copyWith(
-                  color: theme.colors.textPrimary,
+        child: SizedBox(
+          width: double.infinity,
+          child: CLScrollable(
+            key: const Key('gallery-scroll'),
+            direction: CLScrollDirection.vertical,
+            verticalController: _scroll,
+            horizontalScrollbar: CLScrollbarVisibility.hidden,
+            // Extra top inset keeps the heading clear of the macOS traffic
+            // lights (the window content extends into the title bar).
+            padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Claralight UI',
+                  style: theme.typography.display.copyWith(
+                    color: theme.colors.textPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'ClaraLight 设计语言 · 扁平分层 · 弹性交互',
-                style: theme.typography.callout.copyWith(
-                  color: theme.colors.textTertiary,
+                const SizedBox(height: 4),
+                Text(
+                  'ClaraLight 设计语言 · 扁平分层 · 弹性交互',
+                  style: theme.typography.callout.copyWith(
+                    color: theme.colors.textTertiary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              const Wrap(
-                spacing: 20,
-                runSpacing: 20,
-                children: [
-                  _ButtonsSection(),
-                  _IconButtonsSection(),
-                  _TogglesSection(),
-                  _SegmentedSection(),
-                  _SliderSection(),
-                  _InputsSection(),
-                  _SelectSection(),
-                  _ScrollableSection(),
-                  _LazyListSection(),
-                  _ListsSection(),
-                  _SwatchesSection(),
-                  _ProgressSection(),
-                  _StatusSection(),
-                  _ToolbarSection(),
-                  _ChipTabsSection(),
-                  _ColorPickerSection(),
-                  _TooltipSection(),
-                  _SheetSection(),
-                  _DialogSection(),
-                  _MenuSection(),
-                ],
-              ),
-            ],
+                const SizedBox(height: 24),
+                const Wrap(
+                  spacing: 20,
+                  runSpacing: 20,
+                  children: [
+                    _ButtonsSection(),
+                    _IconButtonsSection(),
+                    _TogglesSection(),
+                    _SegmentedSection(),
+                    _SliderSection(),
+                    _InputsSection(),
+                    _SelectSection(),
+                    _ScrollableSection(),
+                    _LazyListSection(),
+                    _ListsSection(),
+                    _SwatchesSection(),
+                    _ProgressSection(),
+                    _StatusSection(),
+                    _ToolbarSection(),
+                    _ChipTabsSection(),
+                    _ColorPickerSection(),
+                    _TooltipSection(),
+                    _SheetSection(),
+                    _DialogSection(),
+                    _MenuSection(),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

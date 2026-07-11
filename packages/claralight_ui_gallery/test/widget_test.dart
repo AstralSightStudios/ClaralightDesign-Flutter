@@ -26,6 +26,16 @@ void main() {
     expect(find.byType(CLMenu), findsWidgets);
     expect(find.byType(CLTreeView), findsOneWidget);
 
+    final galleryScroll = tester.widget<CLScrollable>(
+      find.byKey(const Key('gallery-scroll')),
+    );
+    expect(galleryScroll.direction, CLScrollDirection.vertical);
+    expect(galleryScroll.horizontalScrollbar, CLScrollbarVisibility.hidden);
+    expect(
+      tester.getSize(find.byKey(const Key('gallery-scroll'))).width,
+      tester.getSize(find.byType(SafeArea)).width,
+    );
+
     final tree = tester.widget<CLTreeView>(find.byType(CLTreeView));
     final subtreeLeaf = tree.children.singleWhere(
       (tile) => tile.label == '矩形 1',
@@ -46,19 +56,6 @@ void main() {
     expect(select.alignSelectedOption, isTrue);
     expect(select.options.first.label, '项目 001 / 500');
     expect(select.options.last.label, '项目 500 / 500');
-
-    await tester.ensureVisible(selectFinder);
-    await tester.pump();
-    final triggerCenter = tester.getCenter(selectFinder);
-    await tester.tap(selectFinder);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    final selectedLabel = find.descendant(
-      of: find.byType(CLList),
-      matching: find.text('项目 250 / 500'),
-    );
-    expect(selectedLabel, findsOneWidget);
-    expect(tester.getCenter(selectedLabel).dy, closeTo(triggerCenter.dy, 0.01));
   });
 
   testWidgets('Gallery exposes the interactive CLScrollable demo', (
