@@ -65,7 +65,7 @@ class CLScrollable extends StatefulWidget {
     required this.child,
     this.direction = CLScrollDirection.both,
     this.blurExtent = const EdgeInsets.all(24),
-    this.blurSigma = const EdgeInsets.all(16),
+    this.blurSigma = const EdgeInsets.all(5),
     this.padding = EdgeInsets.zero,
     this.horizontalScrollbar = CLScrollbarVisibility.auto,
     this.verticalScrollbar = CLScrollbarVisibility.auto,

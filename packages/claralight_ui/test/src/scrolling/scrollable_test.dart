@@ -901,7 +901,7 @@ void main() {
     final pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
       Offset(90, 30),
     ]);
-    expect(pixels.single.a, inInclusiveRange(0.4, 0.6));
+    expect(pixels.single.a, inInclusiveRange(0.6, 0.72));
   });
 
   testWidgets('an active edge progressively blurs nearby content', (
@@ -952,7 +952,7 @@ void main() {
       Offset(88, 20),
     ]);
     expect(pixels[0].r, lessThan(0.02));
-    expect(pixels[1].r, greaterThan(0.03));
+    expect(pixels[1].r, greaterThan(0.005));
   });
 
   testWidgets('removing an active blur disposes its textures safely', (

@@ -78,7 +78,7 @@ class CLList extends StatefulWidget {
     this.prototypeItem,
     this.scrollbarVisibility = CLScrollbarVisibility.auto,
     this.blurExtent = const EdgeInsets.all(24),
-    this.blurSigma = const EdgeInsets.all(16),
+    this.blurSigma = const EdgeInsets.all(5),
     this.borderRadius = BorderRadius.zero,
     this.cacheExtent,
   }) : _itemBuilder = null,

@@ -435,8 +435,8 @@ void _drawBlurGradient(
   final stops = <double>[];
   for (var sample = 0; sample <= sampleCount; sample += 1) {
     final position = sample / sampleCount;
-    final smoothstep = position * position * (3 - 2 * position);
-    final effectiveSigma = sigma * activation * (1 - smoothstep);
+    final easedPosition = Curves.easeOut.transform(position);
+    final effectiveSigma = sigma * activation * (1 - easedPosition);
     final value = (255 * math.sqrt(effectiveSigma / globalSigma)).round();
     colors.add(Color.fromARGB(255, value, value, value));
     stops.add(position);
@@ -562,8 +562,8 @@ void _drawMaskGradient(
   final stops = <double>[];
   for (var sample = 0; sample <= sampleCount; sample += 1) {
     final position = sample / sampleCount;
-    final smoothstep = position * position * (3 - 2 * position);
-    final value = (255 * (1 - activation * (1 - smoothstep))).round();
+    final easedPosition = Curves.easeOut.transform(position);
+    final value = (255 * (1 - activation * (1 - easedPosition))).round();
     colors.add(Color.fromARGB(255, value, value, value));
     stops.add(position);
   }
