@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 
 import '../foundation/shape.dart';
+import '../scrolling/cl_list.dart';
+import '../scrolling/types.dart';
 import '../surfaces/pressable.dart';
 import '../theme/theme.dart';
 
@@ -71,7 +73,7 @@ class CLColorSwatchItem extends StatelessWidget {
 
 /// A row of selectable [CLColorSwatchItem]s with an optional trailing
 /// "add" affordance.
-class CLColorSwatchGroup extends StatelessWidget {
+class CLColorSwatchGroup extends StatefulWidget {
   final List<Color> colors;
   final int? selectedIndex;
   final ValueChanged<int>? onChanged;
@@ -93,44 +95,149 @@ class CLColorSwatchGroup extends StatelessWidget {
   });
 
   @override
+  State<CLColorSwatchGroup> createState() => _CLColorSwatchGroupState();
+}
+
+class _CLColorSwatchGroupState extends State<CLColorSwatchGroup> {
+  static const _scrollDuration = Duration(milliseconds: 320);
+  static const _offsetTolerance = 0.01;
+
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleSelectedReveal(Duration.zero);
+  }
+
+  @override
+  void didUpdateWidget(covariant CLColorSwatchGroup oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedIndex != oldWidget.selectedIndex) {
+      _scheduleSelectedReveal(_scrollDuration);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _scheduleSelectedReveal(Duration duration) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      _revealSelected(duration);
+    });
+  }
+
+  void _revealSelected(Duration duration) {
+    final index = widget.selectedIndex;
+    if (index == null || index < 0 || index >= widget.colors.length) return;
+
+    final position = _controller.position;
+    final itemWidth = widget.swatchSize + 8;
+    final selectedWidth = widget.swatchSize * 2.6 + 8;
+    final selectedStart = index * (itemWidth + widget.spacing);
+    final selectedEnd = selectedStart + selectedWidth;
+    final visibleStart = position.pixels;
+    final visibleEnd = visibleStart + position.viewportDimension;
+
+    var target = visibleStart;
+    if (selectedStart < visibleStart) {
+      target = selectedStart;
+    } else if (selectedEnd > visibleEnd) {
+      target = selectedEnd - position.viewportDimension;
+    }
+
+    final itemCount = widget.colors.length + (widget.onAdd == null ? 0 : 1);
+    final contentWidth =
+        widget.colors.length * itemWidth +
+        (selectedWidth - itemWidth) +
+        (widget.onAdd == null ? 0 : widget.swatchSize) +
+        (itemCount > 1 ? (itemCount - 1) * widget.spacing : 0);
+    final maxOffset = (contentWidth - position.viewportDimension).clamp(
+      0.0,
+      double.infinity,
+    );
+    target = target.clamp(0.0, maxOffset);
+
+    if ((target - visibleStart).abs() < _offsetTolerance) return;
+    if (duration == Duration.zero) {
+      position.jumpTo(target);
+      return;
+    }
+
+    final reachableTarget = target.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    position
+        .animateTo(
+          reachableTarget,
+          duration: duration,
+          curve: Curves.easeOutCubic,
+        )
+        .whenComplete(() {
+          if (mounted && widget.selectedIndex == index) {
+            _scheduleSelectedReveal(Duration.zero);
+          }
+        });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
+    final itemCount = widget.colors.length + (widget.onAdd == null ? 0 : 1);
 
-    return Wrap(
-      spacing: spacing,
-      runSpacing: spacing,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (var i = 0; i < colors.length; i++)
-          CLColorSwatchItem(
-            color: colors[i],
-            selected: i == selectedIndex,
-            size: swatchSize,
-            onTap: onChanged == null ? null : () => onChanged!(i),
-          ),
-        if (onAdd != null)
-          CLPressable(
-            onTap: onAdd,
-            borderRadius: BorderRadius.circular(swatchSize / 2),
-            pressedScale: 1.1,
-            deformOnDrag: false,
-            showHighlight: false,
-            child: Container(
-              width: swatchSize,
-              height: swatchSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: theme.colors.control, width: 2),
+    return SizedBox(
+      height: widget.swatchSize + 8,
+      child: CLList.separated(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        scrollbarVisibility: CLScrollbarVisibility.hidden,
+        itemCount: itemCount,
+        separatorBuilder: (context, index) => SizedBox(width: widget.spacing),
+        itemBuilder: (context, index) {
+          if (index < widget.colors.length) {
+            return Align(
+              child: CLColorSwatchItem(
+                color: widget.colors[index],
+                selected: index == widget.selectedIndex,
+                size: widget.swatchSize,
+                onTap: widget.onChanged == null
+                    ? null
+                    : () => widget.onChanged!(index),
               ),
-              child: Center(
-                child: CustomPaint(
-                  size: Size.square(swatchSize * 0.55),
-                  painter: _PlusPainter(color: theme.colors.textSecondary),
+            );
+          }
+
+          return Align(
+            child: CLPressable(
+              key: const ValueKey('cl-color-swatch-add'),
+              onTap: widget.onAdd,
+              borderRadius: BorderRadius.circular(widget.swatchSize / 2),
+              pressedScale: 1.1,
+              deformOnDrag: false,
+              showHighlight: false,
+              child: Container(
+                width: widget.swatchSize,
+                height: widget.swatchSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: theme.colors.control, width: 2),
+                ),
+                child: Center(
+                  child: CustomPaint(
+                    size: Size.square(widget.swatchSize * 0.55),
+                    painter: _PlusPainter(color: theme.colors.textSecondary),
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+          );
+        },
+      ),
     );
   }
 }
