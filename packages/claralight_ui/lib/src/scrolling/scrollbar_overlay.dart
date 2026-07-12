@@ -19,6 +19,7 @@ class CLScrollbarOverlay extends StatefulWidget {
     required this.verticalVisibility,
     required this.thumbColor,
     required this.child,
+    this.padding = EdgeInsets.zero,
   });
 
   final ScrollController? horizontalController;
@@ -27,6 +28,7 @@ class CLScrollbarOverlay extends StatefulWidget {
   final CLScrollbarVisibility verticalVisibility;
   final Color thumbColor;
   final Widget child;
+  final EdgeInsetsGeometry padding;
 
   @override
   State<CLScrollbarOverlay> createState() => _CLScrollbarOverlayState();
@@ -221,6 +223,7 @@ class _CLScrollbarOverlayState extends State<CLScrollbarOverlay>
               alpha: widget.thumbColor.a * opacity,
             ),
             interactive: opacity > 0,
+            padding: widget.padding,
             child: result,
           );
         }
@@ -237,6 +240,7 @@ class _CLScrollbarOverlayState extends State<CLScrollbarOverlay>
               alpha: widget.thumbColor.a * opacity,
             ),
             interactive: opacity > 0,
+            padding: widget.padding,
             child: result,
           );
         }
@@ -276,6 +280,7 @@ Widget _buildRawScrollbar({
   required ScrollController controller,
   required Color thumbColor,
   required bool interactive,
+  required EdgeInsetsGeometry padding,
   required Widget child,
 }) {
   return RawScrollbar(
@@ -294,7 +299,7 @@ Widget _buildRawScrollbar({
     scrollbarOrientation: axis == Axis.vertical
         ? ScrollbarOrientation.right
         : ScrollbarOrientation.bottom,
-    padding: EdgeInsets.zero,
+    padding: padding,
     notificationPredicate: (notification) =>
         notification.depth == 0 && notification.metrics.axis == axis,
     child: child,

@@ -40,6 +40,7 @@ void main() {
     expect(scrollable.blurExtent, const EdgeInsets.all(24));
     expect(scrollable.blurSigma, const EdgeInsets.all(5));
     expect(scrollable.padding, EdgeInsets.zero);
+    expect(scrollable.scrollbarPadding, EdgeInsets.zero);
     expect(scrollable.horizontalScrollbar, CLScrollbarVisibility.auto);
     expect(scrollable.verticalScrollbar, CLScrollbarVisibility.auto);
     expect(scrollable.horizontalController, isNull);
@@ -263,6 +264,60 @@ void main() {
       tester.getTopLeft(find.byKey(contentKey)),
       tester.getTopLeft(find.byKey(viewportKey)),
     );
+  });
+
+  testWidgets('scrollbar padding constrains both tracks only', (tester) async {
+    final horizontal = ScrollController();
+    final vertical = ScrollController();
+    addTearDown(horizontal.dispose);
+    addTearDown(vertical.dispose);
+    const scrollbarPadding = EdgeInsets.fromLTRB(10, 20, 30, 40);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 100,
+            height: 80,
+            child: CLScrollable(
+              horizontalController: horizontal,
+              verticalController: vertical,
+              scrollbarPadding: scrollbarPadding,
+              horizontalScrollbar: CLScrollbarVisibility.always,
+              verticalScrollbar: CLScrollbarVisibility.always,
+              child: const SizedBox(width: 240, height: 200),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final scrollbars = tester.widgetList<RawScrollbar>(
+      find.byType(RawScrollbar),
+    );
+    expect(scrollbars, hasLength(2));
+    expect(
+      scrollbars.every((scrollbar) => scrollbar.padding == scrollbarPadding),
+      isTrue,
+    );
+    expect(horizontal.position.maxScrollExtent, 140);
+    expect(vertical.position.maxScrollExtent, 120);
+  });
+
+  testWidgets('CLScrollable rejects negative scrollbar padding', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: CLScrollable(
+          scrollbarPadding: EdgeInsets.only(right: -1),
+          child: SizedBox(),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isAssertionError);
   });
 
   testWidgets('vertical direction disables horizontal scrolling', (
@@ -1374,7 +1429,7 @@ void main() {
 
     await mouse.removePointer();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 999));
+    await tester.pump(const Duration(milliseconds: 299));
     pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
       Offset(98, 10),
     ]);
@@ -1445,7 +1500,7 @@ void main() {
 
     await mouse.removePointer();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 999));
+    await tester.pump(const Duration(milliseconds: 299));
     pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
       Offset(98, 10),
     ]);

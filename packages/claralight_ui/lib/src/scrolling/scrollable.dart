@@ -76,6 +76,9 @@ class CLScrollable extends StatefulWidget {
   /// Insets that move with [child] and contribute to its scroll extent.
   final EdgeInsetsGeometry padding;
 
+  /// Insets that constrain both scrollbar tracks within the viewport.
+  final EdgeInsetsGeometry scrollbarPadding;
+
   /// Visibility policy for the bottom horizontal scrollbar.
   final CLScrollbarVisibility horizontalScrollbar;
 
@@ -99,6 +102,7 @@ class CLScrollable extends StatefulWidget {
     this.blurExtent = const EdgeInsets.all(24),
     this.blurSigma = const EdgeInsets.all(5),
     this.padding = EdgeInsets.zero,
+    this.scrollbarPadding = EdgeInsets.zero,
     this.horizontalScrollbar = CLScrollbarVisibility.auto,
     this.verticalScrollbar = CLScrollbarVisibility.auto,
     this.horizontalController,
@@ -131,6 +135,7 @@ class CLScrollable extends StatefulWidget {
     final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
     final resolvedBlurExtent = blurExtent.resolve(textDirection);
     final resolvedBlurSigma = blurSigma.resolve(textDirection);
+    final resolvedScrollbarPadding = scrollbarPadding.resolve(textDirection);
     assert(
       resolvedBlurExtent.isNonNegative && _isFinite(resolvedBlurExtent),
       'CLScrollable blurExtent values must be finite and non-negative.',
@@ -138,6 +143,11 @@ class CLScrollable extends StatefulWidget {
     assert(
       resolvedBlurSigma.isNonNegative && _isFinite(resolvedBlurSigma),
       'CLScrollable blurSigma values must be finite and non-negative.',
+    );
+    assert(
+      resolvedScrollbarPadding.isNonNegative &&
+          _isFinite(resolvedScrollbarPadding),
+      'CLScrollable scrollbarPadding values must be finite and non-negative.',
     );
 
     return LayoutBuilder(
@@ -228,6 +238,7 @@ class CLScrollable extends StatefulWidget {
           horizontalVisibility: horizontalScrollbar,
           verticalVisibility: verticalScrollbar,
           thumbColor: CLTheme.of(context).colors.selection,
+          padding: resolvedScrollbarPadding,
           child: result,
         );
         return ScrollConfiguration(
