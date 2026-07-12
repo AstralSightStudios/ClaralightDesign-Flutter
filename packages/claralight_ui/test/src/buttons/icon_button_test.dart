@@ -10,7 +10,7 @@ void main() {
     );
   }
 
-  testWidgets('CLIconButton renders flat circle with size steps and taps', (
+  testWidgets('CLIconButton renders frosted circle with size steps and taps', (
     WidgetTester tester,
   ) async {
     var tapped = false;
@@ -20,6 +20,7 @@ void main() {
     );
 
     expect(tester.getSize(find.byType(CLSurface)), const Size(44, 44));
+    expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isTrue);
 
     await tester.tap(find.byType(CLIconButton));
     await tester.pumpAndSettle();
@@ -82,6 +83,7 @@ void main() {
       tester.widget<CLSurface>(find.byType(CLSurface)).fill,
       const Color(0x00000000),
     );
+    expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isFalse);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
@@ -92,11 +94,10 @@ void main() {
       tester.widget<CLSurface>(find.byType(CLSurface)).fill,
       theme.colors.controlHighlight,
     );
+    expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isFalse);
   });
 
-  testWidgets('CLIconButton disabled blocks taps', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('CLIconButton disabled blocks taps', (WidgetTester tester) async {
     await tester.pumpWidget(
       host(const CLIconButton(icon: Icons.add, onPressed: null)),
     );

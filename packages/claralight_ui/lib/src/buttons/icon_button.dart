@@ -102,9 +102,9 @@ class _CLIconButtonState extends State<CLIconButton> {
     final iconColor = !_enabled
         ? theme.colors.textDisabled
         : widget.iconColor ??
-            (widget.selected
-                ? theme.colors.textPrimary
-                : theme.colors.textSecondary);
+              (widget.selected
+                  ? theme.colors.textPrimary
+                  : theme.colors.textSecondary);
 
     return Semantics(
       button: true,
@@ -125,6 +125,7 @@ class _CLIconButtonState extends State<CLIconButton> {
             child: CLSurface(
               fill: fill,
               borderRadius: radius,
+              frosted: widget.variant != CLIconButtonVariant.ghost,
               child: Center(
                 child: Icon(widget.icon, size: _iconSize, color: iconColor),
               ),
