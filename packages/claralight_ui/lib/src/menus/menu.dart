@@ -56,7 +56,8 @@ class CLMenuController extends ChangeNotifier {
 /// Tapping [anchor] morphs its round surface into a panel using the ClaraLight
 /// jelly spring. The panel content is always hosted in a shrink-wrapped
 /// [CLList]; callers own the rows, separators, and selection behavior in
-/// [children]. Use a [CLMenuController] when a child should close the menu.
+/// [children]. A restrained local light follows an active press inside the
+/// panel. Use a [CLMenuController] when a child should close the menu.
 class CLMenu extends StatefulWidget {
   const CLMenu({
     super.key,
@@ -142,8 +143,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   late final AnimationController _morphH;
   late final AnimationController _content;
   late final AnimationController _resize;
+  late final AnimationController _pressGlow;
 
   FocusNode? _previousFocus;
+  Offset _pressPosition = Offset.zero;
+  int? _pressPointer;
   bool _open = false;
   bool _closing = false;
   bool _measuring = false;
@@ -176,6 +180,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 180),
     )..value = 1;
+    _pressGlow = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
     _controller._attach(_handleControllerState);
     if (_controller.isOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -211,6 +220,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       ..dispose();
     _content.dispose();
     _resize.dispose();
+    _pressGlow.dispose();
     _focusScopeNode.dispose();
     _internalController.dispose();
     super.dispose();
@@ -347,6 +357,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _open = false;
     _closing = true;
     _measuring = false;
+    _clearPanelPress();
     widget.onOpenChanged?.call(false);
     setState(() {});
 
@@ -400,6 +411,30 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _previousFocus = null;
     if (previousFocus?.canRequestFocus ?? false) previousFocus!.requestFocus();
     if (mounted) setState(() {});
+  }
+
+  void _handlePanelPointerDown(PointerDownEvent event) {
+    if (!_open || _pressPointer != null) return;
+    setState(() {
+      _pressPointer = event.pointer;
+      _pressPosition = event.localPosition;
+    });
+    _pressGlow.forward();
+  }
+
+  void _handlePanelPointerMove(PointerMoveEvent event) {
+    if (event.pointer != _pressPointer) return;
+    setState(() => _pressPosition = event.localPosition);
+  }
+
+  void _handlePanelPointerEnd(PointerEvent event) {
+    if (event.pointer != _pressPointer) return;
+    _clearPanelPress();
+  }
+
+  void _clearPanelPress() {
+    _pressPointer = null;
+    _pressGlow.reverse();
   }
 
   @override
@@ -493,6 +528,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                         _morphH,
                         _content,
                         _resize,
+                        _pressGlow,
                       ]),
                       builder: (context, _) => _buildPanel(),
                     ),
@@ -539,58 +575,81 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
     return IgnorePointer(
       ignoring: !_open,
-      child: Opacity(
-        opacity: presence,
-        child: Container(
-          width: width,
-          height: height,
-          decoration: clSmoothDecoration(
-            borderRadius: borderRadius,
-            side: BorderSide(color: theme.colors.outlineStrong),
-            shadows: [
-              BoxShadow(
-                color: Color.fromARGB((0x40 * shadowStrength).round(), 0, 0, 0),
-                blurRadius: 36,
-                offset: const Offset(0, 14),
-              ),
-            ],
-          ),
-          child: ClipRSuperellipse(
-            borderRadius: borderRadius,
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  IgnorePointer(child: ColoredBox(color: theme.colors.frost)),
-                  IgnorePointer(
-                    child: ColoredBox(
-                      color: Color.fromRGBO(
-                        255,
-                        255,
-                        255,
-                        0.06 * (1 - reveal) * math.sqrt(shadowStrength),
-                      ),
-                    ),
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _handlePanelPointerDown,
+        onPointerMove: _handlePanelPointerMove,
+        onPointerUp: _handlePanelPointerEnd,
+        onPointerCancel: _handlePanelPointerEnd,
+        child: Opacity(
+          opacity: presence,
+          child: Container(
+            width: width,
+            height: height,
+            decoration: clSmoothDecoration(
+              borderRadius: borderRadius,
+              side: BorderSide(color: theme.colors.outlineStrong),
+              shadows: [
+                BoxShadow(
+                  color: Color.fromARGB(
+                    (0x40 * shadowStrength).round(),
+                    0,
+                    0,
+                    0,
                   ),
-                  OverflowBox(
-                    alignment: _anchor,
-                    minWidth: widget.menuWidth,
-                    maxWidth: widget.menuWidth,
-                    minHeight: 0,
-                    maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                    child: Transform.scale(
-                      scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
-                      alignment: _anchor,
-                      child: Opacity(
-                        opacity: opacity.clamp(0.0, 1.0),
-                        child: _buildMeasuredList(
-                          maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                  blurRadius: 36,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            ),
+            child: ClipRSuperellipse(
+              borderRadius: borderRadius,
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    IgnorePointer(child: ColoredBox(color: theme.colors.frost)),
+                    IgnorePointer(
+                      child: ColoredBox(
+                        color: Color.fromRGBO(
+                          255,
+                          255,
+                          255,
+                          0.06 * (1 - reveal) * math.sqrt(shadowStrength),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    IgnorePointer(
+                      child: CustomPaint(
+                        painter: _CLMenuPressGlowPainter(
+                          pointer: _pressPosition,
+                          color: theme.colors.textPrimary,
+                          strength: Curves.easeOutCubic.transform(
+                            _pressGlow.value,
+                          ),
+                        ),
+                      ),
+                    ),
+                    OverflowBox(
+                      alignment: _anchor,
+                      minWidth: widget.menuWidth,
+                      maxWidth: widget.menuWidth,
+                      minHeight: 0,
+                      maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                      child: Transform.scale(
+                        scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
+                        alignment: _anchor,
+                        child: Opacity(
+                          opacity: opacity.clamp(0.0, 1.0),
+                          child: _buildMeasuredList(
+                            maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -617,6 +676,42 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+class _CLMenuPressGlowPainter extends CustomPainter {
+  const _CLMenuPressGlowPainter({
+    required this.pointer,
+    required this.color,
+    required this.strength,
+  });
+
+  final Offset pointer;
+  final Color color;
+  final double strength;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (strength <= 0.001 || size.isEmpty) return;
+    final radius = (size.width * 0.28).clamp(44.0, 72.0);
+    final alpha = 0.07 * strength;
+    final center = color.withValues(alpha: color.a * alpha);
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          center,
+          center.withValues(alpha: center.a * 0.35),
+          center.withValues(alpha: 0),
+        ],
+        stops: const [0, 0.45, 1],
+      ).createShader(Rect.fromCircle(center: pointer, radius: radius));
+    canvas.drawCircle(pointer, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_CLMenuPressGlowPainter oldDelegate) =>
+      pointer != oldDelegate.pointer ||
+      color != oldDelegate.color ||
+      strength != oldDelegate.strength;
 }
 
 class _SizeReporter extends SingleChildRenderObjectWidget {

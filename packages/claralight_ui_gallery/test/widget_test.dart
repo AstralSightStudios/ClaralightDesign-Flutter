@@ -58,6 +58,26 @@ void main() {
     expect(select.options.last.label, '项目 500 / 500');
   });
 
+  testWidgets('Gallery toolbar demo previews and switches its active tool', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GalleryApp());
+    await tester.pump();
+
+    final first = find.byKey(const Key('toolbar-tool-0'));
+    final initial = find.byKey(const Key('toolbar-tool-3'));
+    expect(tester.widget<CLIconButton>(initial).selected, isTrue);
+    expect(tester.widget<CLIconButton>(first).selected, isFalse);
+
+    await tester.ensureVisible(first);
+    await tester.pump();
+    await tester.tap(first);
+    await tester.pump();
+
+    expect(tester.widget<CLIconButton>(first).selected, isTrue);
+    expect(tester.widget<CLIconButton>(initial).selected, isFalse);
+  });
+
   testWidgets('Gallery exposes the interactive CLScrollable demo', (
     WidgetTester tester,
   ) async {

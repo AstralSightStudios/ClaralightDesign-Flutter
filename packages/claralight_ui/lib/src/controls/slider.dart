@@ -35,7 +35,22 @@ class CLSlider extends StatefulWidget {
 }
 
 class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
-  static const _spring = SpringDescription(mass: 1, stiffness: 520, damping: 18);
+  static const _pressSpring = SpringDescription(
+    mass: 1,
+    stiffness: 520,
+    damping: 18,
+  );
+
+  static SpringDescription _visualSpringFor(double distance) {
+    final dampingProgress = (distance / 0.35).clamp(0.0, 1.0);
+    return SpringDescription(
+      mass: 1,
+      stiffness: 520,
+      // Small corrections retain a light spring. Large jumps approach
+      // critical damping so their rebound does not scale with the distance.
+      damping: 24 + 24 * dampingProgress,
+    );
+  }
 
   late final AnimationController _press;
 
@@ -53,10 +68,8 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
     super.initState();
     _press = AnimationController.unbounded(vsync: this)
       ..addListener(() => setState(() {}));
-    _visual = AnimationController.unbounded(
-      value: _fraction,
-      vsync: this,
-    )..addListener(() => setState(() {}));
+    _visual = AnimationController.unbounded(value: _fraction, vsync: this)
+      ..addListener(() => setState(() {}));
   }
 
   @override
@@ -66,9 +79,15 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
     if (_tracking) {
       _visual.value = target;
     } else if ((target - _visual.value).abs() > 0.0005) {
+      final distance = (target - _visual.value).abs();
       _visual.animateWith(
-        SpringSimulation(_spring, _visual.value, target, 0,
-            tolerance: Tolerance.defaultTolerance),
+        SpringSimulation(
+          _visualSpringFor(distance),
+          _visual.value,
+          target,
+          0,
+          tolerance: Tolerance.defaultTolerance,
+        ),
       );
     }
   }
@@ -88,8 +107,8 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
   void _update(Offset localPosition, double width) {
     if (!_enabled) return;
     final usable = width - CLSlider.thumbSize;
-    final fraction =
-        ((localPosition.dx - CLSlider.thumbSize / 2) / usable).clamp(0.0, 1.0);
+    final fraction = ((localPosition.dx - CLSlider.thumbSize / 2) / usable)
+        .clamp(0.0, 1.0);
     widget.onChanged!(widget.min + fraction * (widget.max - widget.min));
   }
 
@@ -103,8 +122,13 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
       );
     } else {
       _press.animateWith(
-        SpringSimulation(_spring, _press.value, 0, 0,
-            tolerance: Tolerance.defaultTolerance),
+        SpringSimulation(
+          _pressSpring,
+          _press.value,
+          0,
+          0,
+          tolerance: Tolerance.defaultTolerance,
+        ),
       );
     }
   }
@@ -164,8 +188,9 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
                     child: DecoratedBox(
                       decoration: clSmoothDecoration(
                         color: theme.colors.track,
-                        borderRadius:
-                            BorderRadius.circular(CLSlider.trackHeight / 2),
+                        borderRadius: BorderRadius.circular(
+                          CLSlider.trackHeight / 2,
+                        ),
                       ),
                     ),
                   ),
@@ -178,8 +203,9 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
                     child: DecoratedBox(
                       decoration: clSmoothDecoration(
                         color: active,
-                        borderRadius:
-                            BorderRadius.circular(CLSlider.trackHeight / 2),
+                        borderRadius: BorderRadius.circular(
+                          CLSlider.trackHeight / 2,
+                        ),
                       ),
                     ),
                   ),

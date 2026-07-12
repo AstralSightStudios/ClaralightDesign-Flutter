@@ -9,7 +9,7 @@ import 'package:flutter/widgets.dart';
 ///
 /// Use [clSmoothShape] wherever a `ShapeBorder` is needed and
 /// [ClipRSuperellipse] for clipping.
-ShapeBorder clSmoothShape(
+RoundedSuperellipseBorder clSmoothShape(
   BorderRadiusGeometry borderRadius, {
   BorderSide side = BorderSide.none,
 }) {

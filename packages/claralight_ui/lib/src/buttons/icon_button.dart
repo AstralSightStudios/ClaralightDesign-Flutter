@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../containers/toolbar_scope.dart';
 import '../foundation/control_size.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
@@ -34,7 +35,8 @@ class CLIconButton extends StatefulWidget {
   final CLIconButtonShape shape;
   final CLIconButtonVariant variant;
 
-  /// Selected buttons use the selection fill (or [selectedFill]).
+  /// Selected buttons use a raised control fill, or an opaque accent fill
+  /// when hosted by a [CLToolbar].
   final bool selected;
 
   /// Overrides the resting fill.
@@ -94,16 +96,28 @@ class _CLIconButtonState extends State<CLIconButton> {
     );
 
     final isHovered = _hovered && _enabled;
+    final inToolbar = CLToolbarScope.contains(context);
+    final quietInToolbar = inToolbar && widget.fill == null;
+    final emphasizedToolbarSelection =
+        inToolbar && widget.selected && widget.selectedFill == null;
     var fill = widget.selected
-        ? (widget.selectedFill ?? theme.colors.controlHighlight)
-        : (widget.fill ?? _fillColor(theme, isHovered: isHovered));
+        ? (widget.selectedFill ??
+              (inToolbar ? theme.colors.accent : theme.colors.controlHighlight))
+        : (widget.fill ??
+              (quietInToolbar
+                  ? isHovered
+                        ? theme.colors.controlHighlight
+                        : const Color(0x00000000)
+                  : _fillColor(theme, isHovered: isHovered)));
     if (!_enabled) fill = fill.withValues(alpha: fill.a * 0.45);
 
     final iconColor = !_enabled
         ? theme.colors.textDisabled
         : widget.iconColor ??
               (widget.selected
-                  ? theme.colors.textPrimary
+                  ? inToolbar
+                        ? theme.colors.onAccent
+                        : theme.colors.textPrimary
                   : theme.colors.textSecondary);
 
     return Semantics(
@@ -125,7 +139,14 @@ class _CLIconButtonState extends State<CLIconButton> {
             child: CLSurface(
               fill: fill,
               borderRadius: radius,
-              frosted: widget.variant != CLIconButtonVariant.ghost,
+              outlined: emphasizedToolbarSelection,
+              outlineColor: emphasizedToolbarSelection
+                  ? theme.colors.onAccent.withValues(alpha: 0.55)
+                  : null,
+              frosted:
+                  !quietInToolbar &&
+                  widget.variant != CLIconButtonVariant.ghost &&
+                  fill.a > 0,
               child: Center(
                 child: Icon(widget.icon, size: _iconSize, color: iconColor),
               ),

@@ -171,6 +171,45 @@ void main() {
     expect(find.byType(CLList), findsNothing);
   });
 
+  testWidgets('panel press glow preserves child gestures', (tester) async {
+    final controller = CLMenuController();
+    var presses = 0;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      buildMenu(
+        controller: controller,
+        children: [
+          CLListTile(
+            key: _rowKey,
+            label: 'Keep menu open',
+            onTap: () => presses++,
+          ),
+        ],
+      ),
+    );
+    await openMenu(tester, controller);
+
+    final glow = find.byWidgetPredicate(
+      (widget) =>
+          widget is CustomPaint &&
+          widget.painter.runtimeType.toString() == '_CLMenuPressGlowPainter',
+    );
+    expect(glow, findsOneWidget);
+    final idlePainter = tester.widget<CustomPaint>(glow).painter!;
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(_rowKey)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final pressedPainter = tester.widget<CustomPaint>(glow).painter!;
+    expect(pressedPainter.shouldRepaint(idlePainter), isTrue);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(presses, 1);
+    expect(controller.isOpen, isTrue);
+  });
+
   testWidgets('remeasures changing children while open', (tester) async {
     final controller = CLMenuController();
     late StateSetter update;

@@ -300,6 +300,14 @@ void main() {
       scrollbars.every((scrollbar) => scrollbar.padding == scrollbarPadding),
       isTrue,
     );
+    expect(
+      scrollbars.every(
+        (scrollbar) =>
+            scrollbar.radius == null &&
+            scrollbar.shape is RoundedSuperellipseBorder,
+      ),
+      isTrue,
+    );
     expect(horizontal.position.maxScrollExtent, 140);
     expect(vertical.position.maxScrollExtent, 120);
   });
@@ -1033,6 +1041,8 @@ void main() {
         ),
       ),
     );
+
+    expect(find.byType(ClipRSuperellipse), findsOneWidget);
 
     final pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
       Offset(0, 0),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/shape.dart';
 import 'types.dart';
 
 /// Overlay scrollbars for one or two axes, driven by scroll controllers.
@@ -289,7 +290,7 @@ Widget _buildRawScrollbar({
     thumbVisibility: true,
     interactive: interactive,
     thickness: 4,
-    radius: const Radius.circular(17),
+    shape: clSmoothShape(const BorderRadius.all(Radius.circular(17))),
     thumbColor: thumbColor,
     minThumbLength: 49,
     trackVisibility: false,

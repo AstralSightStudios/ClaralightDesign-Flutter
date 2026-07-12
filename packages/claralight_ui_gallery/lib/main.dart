@@ -601,10 +601,10 @@ class _ScrollableSectionState extends State<_ScrollableSection> {
           SizedBox(
             height: 220,
             child: DecoratedBox(
-              decoration: BoxDecoration(
+              decoration: clSmoothDecoration(
                 color: theme.colors.panel,
-                border: Border.all(color: theme.colors.outline),
                 borderRadius: BorderRadius.circular(theme.radii.control),
+                side: BorderSide(color: theme.colors.outline),
               ),
               child: CLScrollable(
                 key: const Key('scrollable-demo'),
@@ -705,8 +705,8 @@ class _ScrollableDemoPainter extends CustomPainter {
       axisPaint,
     );
 
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
+    canvas.drawRSuperellipse(
+      RSuperellipse.fromRectAndRadius(
         Rect.fromCenter(
           center: size.center(Offset.zero),
           width: 112,
@@ -792,10 +792,10 @@ class _LazyListSectionState extends State<_LazyListSection> {
           SizedBox(
             height: 220,
             child: DecoratedBox(
-              decoration: BoxDecoration(
+              decoration: clSmoothDecoration(
                 color: theme.colors.panel,
-                border: Border.all(color: theme.colors.outline),
                 borderRadius: BorderRadius.circular(theme.radii.control),
+                side: BorderSide(color: theme.colors.outline),
               ),
               child: CLList.builder(
                 key: const Key('list-demo'),
@@ -808,7 +808,7 @@ class _LazyListSectionState extends State<_LazyListSection> {
                 itemBuilder: (context, index) {
                   final number = '${index + 1}'.padLeft(3, '0');
                   final content = DecoratedBox(
-                    decoration: BoxDecoration(
+                    decoration: clSmoothDecoration(
                       color: index.isEven
                           ? theme.colors.control
                           : theme.colors.controlHighlight,
@@ -1126,41 +1126,39 @@ class _StatusSection extends StatelessWidget {
   }
 }
 
-class _ToolbarSection extends StatelessWidget {
+class _ToolbarSection extends StatefulWidget {
   const _ToolbarSection();
 
   @override
+  State<_ToolbarSection> createState() => _ToolbarSectionState();
+}
+
+class _ToolbarSectionState extends State<_ToolbarSection> {
+  int _activeTool = 3;
+
+  @override
   Widget build(BuildContext context) {
+    const tools = [
+      (Icons.image_outlined, '图像'),
+      (Icons.title_rounded, '文字'),
+      (Icons.data_usage_rounded, '数据'),
+      (Icons.auto_awesome_outlined, '效果'),
+    ];
     return _SectionCard(
       title: 'CLToolbar',
       child: Row(
         children: [
           CLToolbar(
             children: [
-              CLIconButton(
-                icon: Icons.image_outlined,
-                size: CLControlSize.medium,
-                fill: const Color(0x00000000),
-                onPressed: () {},
-              ),
-              CLIconButton(
-                icon: Icons.title_rounded,
-                size: CLControlSize.medium,
-                fill: const Color(0x00000000),
-                onPressed: () {},
-              ),
-              CLIconButton(
-                icon: Icons.data_usage_rounded,
-                size: CLControlSize.medium,
-                fill: const Color(0x00000000),
-                onPressed: () {},
-              ),
-              CLIconButton(
-                icon: Icons.auto_awesome_outlined,
-                size: CLControlSize.medium,
-                fill: const Color(0x00000000),
-                onPressed: () {},
-              ),
+              for (final (index, tool) in tools.indexed)
+                CLIconButton(
+                  key: Key('toolbar-tool-$index'),
+                  icon: tool.$1,
+                  semanticLabel: tool.$2,
+                  size: CLControlSize.medium,
+                  selected: _activeTool == index,
+                  onPressed: () => setState(() => _activeTool = index),
+                ),
             ],
           ),
           const SizedBox(width: 12),
@@ -1170,13 +1168,11 @@ class _ToolbarSection extends StatelessWidget {
               CLIconButton(
                 icon: Icons.info_outline_rounded,
                 size: CLControlSize.medium,
-                fill: const Color(0x00000000),
                 onPressed: () {},
               ),
               CLIconButton(
                 icon: Icons.zoom_in_rounded,
                 size: CLControlSize.medium,
-                fill: const Color(0x00000000),
                 onPressed: () {},
               ),
             ],

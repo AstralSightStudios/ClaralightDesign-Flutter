@@ -281,7 +281,7 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
               );
             }
             if (widget.borderRadius != BorderRadius.zero) {
-              result = ClipRRect(
+              result = ClipRSuperellipse(
                 borderRadius: widget.borderRadius,
                 child: result,
               );
