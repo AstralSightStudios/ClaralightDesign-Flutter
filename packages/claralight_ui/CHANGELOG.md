@@ -1,3 +1,12 @@
+## Unreleased
+
+* Added `CLControlSize.controlHeight` as the shared 28/36/44px control
+  height contract. `CLButton`, `CLIconButton`, `CLTextField`, and `CLSelect`
+  now use it; `CLButton.large` is 44px tall instead of 48px.
+* `CLToolbar` gained a standard `size` and passes it to `CLButton` and
+  `CLIconButton` descendants that do not specify their own size. A custom
+  `height` continues to override only the toolbar capsule height.
+
 ## 0.2.0
 
 Aligned with the ClaraLight Figma design source (Facetory demo).

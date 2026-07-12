@@ -16,6 +16,18 @@ void main() {
   final stepUp = find.byKey(const Key('cl-text-field-step-up'));
   final stepDown = find.byKey(const Key('cl-text-field-step-down'));
 
+  testWidgets('sizes use the standard control heights', (tester) async {
+    for (final size in CLControlSize.values) {
+      await tester.pumpWidget(host(CLTextField(size: size)));
+
+      expect(
+        tester.getSize(find.byType(CLTextField)).height,
+        size.controlHeight,
+        reason: 'height of $size',
+      );
+    }
+  });
+
   testWidgets('step buttons only appear for numeric fields with a step', (
     tester,
   ) async {

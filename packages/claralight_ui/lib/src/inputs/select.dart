@@ -95,11 +95,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     super.dispose();
   }
 
-  double get _height => switch (widget.size) {
-    CLControlSize.small => 28,
-    CLControlSize.medium => 36,
-    CLControlSize.large => 44,
-  };
+  double get _height => widget.size.controlHeight;
 
   double get _rowHeight => _height;
 

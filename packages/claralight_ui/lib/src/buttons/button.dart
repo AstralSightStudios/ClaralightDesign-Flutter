@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../containers/toolbar_scope.dart';
 import '../foundation/control_size.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
@@ -30,7 +31,10 @@ class CLButton extends StatefulWidget {
   final Widget? leadingIcon;
   final Widget? trailingIcon;
   final CLButtonVariant variant;
-  final CLControlSize size;
+
+  /// Configured size, defaulting to large outside a toolbar.
+  CLControlSize get size => _sizeOverride ?? CLControlSize.large;
+  final CLControlSize? _sizeOverride;
 
   /// Optional fixed width. Null hugs the content.
   final double? width;
@@ -45,10 +49,10 @@ class CLButton extends StatefulWidget {
     this.leadingIcon,
     this.trailingIcon,
     this.variant = CLButtonVariant.primary,
-    this.size = CLControlSize.large,
+    CLControlSize? size,
     this.width,
     this.tint,
-  });
+  }) : _sizeOverride = size;
 
   @override
   State<CLButton> createState() => _CLButtonState();
@@ -57,19 +61,20 @@ class CLButton extends StatefulWidget {
 class _CLButtonState extends State<CLButton> {
   bool _hovered = false;
 
-  double get _height => switch (widget.size) {
-    CLControlSize.small => 28,
-    CLControlSize.medium => 36,
-    CLControlSize.large => 48,
-  };
+  CLControlSize get _size =>
+      widget._sizeOverride ??
+      CLToolbarScope.maybeOf(context)?.size ??
+      CLControlSize.large;
 
-  double get _hPadding => switch (widget.size) {
+  double get _height => _size.controlHeight;
+
+  double get _hPadding => switch (_size) {
     CLControlSize.small => 12,
     CLControlSize.medium => 16,
     CLControlSize.large => 20,
   };
 
-  double get _iconSize => switch (widget.size) {
+  double get _iconSize => switch (_size) {
     CLControlSize.small => 15,
     CLControlSize.medium => 18,
     CLControlSize.large => 22,
@@ -83,7 +88,7 @@ class _CLButtonState extends State<CLButton> {
     final radius = BorderRadius.circular(theme.radii.capsule);
     final foreground = _foregroundColor(theme);
     final textStyle =
-        (widget.size == CLControlSize.large
+        (_size == CLControlSize.large
                 ? theme.typography.title
                 : theme.typography.label)
             .copyWith(color: foreground);
@@ -94,7 +99,7 @@ class _CLButtonState extends State<CLButton> {
       children: [
         if (widget.leadingIcon != null) ...[
           _iconSlot(widget.leadingIcon!, foreground),
-          SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
+          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
         ],
         Flexible(
           child: Text(
@@ -105,7 +110,7 @@ class _CLButtonState extends State<CLButton> {
           ),
         ),
         if (widget.trailingIcon != null) ...[
-          SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
+          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
           _iconSlot(widget.trailingIcon!, foreground),
         ],
       ],

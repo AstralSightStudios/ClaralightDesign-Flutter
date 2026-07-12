@@ -9,6 +9,10 @@ void main() {
     );
   }
 
+  test('CLButton exposes large as its default configured size', () {
+    expect(const CLButton(label: 'Continue').size, CLControlSize.large);
+  });
+
   testWidgets('CLButton renders the flat Claralight base', (
     WidgetTester tester,
   ) async {
@@ -18,7 +22,7 @@ void main() {
     expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isTrue);
 
     final box = tester.getSize(find.byType(CLSurface));
-    expect(box.height, 48);
+    expect(box.height, 44);
   });
 
   testWidgets('CLButton sizes follow the density steps', (
@@ -27,7 +31,7 @@ void main() {
     for (final (size, height) in [
       (CLControlSize.small, 28.0),
       (CLControlSize.medium, 36.0),
-      (CLControlSize.large, 48.0),
+      (CLControlSize.large, 44.0),
     ]) {
       await tester.pumpWidget(
         host(CLButton(label: '继续', size: size, onPressed: () {})),

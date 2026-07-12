@@ -160,11 +160,7 @@ class _CLTextFieldState extends State<CLTextField> {
     super.dispose();
   }
 
-  double get _height => switch (widget.size) {
-    CLControlSize.small => 28,
-    CLControlSize.medium => 36,
-    CLControlSize.large => 44,
-  };
+  double get _height => widget.size.controlHeight;
 
   bool get _isNumeric =>
       widget.keyboardType?.index == TextInputType.number.index;

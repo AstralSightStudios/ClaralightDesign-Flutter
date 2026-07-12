@@ -4,11 +4,136 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  Widget host(Widget child) {
+    return MaterialApp(home: Center(child: child));
+  }
+
   test('CLToolbar keeps its containing capsule by default', () {
     const toolbar = CLToolbar(children: [SizedBox()]);
 
     expect(toolbar.fill, isNull);
     expect(toolbar.outlined, isTrue);
+    expect(toolbar.size, CLControlSize.large);
+    expect(toolbar.height, CLControlSize.large.controlHeight);
+  });
+
+  testWidgets('size steps use the standard control heights', (tester) async {
+    for (final size in CLControlSize.values) {
+      const toolbarKey = Key('toolbar');
+      await tester.pumpWidget(
+        host(
+          CLToolbar(
+            key: toolbarKey,
+            size: size,
+            children: const [SizedBox(width: 1)],
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSize(find.byKey(toolbarKey)).height,
+        size.controlHeight,
+        reason: 'height of $size',
+      );
+    }
+  });
+
+  testWidgets('passes its size to buttons without explicit sizes', (
+    tester,
+  ) async {
+    const buttonKey = Key('button');
+    const iconButtonKey = Key('icon-button');
+    await tester.pumpWidget(
+      host(
+        CLToolbar(
+          size: CLControlSize.medium,
+          children: [
+            CLButton(key: buttonKey, label: 'Save', onPressed: () {}),
+            CLIconButton(key: iconButtonKey, icon: Icons.add, onPressed: () {}),
+          ],
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byKey(buttonKey)).height, 36);
+    expect(tester.getSize(find.byKey(iconButtonKey)), const Size.square(36));
+  });
+
+  testWidgets('explicit button sizes override the toolbar size', (
+    tester,
+  ) async {
+    const buttonKey = Key('button');
+    const iconButtonKey = Key('icon-button');
+    await tester.pumpWidget(
+      host(
+        CLToolbar(
+          children: [
+            CLButton(
+              key: buttonKey,
+              label: 'Save',
+              size: CLControlSize.small,
+              onPressed: () {},
+            ),
+            CLIconButton(
+              key: iconButtonKey,
+              icon: Icons.add,
+              size: CLControlSize.medium,
+              onPressed: () {},
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byKey(buttonKey)).height, 28);
+    expect(tester.getSize(find.byKey(iconButtonKey)), const Size.square(36));
+  });
+
+  testWidgets('height only overrides the toolbar capsule', (tester) async {
+    const toolbarKey = Key('toolbar');
+    const iconButtonKey = Key('icon-button');
+    await tester.pumpWidget(
+      host(
+        CLToolbar(
+          key: toolbarKey,
+          size: CLControlSize.medium,
+          height: 52,
+          children: [
+            CLIconButton(key: iconButtonKey, icon: Icons.add, onPressed: () {}),
+          ],
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byKey(toolbarKey)).height, 52);
+    expect(tester.getSize(find.byKey(iconButtonKey)), const Size.square(36));
+  });
+
+  testWidgets('buttons inherit the nearest toolbar size', (tester) async {
+    const innerToolbarKey = Key('inner-toolbar');
+    const iconButtonKey = Key('icon-button');
+    await tester.pumpWidget(
+      host(
+        CLToolbar(
+          children: [
+            CLToolbar(
+              key: innerToolbarKey,
+              size: CLControlSize.small,
+              children: [
+                CLIconButton(
+                  key: iconButtonKey,
+                  icon: Icons.add,
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byKey(innerToolbarKey)).height, 28);
+    expect(tester.getSize(find.byKey(iconButtonKey)), const Size.square(28));
   });
 
   testWidgets('keeps the capsule but quiets default icon button backgrounds', (
@@ -35,7 +160,22 @@ void main() {
         .toList();
     expect(surfaces, hasLength(2));
     expect(surfaces.first.fill, isNull);
-    expect(surfaces.first.outlined, isTrue);
+    expect(surfaces.first.outlined, isFalse);
+    final outline = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: find.byType(CLToolbar),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is DecoratedBox &&
+              widget.position == DecorationPosition.foreground,
+        ),
+      ),
+    );
+    final outlineShape = (outline.decoration as ShapeDecoration).shape;
+    expect(
+      (outlineShape as RoundedSuperellipseBorder).side,
+      isNot(BorderSide.none),
+    );
     expect(surfaces.last.fill, const Color(0x00000000));
     expect(surfaces.last.frosted, isFalse);
   });

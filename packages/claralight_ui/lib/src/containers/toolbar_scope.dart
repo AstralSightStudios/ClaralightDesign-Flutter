@@ -1,12 +1,18 @@
 import 'package:flutter/widgets.dart';
 
-/// Internal marker used to give toolbar controls their quieter defaults.
-class CLToolbarScope extends InheritedWidget {
-  const CLToolbarScope({super.key, required super.child});
+import '../foundation/control_size.dart';
 
-  static bool contains(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<CLToolbarScope>() != null;
+/// Internal marker used to configure controls inside a toolbar.
+class CLToolbarScope extends InheritedWidget {
+  final CLControlSize size;
+
+  const CLToolbarScope({super.key, required this.size, required super.child});
+
+  static CLToolbarScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<CLToolbarScope>();
+
+  static bool contains(BuildContext context) => maybeOf(context) != null;
 
   @override
-  bool updateShouldNotify(CLToolbarScope oldWidget) => false;
+  bool updateShouldNotify(CLToolbarScope oldWidget) => size != oldWidget.size;
 }

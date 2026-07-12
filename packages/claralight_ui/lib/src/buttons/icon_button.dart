@@ -37,7 +37,11 @@ enum CLIconButtonVariant {
 class CLIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onPressed;
-  final CLControlSize size;
+
+  /// Configured size, defaulting to large outside a toolbar.
+  CLControlSize get size => _sizeOverride ?? CLControlSize.large;
+  final CLControlSize? _sizeOverride;
+
   final CLIconButtonShape shape;
   final CLIconButtonVariant variant;
 
@@ -61,7 +65,7 @@ class CLIconButton extends StatefulWidget {
     super.key,
     required this.icon,
     required this.onPressed,
-    this.size = CLControlSize.large,
+    CLControlSize? size,
     this.shape = CLIconButtonShape.circle,
     this.variant = CLIconButtonVariant.secondary,
     this.selected = false,
@@ -69,7 +73,7 @@ class CLIconButton extends StatefulWidget {
     this.selectedFill,
     this.iconColor,
     this.semanticLabel,
-  });
+  }) : _sizeOverride = size;
 
   @override
   State<CLIconButton> createState() => _CLIconButtonState();
@@ -78,13 +82,7 @@ class CLIconButton extends StatefulWidget {
 class _CLIconButtonState extends State<CLIconButton> {
   bool _hovered = false;
 
-  double get _extent => switch (widget.size) {
-    CLControlSize.small => 28,
-    CLControlSize.medium => 36,
-    CLControlSize.large => 44,
-  };
-
-  double get _iconSize => switch (widget.size) {
+  double _iconSize(CLControlSize size) => switch (size) {
     CLControlSize.small => 16,
     CLControlSize.medium => 19,
     CLControlSize.large => 22,
@@ -95,14 +93,17 @@ class _CLIconButtonState extends State<CLIconButton> {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
+    final toolbar = CLToolbarScope.maybeOf(context);
+    final size = widget._sizeOverride ?? toolbar?.size ?? CLControlSize.large;
+    final extent = size.controlHeight;
     final radius = BorderRadius.circular(
       widget.shape == CLIconButtonShape.circle
-          ? _extent / 2
+          ? extent / 2
           : theme.radii.control,
     );
 
     final isHovered = _hovered && _enabled;
-    final inToolbar = CLToolbarScope.contains(context);
+    final inToolbar = toolbar != null;
     final isSemanticVariant =
         widget.variant == CLIconButtonVariant.primary ||
         widget.variant == CLIconButtonVariant.danger;
@@ -150,10 +151,10 @@ class _CLIconButtonState extends State<CLIconButton> {
         child: CLPressable(
           onTap: widget.onPressed,
           borderRadius: radius,
-          pressedScale: 1 + 4 / _extent,
+          pressedScale: 1 + 4 / extent,
           child: SizedBox(
-            width: _extent,
-            height: _extent,
+            width: extent,
+            height: extent,
             child: CLSurface(
               fill: fill,
               borderRadius: radius,
@@ -162,7 +163,11 @@ class _CLIconButtonState extends State<CLIconButton> {
                   widget.variant != CLIconButtonVariant.ghost &&
                   fill.a > 0,
               child: Center(
-                child: Icon(widget.icon, size: _iconSize, color: iconColor),
+                child: Icon(
+                  widget.icon,
+                  size: _iconSize(size),
+                  color: iconColor,
+                ),
               ),
             ),
           ),

@@ -10,6 +10,13 @@ void main() {
     );
   }
 
+  test('CLIconButton exposes large as its default configured size', () {
+    expect(
+      const CLIconButton(icon: Icons.add, onPressed: null).size,
+      CLControlSize.large,
+    );
+  });
+
   testWidgets('CLIconButton renders frosted circle with size steps and taps', (
     WidgetTester tester,
   ) async {

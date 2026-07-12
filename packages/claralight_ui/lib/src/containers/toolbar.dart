@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../foundation/control_size.dart';
+import '../foundation/shape.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
 import 'toolbar_scope.dart';
@@ -16,8 +18,14 @@ class CLToolbar extends StatefulWidget {
   /// Whether hairline dividers separate the children.
   final bool dividers;
 
-  /// Height of the capsule.
-  final double height;
+  /// Density inherited by buttons that do not specify their own size.
+  final CLControlSize size;
+
+  /// Effective height of the capsule.
+  ///
+  /// Defaults to [CLControlSize.controlHeight] for [size].
+  double get height => _heightOverride ?? size.controlHeight;
+  final double? _heightOverride;
 
   /// Horizontal padding inside the capsule.
   ///
@@ -42,12 +50,13 @@ class CLToolbar extends StatefulWidget {
     super.key,
     required this.children,
     this.dividers = false,
-    this.height = 44,
+    this.size = CLControlSize.large,
+    double? height,
     this.padding = 3,
     this.spacing = 2,
     this.fill,
     this.outlined = true,
-  });
+  }) : _heightOverride = height;
 
   @override
   State<CLToolbar> createState() => _CLToolbarState();
@@ -78,6 +87,7 @@ class _CLToolbarState extends State<CLToolbar> {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
+    final radius = BorderRadius.circular(widget.height / 2);
 
     final items = <Widget>[];
     for (var i = 0; i < widget.children.length; i++) {
@@ -119,22 +129,32 @@ class _CLToolbarState extends State<CLToolbar> {
 
     return SizedBox(
       height: widget.height,
-      child: CLSurface(
-        level: CLSurfaceLevel.control,
-        fill: widget.fill,
-        frosted: true,
-        borderRadius: BorderRadius.circular(widget.height / 2),
-        outlined: widget.outlined,
-        shadow: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 18,
-            offset: Offset(0, 6),
+      // Overlay the outline so it does not shrink same-size descendants.
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: clSmoothDecoration(
+          borderRadius: radius,
+          side: widget.outlined
+              ? BorderSide(color: theme.colors.outline)
+              : BorderSide.none,
+        ),
+        child: CLSurface(
+          level: CLSurfaceLevel.control,
+          fill: widget.fill,
+          frosted: true,
+          borderRadius: radius,
+          shadow: const [
+            BoxShadow(
+              color: Color(0x40000000),
+              blurRadius: 18,
+              offset: Offset(0, 6),
+            ),
+          ],
+          padding: EdgeInsets.symmetric(horizontal: widget.padding),
+          child: CLToolbarScope(
+            size: widget.size,
+            child: Row(mainAxisSize: MainAxisSize.min, children: items),
           ),
-        ],
-        padding: EdgeInsets.symmetric(horizontal: widget.padding),
-        child: CLToolbarScope(
-          child: Row(mainAxisSize: MainAxisSize.min, children: items),
         ),
       ),
     );
