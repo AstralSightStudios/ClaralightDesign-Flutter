@@ -196,6 +196,9 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
     final inactiveColor = theme.colors.controlHighlight;
     var trackColor = Color.lerp(inactiveColor, activeColor, _currentFraction)!;
     if (!enabled) trackColor = trackColor.withValues(alpha: trackColor.a * 0.5);
+    final outlineColor = enabled
+        ? theme.colors.outline
+        : theme.colors.outline.withValues(alpha: theme.colors.outline.a * 0.5);
 
     final thumbOffset = _lerpDouble(
       CLToggle.thumbPadding,
@@ -234,7 +237,7 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
                 decoration: clSmoothDecoration(
                   color: trackColor,
                   borderRadius: BorderRadius.circular(CLToggle.trackHeight / 2),
-                  side: BorderSide(color: theme.colors.outline),
+                  side: BorderSide(color: outlineColor),
                 ),
               ),
               // Thumb
@@ -270,13 +273,6 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
       decoration: clSmoothDecoration(
         color: Color.fromRGBO(255, 255, 255, alpha),
         borderRadius: BorderRadius.circular(CLToggle.thumbHeight / 2),
-        shadows: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 6,
-            offset: Offset(0, 1),
-          ),
-        ],
       ),
     );
   }

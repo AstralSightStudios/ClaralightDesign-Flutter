@@ -41,10 +41,45 @@ void main() {
   test('CLMenu has stable public defaults', () {
     const menu = CLMenu(anchor: SizedBox(), children: [SizedBox()]);
 
+    expect(menu.buttonBuilder, isNull);
     expect(menu.buttonSize, 44);
     expect(menu.menuWidth, 260);
     expect(menu.cornerRadius, isNull);
     expect(menu.padding, const EdgeInsets.all(10));
+  });
+
+  testWidgets('supports a CLButton trigger at its actual size', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CLMenu(
+              anchor: const SizedBox.shrink(),
+              buttonBuilder: (context, onPressed) => CLButton(
+                key: _anchorKey,
+                label: '120%',
+                width: 75,
+                size: CLControlSize.medium,
+                variant: CLButtonVariant.secondary,
+                trailingIcon: const Icon(Icons.arrow_drop_down),
+                onPressed: onPressed,
+              ),
+              children: const [CLListTile(key: _rowKey, label: '100%')],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byKey(_anchorKey)), const Size(75, 36));
+    await tester.tap(find.byKey(_anchorKey));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CLList), findsOneWidget);
+    expect(find.byKey(_rowKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('hosts caller content in an internal CLList', (tester) async {

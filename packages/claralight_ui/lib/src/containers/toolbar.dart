@@ -122,6 +122,7 @@ class _CLToolbarState extends State<CLToolbar> {
       child: CLSurface(
         level: CLSurfaceLevel.control,
         fill: widget.fill,
+        frosted: true,
         borderRadius: BorderRadius.circular(widget.height / 2),
         outlined: widget.outlined,
         shadow: const [

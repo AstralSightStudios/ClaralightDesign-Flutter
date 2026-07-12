@@ -15,6 +15,7 @@ void main() {
     await tester.pumpWidget(host(CLButton(label: '继续', onPressed: () {})));
 
     expect(find.byType(CLSurface), findsOneWidget);
+    expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isTrue);
 
     final box = tester.getSize(find.byType(CLSurface));
     expect(box.height, 48);
@@ -112,6 +113,26 @@ void main() {
     expect(await fillFor(CLButtonVariant.primary), theme.colors.accent);
     expect(await fillFor(CLButtonVariant.secondary), theme.colors.control);
     expect(await fillFor(CLButtonVariant.danger), theme.colors.danger);
+  });
+
+  testWidgets('CLButton only ghosts skip the frosted background', (
+    WidgetTester tester,
+  ) async {
+    for (final (variant, frosted) in [
+      (CLButtonVariant.primary, true),
+      (CLButtonVariant.secondary, true),
+      (CLButtonVariant.danger, true),
+      (CLButtonVariant.ghost, false),
+    ]) {
+      await tester.pumpWidget(
+        host(CLButton(label: '继续', variant: variant, onPressed: () {})),
+      );
+      expect(
+        tester.widget<CLSurface>(find.byType(CLSurface)).frosted,
+        frosted,
+        reason: 'frosted state of $variant',
+      );
+    }
   });
 
   testWidgets('CLButton tint overrides the variant fill', (

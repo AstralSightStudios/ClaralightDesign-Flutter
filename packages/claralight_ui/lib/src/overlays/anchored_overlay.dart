@@ -886,19 +886,6 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
   void _paintSurface(PaintingContext context, Offset offset) {
     final localPath = _surfacePath();
     final path = localPath.shift(offset);
-    final canvas = context.canvas;
-
-    if (_shadowColor.a > 0 && _shadowBlur > 0) {
-      canvas.drawPath(
-        path.shift(_shadowOffset),
-        Paint()
-          ..color = _shadowColor
-          ..maskFilter = MaskFilter.blur(
-            BlurStyle.normal,
-            ui.Shadow.convertRadiusToSigma(_shadowBlur),
-          ),
-      );
-    }
 
     context.pushClipPath(needsCompositing, offset, offset & size, path, (
       context,
@@ -919,10 +906,34 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
       );
     }, clipBehavior: Clip.antiAlias);
 
-    // pushLayer may replace the active canvas; reacquire it before painting
-    // the outline instead of retaining the pre-layer native canvas.
-    context.canvas.drawPath(
-      _surfacePath().shift(offset),
+    // Paint the shadow after the backdrop layer, then clear the surface
+    // interior. This keeps the shadow visually behind the panel without
+    // feeding it back into the backdrop blur.
+    final canvas = context.canvas;
+    if (_shadowColor.a > 0 && _shadowBlur > 0) {
+      final extent =
+          _shadowBlur * 2 + _shadowOffset.dx.abs() + _shadowOffset.dy.abs();
+      canvas.saveLayer(path.getBounds().inflate(extent), Paint());
+      canvas.drawPath(
+        path.shift(_shadowOffset),
+        Paint()
+          ..color = _shadowColor
+          ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal,
+            ui.Shadow.convertRadiusToSigma(_shadowBlur),
+          ),
+      );
+      canvas.drawPath(
+        path,
+        Paint()
+          ..blendMode = BlendMode.clear
+          ..isAntiAlias = true,
+      );
+      canvas.restore();
+    }
+
+    canvas.drawPath(
+      path,
       Paint()
         ..color = _outlineColor
         ..style = PaintingStyle.stroke

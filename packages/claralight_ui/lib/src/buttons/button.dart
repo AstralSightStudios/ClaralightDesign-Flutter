@@ -127,6 +127,7 @@ class _CLButtonState extends State<CLButton> {
             height: _height,
             child: CLSurface(
               fill: _fillColor(theme, pressedHover: _hovered && _enabled),
+              frosted: widget.variant != CLButtonVariant.ghost,
               borderRadius: radius,
               padding: EdgeInsets.symmetric(horizontal: _hPadding),
               // widthFactor 1 hugs the content when no width is given;

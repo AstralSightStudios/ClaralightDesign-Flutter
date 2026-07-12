@@ -1,5 +1,7 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/shape.dart';
@@ -91,8 +93,7 @@ class CLSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
-    final radius =
-        borderRadius ?? BorderRadius.circular(theme.radii.control);
+    final radius = borderRadius ?? BorderRadius.circular(theme.radii.control);
     final side = outlined
         ? BorderSide(color: outlineColor ?? theme.colors.outline)
         : BorderSide.none;
@@ -103,22 +104,41 @@ class CLSurface extends StatelessWidget {
 
     Widget surface;
     if (frosted) {
-      surface = Container(
-        decoration: clSmoothDecoration(
-          borderRadius: radius,
-          side: side,
-          shadows: shadow,
-        ),
-        child: ClipRSuperellipse(
-          borderRadius: radius,
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: frostSigma, sigmaY: frostSigma),
-            child: ColoredBox(
-              color: fill ?? theme.colors.frost,
-              child: content,
+      surface = Stack(
+        fit: StackFit.passthrough,
+        clipBehavior: Clip.none,
+        children: [
+          Padding(
+            padding: side == BorderSide.none
+                ? EdgeInsets.zero
+                : EdgeInsets.all(side.width),
+            child: ClipRSuperellipse(
+              borderRadius: radius,
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(
+                  sigmaX: frostSigma,
+                  sigmaY: frostSigma,
+                ),
+                child: ColoredBox(
+                  color: fill ?? theme.colors.frost,
+                  child: content,
+                ),
+              ),
             ),
           ),
-        ),
+          if ((shadow?.isNotEmpty ?? false) || side != BorderSide.none)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _FrostedSurfaceChrome(
+                    borderRadius: radius,
+                    side: side,
+                    shadows: shadow ?? const [],
+                  ),
+                ),
+              ),
+            ),
+        ],
       );
     } else {
       surface = Container(
@@ -136,5 +156,60 @@ class CLSurface extends StatelessWidget {
       surface = Padding(padding: margin!, child: surface);
     }
     return surface;
+  }
+}
+
+class _FrostedSurfaceChrome extends CustomPainter {
+  final BorderRadius borderRadius;
+  final BorderSide side;
+  final List<BoxShadow> shadows;
+
+  const _FrostedSurfaceChrome({
+    required this.borderRadius,
+    required this.side,
+    required this.shadows,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final shape = clSmoothShape(borderRadius);
+
+    if (shadows.isNotEmpty) {
+      final extent = shadows.fold<double>(0, (current, shadow) {
+        final shadowExtent =
+            shadow.blurRadius * 2 +
+            shadow.spreadRadius.abs() +
+            shadow.offset.dx.abs() +
+            shadow.offset.dy.abs();
+        return math.max(current, shadowExtent);
+      });
+      final shadowPainter = clSmoothDecoration(
+        borderRadius: borderRadius,
+        shadows: shadows,
+      ).createBoxPainter(() {});
+
+      canvas.saveLayer(rect.inflate(extent), Paint());
+      shadowPainter.paint(canvas, Offset.zero, ImageConfiguration(size: size));
+      canvas.drawPath(
+        shape.getOuterPath(rect),
+        Paint()
+          ..blendMode = BlendMode.clear
+          ..isAntiAlias = true,
+      );
+      canvas.restore();
+      shadowPainter.dispose();
+    }
+
+    if (side != BorderSide.none) {
+      clSmoothShape(borderRadius, side: side).paint(canvas, rect);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FrostedSurfaceChrome oldDelegate) {
+    return borderRadius != oldDelegate.borderRadius ||
+        side != oldDelegate.side ||
+        !listEquals(shadows, oldDelegate.shadows);
   }
 }

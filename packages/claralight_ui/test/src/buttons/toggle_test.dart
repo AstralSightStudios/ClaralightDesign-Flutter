@@ -37,6 +37,35 @@ void main() {
       );
     });
 
+    for (final colors in [
+      const CLColorScheme.light(),
+      const CLColorScheme.dark(),
+    ]) {
+      testWidgets('${colors.brightness.name} thumb has no shadow', (
+        WidgetTester tester,
+      ) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CLTheme(
+              data: CLThemeData(colors: colors),
+              child: Scaffold(
+                body: Center(child: CLToggle(value: false, onChanged: (_) {})),
+              ),
+            ),
+          ),
+        );
+
+        final thumb = tester.widget<DecoratedBox>(
+          find.descendant(
+            of: find.byKey(const Key('cl-toggle-thumb')),
+            matching: find.byType(DecoratedBox),
+          ),
+        );
+        final decoration = thumb.decoration as ShapeDecoration;
+        expect(decoration.shadows, anyOf(isNull, isEmpty));
+      });
+    }
+
     testWidgets('thumb starts at left padding when value is false', (
       WidgetTester tester,
     ) async {
@@ -385,6 +414,23 @@ void main() {
         ),
       );
       expect(semantics.properties.enabled, isFalse);
+
+      final thumb = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byKey(const Key('cl-toggle-thumb')),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
+      final thumbDecoration = thumb.decoration as ShapeDecoration;
+      expect(thumbDecoration.shadows, anyOf(isNull, isEmpty));
+
+      final track = tester.widget<Container>(
+        find.byKey(const Key('cl-toggle-track')),
+      );
+      final trackShape =
+          (track.decoration! as ShapeDecoration).shape
+              as RoundedSuperellipseBorder;
+      expect(trackShape.side.color.a, lessThan(CLThemeData().colors.outline.a));
     });
 
     testWidgets('semantics reports toggle role and value', (

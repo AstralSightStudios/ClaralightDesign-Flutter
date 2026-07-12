@@ -19,25 +19,48 @@ Future<void> main() async {
   runApp(const GalleryApp());
 }
 
-class GalleryApp extends StatelessWidget {
+class GalleryApp extends StatefulWidget {
   const GalleryApp({super.key});
 
   @override
+  State<GalleryApp> createState() => _GalleryAppState();
+}
+
+class _GalleryAppState extends State<GalleryApp> {
+  Brightness _brightness = Brightness.dark;
+
+  @override
   Widget build(BuildContext context) {
+    final colors = _brightness == Brightness.light
+        ? const CLColorScheme.light()
+        : const CLColorScheme.dark();
+
     return CLTheme(
-      data: CLThemeData(),
+      data: CLThemeData(colors: colors),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'Claralight UI Gallery',
-        theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
-        home: const GalleryHome(),
+        theme: ThemeData(useMaterial3: true, brightness: _brightness),
+        home: GalleryHome(
+          brightness: _brightness,
+          onBrightnessChanged: (brightness) {
+            setState(() => _brightness = brightness);
+          },
+        ),
       ),
     );
   }
 }
 
 class GalleryHome extends StatefulWidget {
-  const GalleryHome({super.key});
+  final Brightness brightness;
+  final ValueChanged<Brightness> onBrightnessChanged;
+
+  const GalleryHome({
+    super.key,
+    required this.brightness,
+    required this.onBrightnessChanged,
+  });
 
   @override
   State<GalleryHome> createState() => _GalleryHomeState();
@@ -102,11 +125,35 @@ class _GalleryHomeState extends State<GalleryHome> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Claralight UI',
-                  style: theme.typography.display.copyWith(
-                    color: theme.colors.textPrimary,
-                  ),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  runSpacing: 12,
+                  children: [
+                    Text(
+                      'Claralight UI',
+                      style: theme.typography.display.copyWith(
+                        color: theme.colors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 156,
+                      child: CLSegmentedControl(
+                        key: const Key('theme-mode-control'),
+                        segments: const ['浅色', '深色'],
+                        selectedIndex: widget.brightness == Brightness.light
+                            ? 0
+                            : 1,
+                        onChanged: (index) {
+                          widget.onBrightnessChanged(
+                            index == 0 ? Brightness.light : Brightness.dark,
+                          );
+                        },
+                        size: CLControlSize.small,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(

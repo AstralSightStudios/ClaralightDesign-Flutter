@@ -6,7 +6,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/shape.dart';
 import '../scrolling/cl_list.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
@@ -51,6 +50,9 @@ class CLMenuController extends ChangeNotifier {
   }
 }
 
+typedef CLMenuButtonBuilder =
+    Widget Function(BuildContext context, VoidCallback onPressed);
+
 /// The ClaraLight popup menu.
 ///
 /// Tapping [anchor] morphs its round surface into a panel using the ClaraLight
@@ -64,6 +66,7 @@ class CLMenu extends StatefulWidget {
     required this.anchor,
     required this.children,
     this.controller,
+    this.buttonBuilder,
     this.buttonSize = 44,
     this.menuWidth = 260,
     this.cornerRadius,
@@ -85,7 +88,11 @@ class CLMenu extends StatefulWidget {
   /// Optional external controller. An internal controller is used when null.
   final CLMenuController? controller;
 
-  /// Diameter of the collapsed anchor button.
+  /// Builds a custom trigger, such as a [CLButton]. When provided, the builder
+  /// owns the trigger's semantics, focus, shape, and visual treatment.
+  final CLMenuButtonBuilder? buttonBuilder;
+
+  /// Diameter of the default collapsed anchor button.
   final double buttonSize;
 
   /// Width of the expanded menu panel.
@@ -158,6 +165,8 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   double _measurementLimit = 0;
   double _heightFrom = 0;
   double _heightTo = 0;
+  double _collapsedWidth = 44;
+  double _collapsedHeight = 44;
 
   CLMenuController get _controller => widget.controller ?? _internalController;
 
@@ -252,13 +261,15 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     final origin = buttonBox.localToGlobal(Offset.zero, ancestor: overlayBox);
     final buttonRect = origin & buttonBox.size;
     final overlaySize = overlayBox.size;
+    _collapsedWidth = buttonRect.width;
+    _collapsedHeight = buttonRect.height;
 
     final growLeft = buttonRect.center.dx > overlaySize.width / 2;
     _spaceBelow = math.max(
       overlaySize.height - buttonRect.top - 12,
-      widget.buttonSize,
+      _collapsedHeight,
     );
-    _spaceAbove = math.max(buttonRect.bottom - 12, widget.buttonSize);
+    _spaceAbove = math.max(buttonRect.bottom - 12, _collapsedHeight);
     _measurementLimit = math.max(_spaceBelow, _spaceAbove);
     _anchor = Alignment(growLeft ? 1 : -1, -1);
 
@@ -279,7 +290,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       _anchor = Alignment(_anchor.x, _growDown ? -1 : 1);
       final available = _growDown ? _spaceBelow : _spaceAbove;
       final measuredHeight = math.max(
-        widget.buttonSize,
+        _collapsedHeight,
         math.min(size.height, available),
       );
       _heightFrom = measuredHeight;
@@ -293,7 +304,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
     final available = _growDown ? _spaceBelow : _spaceAbove;
     final nextHeight = math.max(
-      widget.buttonSize,
+      _collapsedHeight,
       math.min(size.height, available),
     );
     if ((nextHeight - _heightTo).abs() <= 0.5) return;
@@ -453,39 +464,48 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                   .clamp(0.0, 1.0);
               return Opacity(opacity: 1 - presence, child: child);
             },
-            child: FocusableActionDetector(
-              shortcuts: const <ShortcutActivator, Intent>{
-                SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-              },
-              actions: <Type, Action<Intent>>{
-                ActivateIntent: CallbackAction<ActivateIntent>(
-                  onInvoke: (_) {
-                    _toggle();
-                    return null;
-                  },
-                ),
-              },
-              child: Semantics(
-                button: true,
-                expanded: _open,
-                child: CLPressable(
-                  onTap: _toggle,
-                  borderRadius: BorderRadius.circular(widget.buttonSize / 2),
-                  pressedScale: 1 + 4 / widget.buttonSize,
-                  child: SizedBox(
-                    width: widget.buttonSize,
-                    height: widget.buttonSize,
-                    child: CLSurface(
-                      borderRadius: BorderRadius.circular(
-                        widget.buttonSize / 2,
+            child: widget.buttonBuilder != null
+                ? Semantics(
+                    expanded: _open,
+                    child: widget.buttonBuilder!(context, _toggle),
+                  )
+                : FocusableActionDetector(
+                    shortcuts: const <ShortcutActivator, Intent>{
+                      SingleActivator(LogicalKeyboardKey.enter):
+                          ActivateIntent(),
+                      SingleActivator(LogicalKeyboardKey.space):
+                          ActivateIntent(),
+                    },
+                    actions: <Type, Action<Intent>>{
+                      ActivateIntent: CallbackAction<ActivateIntent>(
+                        onInvoke: (_) {
+                          _toggle();
+                          return null;
+                        },
                       ),
-                      child: Center(child: widget.anchor),
+                    },
+                    child: Semantics(
+                      button: true,
+                      expanded: _open,
+                      child: CLPressable(
+                        onTap: _toggle,
+                        borderRadius: BorderRadius.circular(
+                          widget.buttonSize / 2,
+                        ),
+                        pressedScale: 1 + 4 / widget.buttonSize,
+                        child: SizedBox(
+                          width: widget.buttonSize,
+                          height: widget.buttonSize,
+                          child: CLSurface(
+                            borderRadius: BorderRadius.circular(
+                              widget.buttonSize / 2,
+                            ),
+                            child: Center(child: widget.anchor),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ),
           ),
         ),
       ),
@@ -560,10 +580,10 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     }
 
     final targetHeight = _displayHeight;
-    final width = ui.lerpDouble(widget.buttonSize, widget.menuWidth, tW)!;
-    final height = ui.lerpDouble(widget.buttonSize, targetHeight, tH)!;
+    final width = ui.lerpDouble(_collapsedWidth, widget.menuWidth, tW)!;
+    final height = ui.lerpDouble(_collapsedHeight, targetHeight, tH)!;
     final radius = ui.lerpDouble(
-      widget.buttonSize / 2,
+      math.min(_collapsedWidth, _collapsedHeight) / 2,
       widget.cornerRadius ?? theme.radii.panel,
       tH.clamp(0.0, 1.0),
     )!;
@@ -583,13 +603,15 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
         onPointerCancel: _handlePanelPointerEnd,
         child: Opacity(
           opacity: presence,
-          child: Container(
+          child: SizedBox(
             width: width,
             height: height,
-            decoration: clSmoothDecoration(
+            child: CLSurface(
+              frosted: true,
               borderRadius: borderRadius,
-              side: BorderSide(color: theme.colors.outlineStrong),
-              shadows: [
+              outlined: true,
+              outlineColor: theme.colors.outlineStrong,
+              shadow: [
                 BoxShadow(
                   color: Color.fromARGB(
                     (0x40 * shadowStrength).round(),
@@ -601,55 +623,48 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                   offset: const Offset(0, 14),
                 ),
               ],
-            ),
-            child: ClipRSuperellipse(
-              borderRadius: borderRadius,
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    IgnorePointer(child: ColoredBox(color: theme.colors.frost)),
-                    IgnorePointer(
-                      child: ColoredBox(
-                        color: Color.fromRGBO(
-                          255,
-                          255,
-                          255,
-                          0.06 * (1 - reveal) * math.sqrt(shadowStrength),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  IgnorePointer(
+                    child: ColoredBox(
+                      color: Color.fromRGBO(
+                        255,
+                        255,
+                        255,
+                        0.06 * (1 - reveal) * math.sqrt(shadowStrength),
+                      ),
+                    ),
+                  ),
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: _CLMenuPressGlowPainter(
+                        pointer: _pressPosition,
+                        color: theme.colors.textPrimary,
+                        strength: Curves.easeOutCubic.transform(
+                          _pressGlow.value,
                         ),
                       ),
                     ),
-                    IgnorePointer(
-                      child: CustomPaint(
-                        painter: _CLMenuPressGlowPainter(
-                          pointer: _pressPosition,
-                          color: theme.colors.textPrimary,
-                          strength: Curves.easeOutCubic.transform(
-                            _pressGlow.value,
-                          ),
-                        ),
-                      ),
-                    ),
-                    OverflowBox(
+                  ),
+                  OverflowBox(
+                    alignment: _anchor,
+                    minWidth: widget.menuWidth,
+                    maxWidth: widget.menuWidth,
+                    minHeight: 0,
+                    maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                    child: Transform.scale(
+                      scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
                       alignment: _anchor,
-                      minWidth: widget.menuWidth,
-                      maxWidth: widget.menuWidth,
-                      minHeight: 0,
-                      maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                      child: Transform.scale(
-                        scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
-                        alignment: _anchor,
-                        child: Opacity(
-                          opacity: opacity.clamp(0.0, 1.0),
-                          child: _buildMeasuredList(
-                            maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                          ),
+                      child: Opacity(
+                        opacity: opacity.clamp(0.0, 1.0),
+                        child: _buildMeasuredList(
+                          maxHeight: _growDown ? _spaceBelow : _spaceAbove,
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

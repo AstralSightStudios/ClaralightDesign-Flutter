@@ -1,6 +1,6 @@
 import 'package:claralight_ui/claralight_ui.dart';
 import 'package:claralight_ui_gallery/main.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -41,6 +41,36 @@ void main() {
       (tile) => tile.label == '矩形 1',
     );
     expect(subtreeLeaf.depth, 2);
+  });
+
+  testWidgets('Gallery switches between dark and light themes', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GalleryApp());
+    await tester.pump();
+
+    CLTheme theme() => tester.widget<CLTheme>(find.byType(CLTheme));
+
+    expect(theme().data.colors.brightness, Brightness.dark);
+
+    final modeControl = find.byKey(const Key('theme-mode-control'));
+    await tester.tap(
+      find.descendant(of: modeControl, matching: find.text('浅色')),
+    );
+    await tester.pump();
+
+    expect(theme().data.colors.brightness, Brightness.light);
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
+      const CLColorScheme.light().background,
+    );
+
+    await tester.tap(
+      find.descendant(of: modeControl, matching: find.text('深色')),
+    );
+    await tester.pump();
+
+    expect(theme().data.colors.brightness, Brightness.dark);
   });
 
   testWidgets('Gallery exposes a 500-option aligned select demo', (
