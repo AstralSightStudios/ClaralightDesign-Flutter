@@ -8,9 +8,8 @@ import '../theme/theme.dart';
 
 /// A Claralight bottom sheet — the dark sheet of the mobile mockup.
 ///
-/// A panel-level surface with large top radii and a grabber. Use inline
-/// (e.g. persistently docked like the mockup) or present it with
-/// [CLSheet.show].
+/// A floating panel-level surface with large rounded corners and a grabber.
+/// Use inline or present it with [CLSheet.show].
 class CLSheet extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -32,7 +31,7 @@ class CLSheet extends StatelessWidget {
 
     return CLSurface(
       frosted: true,
-      borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
+      borderRadius: BorderRadius.all(radius),
       outlined: true,
       outlineColor: theme.colors.outlineStrong,
       shadow: const [
@@ -58,7 +57,9 @@ class CLSheet extends StatelessWidget {
                 ),
               ),
             ),
-          Flexible(child: Padding(padding: padding, child: child)),
+          Flexible(
+            child: Padding(padding: padding, child: child),
+          ),
         ],
       ),
     );
@@ -74,10 +75,7 @@ class CLSheet extends StatelessWidget {
   }) {
     return Navigator.of(context, rootNavigator: true).push<T>(
       _CLSheetRoute<T>(
-        builder: (context) => CLSheet(
-          showGrabber: showGrabber,
-          child: child,
-        ),
+        builder: (context) => CLSheet(showGrabber: showGrabber, child: child),
         barrierDismissible: barrierDismissible,
         scrim: CLTheme.of(context).colors.scrim,
       ),
@@ -117,6 +115,19 @@ class _CLSheetRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
+    const designInset = 10.0;
+    const maxSheetWidth = 746.0;
+    final mediaQuery = MediaQuery.of(context);
+    final safePadding = mediaQuery.viewPadding;
+    final routePadding = EdgeInsets.fromLTRB(
+      math.max(designInset, safePadding.left),
+      math.max(designInset, safePadding.top),
+      math.max(designInset, safePadding.right),
+      math.max(
+        designInset,
+        math.max(safePadding.bottom, mediaQuery.viewInsets.bottom),
+      ),
+    );
     final curved = CurvedAnimation(
       parent: animation,
       // A touch of overshoot so the sheet lands with the Claralight spring.
@@ -124,16 +135,22 @@ class _CLSheetRoute<T> extends PopupRoute<T> {
       reverseCurve: Curves.easeInCubic,
     );
 
-    return SafeArea(
-      top: false,
+    return Padding(
+      padding: routePadding,
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(curved),
-          child: builder(context),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: maxSheetWidth),
+          child: SizedBox(
+            width: double.infinity,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(curved),
+              child: builder(context),
+            ),
+          ),
         ),
       ),
     );

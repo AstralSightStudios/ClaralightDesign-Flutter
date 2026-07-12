@@ -15,10 +15,10 @@ class CLRadii {
   /// Cards, grouped lists, banners, popovers.
   final double medium;
 
-  /// Panels, sidebars, sheets.
+  /// Panels and sidebars.
   final double panel;
 
-  /// Bottom sheets (same as [panel] in the ClaraLight design).
+  /// Floating bottom sheets.
   final double sheet;
 
   /// Modal dialogs.
@@ -31,7 +31,7 @@ class CLRadii {
     this.control = 8,
     this.medium = 12,
     this.panel = 18,
-    this.sheet = 18,
+    this.sheet = 36,
     this.dialog = 36,
     this.capsule = 999,
   });
