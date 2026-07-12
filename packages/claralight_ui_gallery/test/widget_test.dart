@@ -25,6 +25,34 @@ void main() {
     expect(find.byType(CLProgressBar), findsWidgets);
     expect(find.byType(CLMenu), findsWidgets);
     expect(find.byType(CLTreeView), findsOneWidget);
+    expect(
+      tester
+          .widget<CLButton>(find.byKey(const Key('primary-button-demo')))
+          .variant,
+      CLButtonVariant.primary,
+    );
+    expect(
+      tester
+          .widget<CLButton>(find.byKey(const Key('danger-button-demo')))
+          .variant,
+      CLButtonVariant.danger,
+    );
+    expect(
+      tester
+          .widget<CLIconButton>(
+            find.byKey(const Key('primary-icon-button-demo')),
+          )
+          .variant,
+      CLIconButtonVariant.primary,
+    );
+    expect(
+      tester
+          .widget<CLIconButton>(
+            find.byKey(const Key('danger-icon-button-demo')),
+          )
+          .variant,
+      CLIconButtonVariant.danger,
+    );
 
     final galleryScroll = tester.widget<CLScrollable>(
       find.byKey(const Key('gallery-scroll')),

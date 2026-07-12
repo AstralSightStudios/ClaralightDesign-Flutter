@@ -245,8 +245,10 @@ class _ButtonsSection extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           CLButton(
-            label: '继续',
+            key: const Key('primary-button-demo'),
+            label: '主要',
             leadingIcon: const Icon(Icons.check_rounded),
+            variant: CLButtonVariant.primary,
             onPressed: () {},
           ),
           CLButton(
@@ -260,6 +262,7 @@ class _ButtonsSection extends StatelessWidget {
             onPressed: () {},
           ),
           CLButton(
+            key: const Key('danger-button-demo'),
             label: '删除',
             variant: CLButtonVariant.danger,
             onPressed: () {},
@@ -313,9 +316,16 @@ class _IconButtonsSectionState extends State<_IconButtonsSection> {
               ),
               const SizedBox(width: 8),
               CLIconButton(
+                key: const Key('primary-icon-button-demo'),
                 icon: Icons.ios_share_rounded,
-                fill: CLTheme.of(context).colors.accent,
-                iconColor: CLTheme.of(context).colors.onAccent,
+                variant: CLIconButtonVariant.primary,
+                onPressed: () {},
+              ),
+              const SizedBox(width: 8),
+              CLIconButton(
+                key: const Key('danger-icon-button-demo'),
+                icon: Icons.delete_outline_rounded,
+                variant: CLIconButtonVariant.danger,
                 onPressed: () {},
               ),
               const SizedBox(width: 8),

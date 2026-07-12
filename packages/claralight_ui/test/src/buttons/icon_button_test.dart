@@ -64,6 +64,51 @@ void main() {
     expect(surface.fill, fill);
   });
 
+  testWidgets('CLIconButton semantic variants use scheme colors', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+
+    for (final (variant, fill, foreground) in [
+      (CLIconButtonVariant.primary, theme.colors.accent, theme.colors.onAccent),
+      (CLIconButtonVariant.danger, theme.colors.danger, theme.colors.onDanger),
+    ]) {
+      await tester.pumpWidget(
+        host(CLIconButton(icon: Icons.add, variant: variant, onPressed: () {})),
+      );
+
+      expect(tester.widget<CLSurface>(find.byType(CLSurface)).fill, fill);
+      expect(tester.widget<Icon>(find.byIcon(Icons.add)).color, foreground);
+    }
+  });
+
+  testWidgets('CLIconButton semantic variants lighten on hover', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+
+    for (final (variant, fill) in [
+      (CLIconButtonVariant.primary, theme.colors.accent),
+      (CLIconButtonVariant.danger, theme.colors.danger),
+    ]) {
+      await tester.pumpWidget(
+        host(CLIconButton(icon: Icons.add, variant: variant, onPressed: () {})),
+      );
+      await mouse.moveTo(Offset.zero);
+      await tester.pump();
+      await mouse.moveTo(tester.getCenter(find.byType(CLIconButton)));
+      await tester.pump();
+
+      expect(
+        tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+        Color.lerp(fill, const Color(0xFFFFFFFF), 0.08),
+      );
+    }
+  });
+
   testWidgets('CLIconButton ghost is transparent until hovered', (
     WidgetTester tester,
   ) async {
@@ -97,19 +142,36 @@ void main() {
     expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isFalse);
   });
 
-  testWidgets('CLIconButton disabled blocks taps', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      host(const CLIconButton(icon: Icons.add, onPressed: null)),
-    );
+  testWidgets('CLIconButton disabled blocks taps and drops semantic color', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
 
-    final semantics = tester.widget<Semantics>(
-      find
-          .descendant(
-            of: find.byType(CLIconButton),
-            matching: find.byType(Semantics),
-          )
-          .first,
-    );
-    expect(semantics.properties.enabled, isFalse);
+    for (final variant in [
+      CLIconButtonVariant.primary,
+      CLIconButtonVariant.danger,
+    ]) {
+      await tester.pumpWidget(
+        host(CLIconButton(icon: Icons.add, variant: variant, onPressed: null)),
+      );
+
+      final semantics = tester.widget<Semantics>(
+        find
+            .descendant(
+              of: find.byType(CLIconButton),
+              matching: find.byType(Semantics),
+            )
+            .first,
+      );
+      expect(semantics.properties.enabled, isFalse);
+      expect(
+        tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+        theme.colors.control,
+      );
+      expect(
+        tester.widget<Icon>(find.byIcon(Icons.add)).color,
+        theme.colors.textDisabled,
+      );
+    }
   });
 }

@@ -2,6 +2,8 @@
 
 Aligned with the ClaraLight Figma design source (Facetory demo).
 
+* `CLButton` and `CLIconButton` now share semantic `primary` (blue) and
+  `danger` (red) variants.
 * `CLIconButton` gained `CLIconButtonVariant.ghost`: transparent at rest,
   with the standard control highlight on hover.
 * Fixed bundled fonts not loading: package fonts must be referenced as

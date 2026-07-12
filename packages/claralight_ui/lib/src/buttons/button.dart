@@ -16,7 +16,7 @@ enum CLButtonVariant {
   /// No fill until hovered; for rows of quiet actions.
   ghost,
 
-  /// Destructive action.
+  /// Destructive action with the semantic danger color.
   danger,
 }
 
@@ -82,10 +82,11 @@ class _CLButtonState extends State<CLButton> {
     final theme = CLTheme.of(context);
     final radius = BorderRadius.circular(theme.radii.capsule);
     final foreground = _foregroundColor(theme);
-    final textStyle = (widget.size == CLControlSize.large
-            ? theme.typography.title
-            : theme.typography.label)
-        .copyWith(color: foreground);
+    final textStyle =
+        (widget.size == CLControlSize.large
+                ? theme.typography.title
+                : theme.typography.label)
+            .copyWith(color: foreground);
 
     final row = Row(
       mainAxisSize: widget.width == null ? MainAxisSize.min : MainAxisSize.max,
@@ -158,7 +159,8 @@ class _CLButtonState extends State<CLButton> {
       CLButtonVariant.secondary =>
         tint ?? (pressedHover ? colors.controlHighlight : colors.control),
       CLButtonVariant.ghost =>
-        tint ?? (pressedHover ? colors.controlHighlight : const Color(0x00000000)),
+        tint ??
+            (pressedHover ? colors.controlHighlight : const Color(0x00000000)),
       CLButtonVariant.danger => tint ?? colors.danger,
     };
     if (pressedHover &&

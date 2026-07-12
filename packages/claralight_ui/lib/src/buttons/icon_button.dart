@@ -17,17 +17,23 @@ enum CLIconButtonShape {
 
 /// Visual treatment of a [CLIconButton].
 enum CLIconButtonVariant {
+  /// Accent-filled primary action.
+  primary,
+
   /// Neutral control fill, used by toolbars and inspectors.
   secondary,
 
   /// Transparent until hovered, for quiet contextual actions.
   ghost,
+
+  /// Destructive action with the semantic danger color.
+  danger,
 }
 
 /// A Claralight icon button.
 ///
-/// A circle or rounded rectangle with a secondary or ghost treatment and a
-/// [selected] accent state.
+/// A circle or rounded rectangle with a semantic, neutral, or ghost treatment
+/// and a [selected] state.
 class CLIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onPressed;
@@ -35,8 +41,8 @@ class CLIconButton extends StatefulWidget {
   final CLIconButtonShape shape;
   final CLIconButtonVariant variant;
 
-  /// Selected buttons use a raised control fill, or an opaque accent fill
-  /// when hosted by a [CLToolbar].
+  /// Selected buttons use a raised control fill. Inside a [CLToolbar], the
+  /// selection stays neutral so it does not compete with primary actions.
   final bool selected;
 
   /// Overrides the resting fill.
@@ -97,27 +103,39 @@ class _CLIconButtonState extends State<CLIconButton> {
 
     final isHovered = _hovered && _enabled;
     final inToolbar = CLToolbarScope.contains(context);
-    final quietInToolbar = inToolbar && widget.fill == null;
-    final emphasizedToolbarSelection =
-        inToolbar && widget.selected && widget.selectedFill == null;
+    final isSemanticVariant =
+        widget.variant == CLIconButtonVariant.primary ||
+        widget.variant == CLIconButtonVariant.danger;
+    final quietInToolbar =
+        inToolbar && widget.fill == null && !isSemanticVariant;
     var fill = widget.selected
         ? (widget.selectedFill ??
-              (inToolbar ? theme.colors.accent : theme.colors.controlHighlight))
+              (isSemanticVariant
+                  ? _fillColor(theme, isHovered: false)
+                  : inToolbar
+                  ? isHovered
+                        ? theme.colors.controlHighlight
+                        : theme.colors.control
+                  : theme.colors.controlHighlight))
         : (widget.fill ??
               (quietInToolbar
                   ? isHovered
                         ? theme.colors.controlHighlight
                         : const Color(0x00000000)
                   : _fillColor(theme, isHovered: isHovered)));
-    if (!_enabled) fill = fill.withValues(alpha: fill.a * 0.45);
+    if (!_enabled) {
+      fill = isSemanticVariant && widget.fill == null
+          ? theme.colors.control
+          : fill.withValues(alpha: fill.a * 0.45);
+    }
 
     final iconColor = !_enabled
         ? theme.colors.textDisabled
         : widget.iconColor ??
-              (widget.selected
-                  ? inToolbar
-                        ? theme.colors.onAccent
-                        : theme.colors.textPrimary
+              (isSemanticVariant
+                  ? _foregroundColor(theme)
+                  : widget.selected && !inToolbar
+                  ? theme.colors.textPrimary
                   : theme.colors.textSecondary);
 
     return Semantics(
@@ -139,10 +157,6 @@ class _CLIconButtonState extends State<CLIconButton> {
             child: CLSurface(
               fill: fill,
               borderRadius: radius,
-              outlined: emphasizedToolbarSelection,
-              outlineColor: emphasizedToolbarSelection
-                  ? theme.colors.onAccent.withValues(alpha: 0.55)
-                  : null,
               frosted:
                   !quietInToolbar &&
                   widget.variant != CLIconButtonVariant.ghost &&
@@ -158,11 +172,29 @@ class _CLIconButtonState extends State<CLIconButton> {
   }
 
   Color _fillColor(CLThemeData theme, {required bool isHovered}) {
-    if (isHovered) return theme.colors.controlHighlight;
-
+    final colors = theme.colors;
     return switch (widget.variant) {
-      CLIconButtonVariant.secondary => theme.colors.control,
-      CLIconButtonVariant.ghost => const Color(0x00000000),
+      CLIconButtonVariant.primary =>
+        isHovered
+            ? Color.lerp(colors.accent, const Color(0xFFFFFFFF), 0.08)!
+            : colors.accent,
+      CLIconButtonVariant.secondary =>
+        isHovered ? colors.controlHighlight : colors.control,
+      CLIconButtonVariant.ghost =>
+        isHovered ? colors.controlHighlight : const Color(0x00000000),
+      CLIconButtonVariant.danger =>
+        isHovered
+            ? Color.lerp(colors.danger, const Color(0xFFFFFFFF), 0.08)!
+            : colors.danger,
+    };
+  }
+
+  Color _foregroundColor(CLThemeData theme) {
+    return switch (widget.variant) {
+      CLIconButtonVariant.primary => theme.colors.onAccent,
+      CLIconButtonVariant.danger => theme.colors.onDanger,
+      CLIconButtonVariant.secondary ||
+      CLIconButtonVariant.ghost => theme.colors.textSecondary,
     };
   }
 }

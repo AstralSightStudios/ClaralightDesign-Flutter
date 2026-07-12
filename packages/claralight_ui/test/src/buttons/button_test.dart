@@ -135,6 +135,37 @@ void main() {
     }
   });
 
+  testWidgets('CLButton semantic variants use contrasting foregrounds', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+
+    for (final (variant, foreground) in [
+      (CLButtonVariant.primary, theme.colors.onAccent),
+      (CLButtonVariant.danger, theme.colors.onDanger),
+    ]) {
+      await tester.pumpWidget(
+        host(
+          CLButton(
+            label: variant.name,
+            leadingIcon: const Icon(Icons.add),
+            variant: variant,
+            onPressed: () {},
+          ),
+        ),
+      );
+
+      expect(
+        tester.widget<Text>(find.text(variant.name)).style?.color,
+        foreground,
+      );
+      expect(
+        IconTheme.of(tester.element(find.byIcon(Icons.add))).color,
+        foreground,
+      );
+    }
+  });
+
   testWidgets('CLButton tint overrides the variant fill', (
     WidgetTester tester,
   ) async {

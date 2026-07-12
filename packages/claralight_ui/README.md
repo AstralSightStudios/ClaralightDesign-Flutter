@@ -106,7 +106,8 @@ Three free-for-commercial-use families ship with the package (see
   scale, jelly drag, pointer highlight)
 - **Scrolling** — `CLScrollable`, `CLList`, `CLScrollDirection`,
   `CLScrollbarVisibility`
-- **Buttons** — `CLButton`, `CLIconButton`
+- **Buttons** — `CLButton`, `CLIconButton` (`primary`, `secondary`, `ghost`,
+  and red `danger` variants)
 - **Controls** — `CLToggle`, `CLSegmentedControl`, `CLSlider`,
   `CLChipTabs`
 - **Inputs** — `CLTextField` (`mono:` and external `error:` states),
