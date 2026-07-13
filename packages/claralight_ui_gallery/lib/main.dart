@@ -1598,7 +1598,6 @@ class _DialogSection extends StatelessWidget {
             onPressed: () => CLDialog.show(
               context,
               title: '保存更改',
-              maxWidth: 400,
               child: const Padding(
                 padding: EdgeInsets.symmetric(vertical: 48),
                 child: Text('关闭前是否保存当前更改？'),

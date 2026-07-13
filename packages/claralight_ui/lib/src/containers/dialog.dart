@@ -28,7 +28,7 @@ class CLDialog extends StatelessWidget {
     this.title,
     required this.child,
     this.actions = const [],
-    this.maxWidth = 536,
+    this.maxWidth = 320,
   });
 
   @override
@@ -116,7 +116,7 @@ class CLDialog extends StatelessWidget {
     String? title,
     required Widget child,
     List<Widget> actions = const [],
-    double maxWidth = 536,
+    double maxWidth = 320,
     bool barrierDismissible = true,
   }) {
     return Navigator.of(context, rootNavigator: true).push<T>(

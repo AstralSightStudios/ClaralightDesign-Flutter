@@ -80,10 +80,11 @@ void main() {
       find.byKey(const Key('three-action-dialog-demo')),
     );
     demoButton.onPressed!();
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('保存更改'), findsOneWidget);
-    expect(tester.getSize(find.byType(CLDialog)).width, 400);
+    expect(tester.getSize(find.byType(CLDialog)).width, 320);
     expect(find.text('关闭前是否保存当前更改？'), findsOneWidget);
     expect(find.text('保存并关闭'), findsOneWidget);
     expect(find.text('不保存'), findsOneWidget);

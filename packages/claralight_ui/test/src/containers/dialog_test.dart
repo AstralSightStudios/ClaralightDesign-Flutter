@@ -24,6 +24,34 @@ void main() {
     return tester.getRect(find.byKey(Key('action-$index')));
   }
 
+  test('defaults to a compact 320px maximum width', () {
+    expect(const CLDialog(child: SizedBox()).maxWidth, 320);
+  });
+
+  testWidgets('show uses the compact default width', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                child: const SizedBox(width: 500, height: 40),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+
+    expect(tester.widget<CLDialog>(find.byType(CLDialog)).maxWidth, 320);
+    expect(tester.getSize(find.byType(CLDialog)).width, 320);
+  });
+
   testWidgets('lays out two actions horizontally with equal widths', (
     tester,
   ) async {
