@@ -90,20 +90,117 @@ class CLThemeData {
 
 /// Provides a [CLThemeData] to descendant Claralight widgets.
 ///
+/// Theme changes are immediate by default. Set [duration] to opt into an
+/// implicit transition; surface and semantic fill colors interpolate while
+/// foreground colors switch at the midpoint to avoid a prolonged low-contrast
+/// state when light and dark themes exchange luminance polarity.
+///
 /// Widgets work without an ancestor [CLTheme] by falling back to the default
 /// dark theme, so drop-in usage inside any app keeps working.
-class CLTheme extends InheritedWidget {
+class CLTheme extends StatelessWidget {
   final CLThemeData data;
+  final Duration duration;
+  final Curve curve;
+  final Widget child;
 
-  const CLTheme({super.key, required this.data, required super.child});
+  const CLTheme({
+    super.key,
+    required this.data,
+    required this.child,
+    this.duration = Duration.zero,
+    this.curve = Curves.linear,
+  });
 
   static CLThemeData? _fallback;
 
   static CLThemeData of(BuildContext context) {
-    final theme = context.dependOnInheritedWidgetOfExactType<CLTheme>();
+    final theme = context.dependOnInheritedWidgetOfExactType<_CLThemeScope>();
     return theme?.data ?? (_fallback ??= CLThemeData());
   }
 
   @override
-  bool updateShouldNotify(CLTheme oldWidget) => data != oldWidget.data;
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final animationsDisabled =
+        mediaQuery?.disableAnimations ??
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .disableAnimations;
+    return TweenAnimationBuilder<CLThemeData>(
+      tween: _CLThemeDataTween(end: data),
+      duration: animationsDisabled ? Duration.zero : duration,
+      curve: curve,
+      builder: (context, value, child) =>
+          _CLThemeScope(data: value, child: child!),
+      child: child,
+    );
+  }
+}
+
+class _CLThemeScope extends InheritedWidget {
+  const _CLThemeScope({required this.data, required super.child});
+
+  final CLThemeData data;
+
+  @override
+  bool updateShouldNotify(_CLThemeScope oldWidget) => data != oldWidget.data;
+}
+
+class _CLThemeDataTween extends Tween<CLThemeData> {
+  _CLThemeDataTween({required super.end});
+
+  @override
+  CLThemeData lerp(double t) {
+    final start = begin!;
+    final finish = end!;
+    if (t <= 0) return start;
+    if (t >= 1) return finish;
+    final foreground = t < .5 ? start.colors : finish.colors;
+    return CLThemeData(
+      colors: _lerpColorScheme(start.colors, finish.colors, foreground, t),
+      typography: t < .5 ? start.typography : finish.typography,
+      radii: t < .5 ? start.radii : finish.radii,
+      spacing: t < .5 ? start.spacing : finish.spacing,
+    );
+  }
+}
+
+CLColorScheme _lerpColorScheme(
+  CLColorScheme start,
+  CLColorScheme finish,
+  CLColorScheme foreground,
+  double t,
+) {
+  Color lerp(Color a, Color b) => Color.lerp(a, b, t)!;
+
+  return CLColorScheme(
+    background: lerp(start.background, finish.background),
+    panel: lerp(start.panel, finish.panel),
+    frost: lerp(start.frost, finish.frost),
+    control: lerp(start.control, finish.control),
+    controlHighlight: lerp(start.controlHighlight, finish.controlHighlight),
+    selection: lerp(start.selection, finish.selection),
+    track: lerp(start.track, finish.track),
+    separator: lerp(start.separator, finish.separator),
+    outline: lerp(start.outline, finish.outline),
+    outlineStrong: lerp(start.outlineStrong, finish.outlineStrong),
+    textPrimary: foreground.textPrimary,
+    textSecondary: foreground.textSecondary,
+    textTertiary: foreground.textTertiary,
+    textHint: foreground.textHint,
+    textDisabled: foreground.textDisabled,
+    accent: lerp(start.accent, finish.accent),
+    accentBackground: lerp(start.accentBackground, finish.accentBackground),
+    onAccent: foreground.onAccent,
+    success: lerp(start.success, finish.success),
+    warning: lerp(start.warning, finish.warning),
+    warningBackground: lerp(start.warningBackground, finish.warningBackground),
+    danger: lerp(start.danger, finish.danger),
+    dangerBackground: lerp(start.dangerBackground, finish.dangerBackground),
+    onDanger: foreground.onDanger,
+    scrim: lerp(start.scrim, finish.scrim),
+    brightness: foreground.brightness,
+  );
 }
