@@ -9,6 +9,21 @@ void main() {
     );
   }
 
+  BorderSide outlineSide(WidgetTester tester) {
+    final box = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: find.byType(CLButton),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is DecoratedBox &&
+              widget.position == DecorationPosition.foreground,
+        ),
+      ),
+    );
+    final shape = (box.decoration as ShapeDecoration).shape;
+    return (shape as RoundedSuperellipseBorder).side;
+  }
+
   test('CLButton exposes large as its default configured size', () {
     expect(const CLButton(label: 'Continue').size, CLControlSize.large);
   });
@@ -117,6 +132,53 @@ void main() {
     expect(await fillFor(CLButtonVariant.primary), theme.colors.accent);
     expect(await fillFor(CLButtonVariant.secondary), theme.colors.control);
     expect(await fillFor(CLButtonVariant.danger), theme.colors.danger);
+  });
+
+  testWidgets('CLButton outlines non-ghost variants by default', (
+    WidgetTester tester,
+  ) async {
+    final outline = CLThemeData().colors.outline;
+
+    for (final (variant, expectedOutlined) in [
+      (CLButtonVariant.primary, true),
+      (CLButtonVariant.secondary, true),
+      (CLButtonVariant.danger, true),
+      (CLButtonVariant.ghost, false),
+    ]) {
+      await tester.pumpWidget(
+        host(CLButton(label: '继续', variant: variant, onPressed: () {})),
+      );
+
+      expect(
+        outlineSide(tester),
+        expectedOutlined ? BorderSide(color: outline) : BorderSide.none,
+        reason: 'outline of $variant',
+      );
+    }
+  });
+
+  testWidgets('CLButton outline can be enabled, disabled, and recolored', (
+    WidgetTester tester,
+  ) async {
+    const customOutline = Color(0xFF00FF00);
+
+    await tester.pumpWidget(
+      host(
+        CLButton(
+          label: '继续',
+          variant: CLButtonVariant.ghost,
+          outlined: true,
+          outlineColor: customOutline,
+          onPressed: () {},
+        ),
+      ),
+    );
+    expect(outlineSide(tester), const BorderSide(color: customOutline));
+
+    await tester.pumpWidget(
+      host(CLButton(label: '继续', outlined: false, onPressed: () {})),
+    );
+    expect(outlineSide(tester), BorderSide.none);
   });
 
   testWidgets('CLButton only ghosts skip the frosted background', (

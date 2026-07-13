@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../containers/toolbar_scope.dart';
 import '../foundation/control_size.dart';
+import '../foundation/shape.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
@@ -43,7 +44,12 @@ class CLIconButton extends StatefulWidget {
   final CLControlSize? _sizeOverride;
 
   final CLIconButtonShape shape;
+
+  /// Configured variant. When omitted, the button defaults to
+  /// [CLIconButtonVariant.secondary] outside a toolbar and
+  /// [CLIconButtonVariant.ghost] inside one.
   final CLIconButtonVariant variant;
+  final bool _usesDefaultVariant;
 
   /// Selected buttons use a raised control fill. Inside a [CLToolbar], the
   /// selection stays neutral so it does not compete with primary actions.
@@ -58,6 +64,14 @@ class CLIconButton extends StatefulWidget {
   /// Overrides the icon color.
   final Color? iconColor;
 
+  /// Overrides whether the button draws a hairline outline.
+  ///
+  /// Null outlines every variant except [CLIconButtonVariant.ghost].
+  final bool? outlined;
+
+  /// Overrides the theme outline color when the outline is visible.
+  final Color? outlineColor;
+
   /// Accessibility label.
   final String? semanticLabel;
 
@@ -67,13 +81,17 @@ class CLIconButton extends StatefulWidget {
     required this.onPressed,
     CLControlSize? size,
     this.shape = CLIconButtonShape.circle,
-    this.variant = CLIconButtonVariant.secondary,
+    CLIconButtonVariant? variant,
     this.selected = false,
     this.fill,
     this.selectedFill,
     this.iconColor,
+    this.outlined,
+    this.outlineColor,
     this.semanticLabel,
-  }) : _sizeOverride = size;
+  }) : variant = variant ?? CLIconButtonVariant.secondary,
+       _usesDefaultVariant = variant == null,
+       _sizeOverride = size;
 
   @override
   State<CLIconButton> createState() => _CLIconButtonState();
@@ -104,26 +122,25 @@ class _CLIconButtonState extends State<CLIconButton> {
 
     final isHovered = _hovered && _enabled;
     final inToolbar = toolbar != null;
+    final effectiveVariant = widget._usesDefaultVariant && inToolbar
+        ? CLIconButtonVariant.ghost
+        : widget.variant;
     final isSemanticVariant =
-        widget.variant == CLIconButtonVariant.primary ||
-        widget.variant == CLIconButtonVariant.danger;
-    final quietInToolbar =
-        inToolbar && widget.fill == null && !isSemanticVariant;
+        effectiveVariant == CLIconButtonVariant.primary ||
+        effectiveVariant == CLIconButtonVariant.danger;
+    final outlined =
+        widget.outlined ?? effectiveVariant != CLIconButtonVariant.ghost;
     var fill = widget.selected
         ? (widget.selectedFill ??
               (isSemanticVariant
-                  ? _fillColor(theme, isHovered: false)
+                  ? _fillColor(theme, effectiveVariant, isHovered: false)
                   : inToolbar
                   ? isHovered
                         ? theme.colors.controlHighlight
                         : theme.colors.control
                   : theme.colors.controlHighlight))
         : (widget.fill ??
-              (quietInToolbar
-                  ? isHovered
-                        ? theme.colors.controlHighlight
-                        : const Color(0x00000000)
-                  : _fillColor(theme, isHovered: isHovered)));
+              _fillColor(theme, effectiveVariant, isHovered: isHovered));
     if (!_enabled) {
       fill = isSemanticVariant && widget.fill == null
           ? theme.colors.control
@@ -134,7 +151,7 @@ class _CLIconButtonState extends State<CLIconButton> {
         ? theme.colors.textDisabled
         : widget.iconColor ??
               (isSemanticVariant
-                  ? _foregroundColor(theme)
+                  ? _foregroundColor(theme, effectiveVariant)
                   : widget.selected && !inToolbar
                   ? theme.colors.textPrimary
                   : theme.colors.textSecondary);
@@ -155,18 +172,27 @@ class _CLIconButtonState extends State<CLIconButton> {
           child: SizedBox(
             width: extent,
             height: extent,
-            child: CLSurface(
-              fill: fill,
-              borderRadius: radius,
-              frosted:
-                  !quietInToolbar &&
-                  widget.variant != CLIconButtonVariant.ghost &&
-                  fill.a > 0,
-              child: Center(
-                child: Icon(
-                  widget.icon,
-                  size: _iconSize(size),
-                  color: iconColor,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: clSmoothDecoration(
+                borderRadius: radius,
+                side: outlined
+                    ? BorderSide(
+                        color: widget.outlineColor ?? theme.colors.outline,
+                      )
+                    : BorderSide.none,
+              ),
+              child: CLSurface(
+                fill: fill,
+                borderRadius: radius,
+                frosted:
+                    effectiveVariant != CLIconButtonVariant.ghost && fill.a > 0,
+                child: Center(
+                  child: Icon(
+                    widget.icon,
+                    size: _iconSize(size),
+                    color: iconColor,
+                  ),
                 ),
               ),
             ),
@@ -176,9 +202,13 @@ class _CLIconButtonState extends State<CLIconButton> {
     );
   }
 
-  Color _fillColor(CLThemeData theme, {required bool isHovered}) {
+  Color _fillColor(
+    CLThemeData theme,
+    CLIconButtonVariant variant, {
+    required bool isHovered,
+  }) {
     final colors = theme.colors;
-    return switch (widget.variant) {
+    return switch (variant) {
       CLIconButtonVariant.primary =>
         isHovered
             ? Color.lerp(colors.accent, const Color(0xFFFFFFFF), 0.08)!
@@ -194,8 +224,8 @@ class _CLIconButtonState extends State<CLIconButton> {
     };
   }
 
-  Color _foregroundColor(CLThemeData theme) {
-    return switch (widget.variant) {
+  Color _foregroundColor(CLThemeData theme, CLIconButtonVariant variant) {
+    return switch (variant) {
       CLIconButtonVariant.primary => theme.colors.onAccent,
       CLIconButtonVariant.danger => theme.colors.onDanger,
       CLIconButtonVariant.secondary ||

@@ -43,7 +43,7 @@ class CLToolbar extends StatefulWidget {
   final Color? fill;
 
   /// Whether the capsule draws its hairline outline. Floating pills over
-  /// imagery drop it and rely on their shadow.
+  /// imagery can drop it for a quieter treatment.
   final bool outlined;
 
   const CLToolbar({
@@ -143,13 +143,6 @@ class _CLToolbarState extends State<CLToolbar> {
           fill: widget.fill,
           frosted: true,
           borderRadius: radius,
-          shadow: const [
-            BoxShadow(
-              color: Color(0x40000000),
-              blurRadius: 18,
-              offset: Offset(0, 6),
-            ),
-          ],
           padding: EdgeInsets.symmetric(horizontal: widget.padding),
           child: CLToolbarScope(
             size: widget.size,

@@ -26,7 +26,7 @@ void main() {
     const CLColorScheme.dark(),
   ]) {
     testWidgets(
-      'frosted ${colors.brightness.name} surfaces paint shadows after blur',
+      'frosted ${colors.brightness.name} toolbar skips shadow chrome',
       (WidgetTester tester) async {
         await tester.pumpWidget(host(colors));
 
@@ -48,7 +48,7 @@ void main() {
             of: find.byType(CLSurface),
             matching: find.byType(CustomPaint),
           ),
-          findsOneWidget,
+          findsNothing,
         );
       },
     );

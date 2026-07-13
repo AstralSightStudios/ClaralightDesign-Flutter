@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../containers/toolbar_scope.dart';
 import '../foundation/control_size.dart';
+import '../foundation/shape.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
@@ -30,7 +31,11 @@ class CLButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final Widget? leadingIcon;
   final Widget? trailingIcon;
+
+  /// Configured variant. When omitted, the button defaults to [CLButtonVariant.primary]
+  /// outside a toolbar and [CLButtonVariant.ghost] inside one.
   final CLButtonVariant variant;
+  final bool _usesDefaultVariant;
 
   /// Configured size, defaulting to large outside a toolbar.
   CLControlSize get size => _sizeOverride ?? CLControlSize.large;
@@ -42,17 +47,29 @@ class CLButton extends StatefulWidget {
   /// Overrides the variant fill.
   final Color? tint;
 
+  /// Overrides whether the button draws a hairline outline.
+  ///
+  /// Null outlines every variant except [CLButtonVariant.ghost].
+  final bool? outlined;
+
+  /// Overrides the theme outline color when the outline is visible.
+  final Color? outlineColor;
+
   const CLButton({
     super.key,
     required this.label,
     this.onPressed,
     this.leadingIcon,
     this.trailingIcon,
-    this.variant = CLButtonVariant.primary,
+    CLButtonVariant? variant,
     CLControlSize? size,
     this.width,
     this.tint,
-  }) : _sizeOverride = size;
+    this.outlined,
+    this.outlineColor,
+  }) : variant = variant ?? CLButtonVariant.primary,
+       _usesDefaultVariant = variant == null,
+       _sizeOverride = size;
 
   @override
   State<CLButton> createState() => _CLButtonState();
@@ -85,8 +102,14 @@ class _CLButtonState extends State<CLButton> {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
+    final inToolbar = CLToolbarScope.maybeOf(context) != null;
+    final effectiveVariant = widget._usesDefaultVariant && inToolbar
+        ? CLButtonVariant.ghost
+        : widget.variant;
+    final outlined =
+        widget.outlined ?? effectiveVariant != CLButtonVariant.ghost;
     final radius = BorderRadius.circular(theme.radii.capsule);
-    final foreground = _foregroundColor(theme);
+    final foreground = _foregroundColor(theme, effectiveVariant);
     final textStyle =
         (_size == CLControlSize.large
                 ? theme.typography.title
@@ -131,16 +154,31 @@ class _CLButtonState extends State<CLButton> {
           child: SizedBox(
             width: widget.width,
             height: _height,
-            child: CLSurface(
-              fill: _fillColor(theme, pressedHover: _hovered && _enabled),
-              frosted: widget.variant != CLButtonVariant.ghost,
-              borderRadius: radius,
-              padding: EdgeInsets.symmetric(horizontal: _hPadding),
-              // widthFactor 1 hugs the content when no width is given;
-              // with a fixed width the Align expands and centers instead.
-              child: Align(
-                widthFactor: widget.width == null ? 1 : null,
-                child: row,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: clSmoothDecoration(
+                borderRadius: radius,
+                side: outlined
+                    ? BorderSide(
+                        color: widget.outlineColor ?? theme.colors.outline,
+                      )
+                    : BorderSide.none,
+              ),
+              child: CLSurface(
+                fill: _fillColor(
+                  theme,
+                  effectiveVariant,
+                  pressedHover: _hovered && _enabled,
+                ),
+                frosted: effectiveVariant != CLButtonVariant.ghost,
+                borderRadius: radius,
+                padding: EdgeInsets.symmetric(horizontal: _hPadding),
+                // widthFactor 1 hugs the content when no width is given;
+                // with a fixed width the Align expands and centers instead.
+                child: Align(
+                  widthFactor: widget.width == null ? 1 : null,
+                  child: row,
+                ),
               ),
             ),
           ),
@@ -156,10 +194,14 @@ class _CLButtonState extends State<CLButton> {
     );
   }
 
-  Color _fillColor(CLThemeData theme, {required bool pressedHover}) {
+  Color _fillColor(
+    CLThemeData theme,
+    CLButtonVariant variant, {
+    required bool pressedHover,
+  }) {
     final colors = theme.colors;
     final tint = widget.tint;
-    var fill = switch (widget.variant) {
+    var fill = switch (variant) {
       CLButtonVariant.primary => tint ?? colors.accent,
       CLButtonVariant.secondary =>
         tint ?? (pressedHover ? colors.controlHighlight : colors.control),
@@ -169,8 +211,8 @@ class _CLButtonState extends State<CLButton> {
       CLButtonVariant.danger => tint ?? colors.danger,
     };
     if (pressedHover &&
-        (widget.variant == CLButtonVariant.primary ||
-            widget.variant == CLButtonVariant.danger)) {
+        (variant == CLButtonVariant.primary ||
+            variant == CLButtonVariant.danger)) {
       fill = Color.lerp(fill, const Color(0xFFFFFFFF), 0.08)!;
     }
     if (!_enabled) {
@@ -181,9 +223,9 @@ class _CLButtonState extends State<CLButton> {
     return fill;
   }
 
-  Color _foregroundColor(CLThemeData theme) {
+  Color _foregroundColor(CLThemeData theme, CLButtonVariant variant) {
     final colors = theme.colors;
-    final color = switch (widget.variant) {
+    final color = switch (variant) {
       CLButtonVariant.primary => colors.onAccent,
       CLButtonVariant.secondary => colors.textPrimary,
       CLButtonVariant.ghost => colors.textPrimary,

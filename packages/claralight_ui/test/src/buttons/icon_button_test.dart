@@ -10,6 +10,21 @@ void main() {
     );
   }
 
+  BorderSide outlineSide(WidgetTester tester) {
+    final box = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: find.byType(CLIconButton),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is DecoratedBox &&
+              widget.position == DecorationPosition.foreground,
+        ),
+      ),
+    );
+    final shape = (box.decoration as ShapeDecoration).shape;
+    return (shape as RoundedSuperellipseBorder).side;
+  }
+
   test('CLIconButton exposes large as its default configured size', () {
     expect(
       const CLIconButton(icon: Icons.add, onPressed: null).size,
@@ -87,6 +102,53 @@ void main() {
       expect(tester.widget<CLSurface>(find.byType(CLSurface)).fill, fill);
       expect(tester.widget<Icon>(find.byIcon(Icons.add)).color, foreground);
     }
+  });
+
+  testWidgets('CLIconButton outlines non-ghost variants by default', (
+    WidgetTester tester,
+  ) async {
+    final outline = CLThemeData().colors.outline;
+
+    for (final (variant, expectedOutlined) in [
+      (CLIconButtonVariant.primary, true),
+      (CLIconButtonVariant.secondary, true),
+      (CLIconButtonVariant.danger, true),
+      (CLIconButtonVariant.ghost, false),
+    ]) {
+      await tester.pumpWidget(
+        host(CLIconButton(icon: Icons.add, variant: variant, onPressed: () {})),
+      );
+
+      expect(
+        outlineSide(tester),
+        expectedOutlined ? BorderSide(color: outline) : BorderSide.none,
+        reason: 'outline of $variant',
+      );
+    }
+  });
+
+  testWidgets('CLIconButton outline can be enabled, disabled, and recolored', (
+    WidgetTester tester,
+  ) async {
+    const customOutline = Color(0xFF00FF00);
+
+    await tester.pumpWidget(
+      host(
+        CLIconButton(
+          icon: Icons.add,
+          variant: CLIconButtonVariant.ghost,
+          outlined: true,
+          outlineColor: customOutline,
+          onPressed: () {},
+        ),
+      ),
+    );
+    expect(outlineSide(tester), const BorderSide(color: customOutline));
+
+    await tester.pumpWidget(
+      host(CLIconButton(icon: Icons.add, outlined: false, onPressed: () {})),
+    );
+    expect(outlineSide(tester), BorderSide.none);
   });
 
   testWidgets('CLIconButton semantic variants lighten on hover', (

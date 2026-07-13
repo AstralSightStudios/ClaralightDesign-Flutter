@@ -161,15 +161,18 @@ void main() {
     expect(surfaces, hasLength(2));
     expect(surfaces.first.fill, isNull);
     expect(surfaces.first.outlined, isFalse);
+    expect(surfaces.first.shadow, isNull);
     final outline = tester.widget<DecoratedBox>(
-      find.descendant(
-        of: find.byType(CLToolbar),
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is DecoratedBox &&
-              widget.position == DecorationPosition.foreground,
-        ),
-      ),
+      find
+          .ancestor(
+            of: find.byType(CLSurface).first,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is DecoratedBox &&
+                  widget.position == DecorationPosition.foreground,
+            ),
+          )
+          .first,
     );
     final outlineShape = (outline.decoration as ShapeDecoration).shape;
     expect(
@@ -179,6 +182,79 @@ void main() {
     expect(surfaces.last.fill, const Color(0x00000000));
     expect(surfaces.last.frosted, isFalse);
   });
+
+  testWidgets(
+    'omitted toolbar variants become ghost while explicit variants remain',
+    (tester) async {
+      const defaultButtonKey = Key('default-button');
+      const explicitButtonKey = Key('explicit-button');
+      const defaultIconKey = Key('default-icon');
+      const explicitIconKey = Key('explicit-icon');
+      final theme = CLThemeData();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: CLToolbar(
+              children: [
+                CLButton(
+                  key: defaultButtonKey,
+                  label: 'Default',
+                  onPressed: () {},
+                ),
+                CLButton(
+                  key: explicitButtonKey,
+                  label: 'Secondary',
+                  variant: CLButtonVariant.secondary,
+                  onPressed: () {},
+                ),
+                CLIconButton(
+                  key: defaultIconKey,
+                  icon: Icons.add,
+                  onPressed: () {},
+                ),
+                CLIconButton(
+                  key: explicitIconKey,
+                  icon: Icons.add,
+                  variant: CLIconButtonVariant.secondary,
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      CLSurface surface(Key key) => tester.widget<CLSurface>(
+        find.descendant(of: find.byKey(key), matching: find.byType(CLSurface)),
+      );
+      BorderSide outline(Key key) {
+        final box = tester.widget<DecoratedBox>(
+          find.descendant(
+            of: find.byKey(key),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is DecoratedBox &&
+                  widget.position == DecorationPosition.foreground,
+            ),
+          ),
+        );
+        final shape = (box.decoration as ShapeDecoration).shape;
+        return (shape as RoundedSuperellipseBorder).side;
+      }
+
+      for (final key in [defaultButtonKey, defaultIconKey]) {
+        expect(surface(key).fill, const Color(0x00000000));
+        expect(surface(key).frosted, isFalse);
+        expect(outline(key), BorderSide.none);
+      }
+      for (final key in [explicitButtonKey, explicitIconKey]) {
+        expect(surface(key).fill, theme.colors.control);
+        expect(surface(key).frosted, isTrue);
+        expect(outline(key), BorderSide(color: theme.colors.outline));
+      }
+    },
+  );
 
   testWidgets('an explicit icon fill still overrides toolbar defaults', (
     tester,
@@ -200,7 +276,7 @@ void main() {
         .widgetList<CLSurface>(find.byType(CLSurface))
         .toList();
     expect(surfaces.last.fill, iconFill);
-    expect(surfaces.last.frosted, isTrue);
+    expect(surfaces.last.frosted, isFalse);
   });
 
   testWidgets('semantic icon variants keep their colors in a toolbar', (
