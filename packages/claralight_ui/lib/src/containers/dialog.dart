@@ -8,8 +8,8 @@ import '../theme/theme.dart';
 /// A Claralight modal dialog — the "导出表盘" dialog of the design source.
 ///
 /// A large-radius (36) translucent panel with a centered [title], free-form
-/// [child] content and a bottom row of [actions] that share the width
-/// equally. Present it with [CLDialog.show].
+/// [child] content and bottom [actions]. One or two actions share a row;
+/// three or more actions stack vertically. Present it with [CLDialog.show].
 class CLDialog extends StatelessWidget {
   /// Centered dialog title ("导出表盘").
   final String? title;
@@ -17,7 +17,7 @@ class CLDialog extends StatelessWidget {
   /// Dialog body.
   final Widget child;
 
-  /// Bottom action buttons, laid out in one equally-divided row.
+  /// Bottom action buttons. One or two share a row; three or more stack.
   final List<Widget> actions;
 
   /// Maximum dialog width.
@@ -64,8 +64,9 @@ class CLDialog extends StatelessWidget {
                 child: Text(
                   title!,
                   textAlign: TextAlign.center,
-                  style: theme.typography.title
-                      .copyWith(color: theme.colors.textPrimary),
+                  style: theme.typography.title.copyWith(
+                    color: theme.colors.textPrimary,
+                  ),
                 ),
               ),
             Flexible(
@@ -82,14 +83,25 @@ class CLDialog extends StatelessWidget {
             ),
             if (actions.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  for (var i = 0; i < actions.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 10),
-                    Expanded(child: actions[i]),
+              if (actions.length >= 3)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < actions.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      actions[i],
+                    ],
                   ],
-                ],
-              ),
+                )
+              else
+                Row(
+                  children: [
+                    for (var i = 0; i < actions.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 10),
+                      Expanded(child: actions[i]),
+                    ],
+                  ],
+                ),
             ],
           ],
         ),

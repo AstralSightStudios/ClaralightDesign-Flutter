@@ -69,6 +69,25 @@ void main() {
       (tile) => tile.label == '矩形 1',
     );
     expect(subtreeLeaf.depth, 2);
+    expect(find.byKey(const Key('three-action-dialog-demo')), findsOneWidget);
+  });
+
+  testWidgets('Gallery opens the three-action dialog demo', (tester) async {
+    await tester.pumpWidget(const GalleryApp());
+    await tester.pump();
+
+    final demoButton = tester.widget<CLButton>(
+      find.byKey(const Key('three-action-dialog-demo')),
+    );
+    demoButton.onPressed!();
+    await tester.pumpAndSettle();
+
+    expect(find.text('保存更改'), findsOneWidget);
+    expect(tester.getSize(find.byType(CLDialog)).width, 400);
+    expect(find.text('关闭前是否保存当前更改？'), findsOneWidget);
+    expect(find.text('保存并关闭'), findsOneWidget);
+    expect(find.text('不保存'), findsOneWidget);
+    expect(find.text('取消'), findsOneWidget);
   });
 
   testWidgets('Gallery switches between dark and light themes', (
