@@ -40,3 +40,8 @@ flutter:
       fonts:
         - asset: fonts/ChillDINGothic_Bold.otf
           weight: 700
+    # Single Medium-weight static serif; the file's own weight (500)
+    # renders for any requested FontWeight since it is the only face.
+    - family: Clara Serif Pro
+      fonts:
+        - asset: fonts/ClaraSerifPro.ttf

@@ -9,6 +9,7 @@ managed with a variable font and subsetting instead.
 | MiSans | MiSansVF.ttf (variable, wght 150–700) | UI text (Chinese + Latin) | [hyperos.mi.com/font](https://hyperos.mi.com/font) — MiSans 字体知识产权许可协议 (free commercial use & redistribution) |
 | Sarasa Mono SC | SarasaMonoSC-{Regular,SemiBold}.ttf (**subset to Latin-1 + common punctuation**; CJK falls back to MiSans) | Monospace values & units (尺寸, 内存占用, 时间码) | [be5invis/Sarasa-Gothic](https://github.com/be5invis/Sarasa-Gothic) v1.0.40 — SIL OFL 1.1 |
 | ChillDINGothic | ChillDINGothic_Bold.otf | Display headings (DIN-flavored gothic) | [Warren2060/ChillDIN-ChillDINGothic](https://github.com/Warren2060/ChillDIN-ChillDINGothic) v1.300 — SIL OFL 1.1 |
+| Clara Serif Pro | ClaraSerifPro.ttf (single Medium weight) | Optional serif; not in the default ramp — reference via `CLTypography.serifFamily` | bundled with Claralight |
 
 ## MiSans VF weight axis (non-standard!)
 

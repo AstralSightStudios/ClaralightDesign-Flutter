@@ -2,12 +2,14 @@ import 'package:flutter/widgets.dart';
 
 /// Claralight type ramp.
 ///
-/// Three bundled families (see `fonts/FONTS.md`):
+/// Four bundled families (see `fonts/FONTS.md`):
 ///
 /// * **MiSans** — every UI style, Chinese + Latin.
 /// * **Sarasa Mono SC** — [mono]/[monoStrong]: numeric values and units
 ///   (`368KB/1024KB`, `78x91px`, `00:00`).
 /// * **ChillDINGothic** — [display]: large DIN-flavored headings.
+/// * **Clara Serif Pro** — an optional serif ([serifFamily]); not wired
+///   into the default ramp, reference it directly where you want a serif.
 ///
 /// All styles omit color; widgets resolve color from [CLColorScheme] so one
 /// ramp serves both schemes.
@@ -25,6 +27,12 @@ class CLTypography {
 
   /// The bundled display family for large headings.
   static const String displayFamily = 'packages/claralight_ui/ChillDINGothic';
+
+  /// The bundled serif family (Clara Serif Pro, a single Medium weight).
+  ///
+  /// Not part of the default ramp — reference it directly when you want a
+  /// serif, e.g. `TextStyle(fontFamily: CLTypography.serifFamily)`.
+  static const String serifFamily = 'packages/claralight_ui/Clara Serif Pro';
 
   /// Maps a [FontWeight] onto MiSans VF's non-standard `wght` axis
   /// (Regular sits at 330, not 400; the axis spans 150–700).
