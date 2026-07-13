@@ -37,7 +37,7 @@ void main() {
     expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isTrue);
 
     final box = tester.getSize(find.byType(CLSurface));
-    expect(box.height, 44);
+    expect(box.height, 50);
   });
 
   testWidgets('CLButton sizes follow the density steps', (
@@ -46,7 +46,7 @@ void main() {
     for (final (size, height) in [
       (CLControlSize.small, 28.0),
       (CLControlSize.medium, 36.0),
-      (CLControlSize.large, 44.0),
+      (CLControlSize.large, 50.0),
     ]) {
       await tester.pumpWidget(
         host(CLButton(label: '继续', size: size, onPressed: () {})),
@@ -74,33 +74,62 @@ void main() {
     expect(fixed, 300);
   });
 
-  testWidgets('CLButton centers icon and label group with 8px gaps', (
+  testWidgets('CLButton centers a full-width label independently of icons', (
     WidgetTester tester,
   ) async {
-    const leftKey = Key('left-icon');
-    const rightKey = Key('right-icon');
+    const leadingKey = Key('leading-icon');
+    const trailingKey = Key('trailing-icon');
 
-    await tester.pumpWidget(
-      host(
-        CLButton(
-          width: 260,
-          label: '继续',
-          leadingIcon: SizedBox(key: leftKey, width: 22, height: 22),
-          trailingIcon: SizedBox(key: rightKey, width: 22, height: 22),
-          onPressed: () {},
+    Future<void> expectLayout({
+      required bool constrainedByParent,
+      Widget? leadingIcon,
+      Widget? trailingIcon,
+    }) async {
+      final button = CLButton(
+        width: constrainedByParent ? null : 354,
+        label: '继续',
+        leadingIcon: leadingIcon,
+        trailingIcon: trailingIcon,
+        onPressed: () {},
+      );
+      await tester.pumpWidget(
+        host(
+          constrainedByParent
+              ? SizedBox(
+                  width: 354,
+                  child: Row(children: [Expanded(child: button)]),
+                )
+              : button,
         ),
-      ),
+      );
+
+      final buttonRect = tester.getRect(find.byType(CLSurface));
+      final textRect = tester.getRect(find.text('继续'));
+      expect(textRect.center.dx, moreOrLessEquals(buttonRect.center.dx));
+    }
+
+    await expectLayout(
+      constrainedByParent: false,
+      leadingIcon: const SizedBox(key: leadingKey, width: 24, height: 24),
     );
+    final leadingRect = tester.getRect(find.byKey(leadingKey));
+    final leadingButtonRect = tester.getRect(find.byType(CLSurface));
+    expect(leadingRect.left, leadingButtonRect.left + 16);
 
-    final buttonRect = tester.getRect(find.byType(CLSurface));
-    final leftRect = tester.getRect(find.byKey(leftKey));
-    final rightRect = tester.getRect(find.byKey(rightKey));
-    final textRect = tester.getRect(find.text('继续'));
-    final groupCenter = (leftRect.left + rightRect.right) / 2;
+    await expectLayout(
+      constrainedByParent: false,
+      trailingIcon: const SizedBox(key: trailingKey, width: 24, height: 24),
+    );
+    final trailingRect = tester.getRect(find.byKey(trailingKey));
+    final trailingButtonRect = tester.getRect(find.byType(CLSurface));
+    expect(trailingRect.right, trailingButtonRect.right - 16);
 
-    expect(textRect.left - leftRect.right, 8);
-    expect(rightRect.left - textRect.right, 8);
-    expect(groupCenter, moreOrLessEquals(buttonRect.center.dx));
+    // ExportPage uses Expanded rather than CLButton.width; the label must
+    // still stay centered when only the trailing arrow is present.
+    await expectLayout(
+      constrainedByParent: true,
+      trailingIcon: const SizedBox(width: 24, height: 24),
+    );
   });
 
   testWidgets('CLButton reports taps', (WidgetTester tester) async {

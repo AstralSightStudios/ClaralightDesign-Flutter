@@ -83,18 +83,22 @@ class _CLButtonState extends State<CLButton> {
       CLToolbarScope.maybeOf(context)?.size ??
       CLControlSize.large;
 
-  double get _height => _size.controlHeight;
+  // Figma's touch CTAs are intentionally taller than the shared large
+  // control density: 50px with a 24px icon slot.
+  double get _height => switch (_size) {
+    CLControlSize.small || CLControlSize.medium => _size.controlHeight,
+    CLControlSize.large => 50,
+  };
 
   double get _hPadding => switch (_size) {
     CLControlSize.small => 12,
-    CLControlSize.medium => 16,
-    CLControlSize.large => 20,
+    CLControlSize.medium || CLControlSize.large => 16,
   };
 
   double get _iconSize => switch (_size) {
     CLControlSize.small => 15,
     CLControlSize.medium => 18,
-    CLControlSize.large => 22,
+    CLControlSize.large => 24,
   };
 
   bool get _enabled => widget.onPressed != null;
@@ -113,32 +117,14 @@ class _CLButtonState extends State<CLButton> {
     final textStyle =
         (_size == CLControlSize.large
                 ? theme.typography.title
+                      .withCLWeight(FontWeight.w500)
+                      .copyWith(
+                        fontSize: 17,
+                        height: 22 / 17,
+                        letterSpacing: -0.43,
+                      )
                 : theme.typography.label)
             .copyWith(color: foreground);
-
-    final row = Row(
-      mainAxisSize: widget.width == null ? MainAxisSize.min : MainAxisSize.max,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (widget.leadingIcon != null) ...[
-          _iconSlot(widget.leadingIcon!, foreground),
-          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
-        ],
-        Flexible(
-          child: Text(
-            widget.label,
-            softWrap: false,
-            overflow: TextOverflow.fade,
-            style: textStyle,
-          ),
-        ),
-        if (widget.trailingIcon != null) ...[
-          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
-          _iconSlot(widget.trailingIcon!, foreground),
-        ],
-      ],
-    );
-
     return Semantics(
       button: true,
       enabled: _enabled,
@@ -171,13 +157,32 @@ class _CLButtonState extends State<CLButton> {
                   pressedHover: _hovered && _enabled,
                 ),
                 frosted: effectiveVariant != CLButtonVariant.ghost,
+                frostSigma: 47.9,
+                shadow: effectiveVariant == CLButtonVariant.ghost
+                    ? null
+                    : const [
+                        BoxShadow(
+                          color: Color(0x33000000),
+                          offset: Offset(0, 2),
+                          blurRadius: 10,
+                        ),
+                      ],
                 borderRadius: radius,
                 padding: EdgeInsets.symmetric(horizontal: _hPadding),
-                // widthFactor 1 hugs the content when no width is given;
-                // with a fixed width the Align expands and centers instead.
-                child: Align(
-                  widthFactor: widget.width == null ? 1 : null,
-                  child: row,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // `Expanded`, as used by ExportPage, gives this button a
+                    // tight width without setting `widget.width`. Use the real
+                    // constraint so either route keeps the label centered.
+                    final fillsAvailableWidth =
+                        widget.width != null || constraints.hasTightWidth;
+                    return Align(
+                      widthFactor: fillsAvailableWidth ? null : 1,
+                      child: fillsAvailableWidth
+                          ? _fullWidthContent(textStyle, foreground)
+                          : _huggingContent(textStyle, foreground),
+                    );
+                  },
                 ),
               ),
             ),
@@ -187,10 +192,70 @@ class _CLButtonState extends State<CLButton> {
     );
   }
 
+  /// Compact content used by buttons that do not have a prescribed width.
+  Widget _huggingContent(TextStyle textStyle, Color foreground) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.leadingIcon != null) ...[
+          _iconSlot(widget.leadingIcon!, foreground),
+          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
+        ],
+        Flexible(
+          child: Text(
+            widget.label,
+            softWrap: false,
+            overflow: TextOverflow.fade,
+            style: textStyle,
+          ),
+        ),
+        if (widget.trailingIcon != null) ...[
+          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
+          _iconSlot(widget.trailingIcon!, foreground),
+        ],
+      ],
+    );
+  }
+
+  /// Fixed-width CTAs reserve equal edge slots. This keeps the label on the
+  /// visual centerline whether the action has a back, forward, or no icon.
+  Widget _fullWidthContent(TextStyle textStyle, Color foreground) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Center(
+          child: Text(
+            widget.label,
+            softWrap: false,
+            overflow: TextOverflow.fade,
+            textAlign: TextAlign.center,
+            style: textStyle,
+          ),
+        ),
+        if (widget.leadingIcon != null)
+          PositionedDirectional(
+            start: 0,
+            top: (_height - _iconSize) / 2,
+            child: _iconSlot(widget.leadingIcon!, foreground),
+          ),
+        if (widget.trailingIcon != null)
+          PositionedDirectional(
+            end: 0,
+            top: (_height - _iconSize) / 2,
+            child: _iconSlot(widget.trailingIcon!, foreground),
+          ),
+      ],
+    );
+  }
+
   Widget _iconSlot(Widget icon, Color color) {
-    return IconTheme.merge(
-      data: IconThemeData(color: color, size: _iconSize),
-      child: icon,
+    return SizedBox(
+      width: _iconSize,
+      height: _iconSize,
+      child: IconTheme.merge(
+        data: IconThemeData(color: color, size: _iconSize),
+        child: icon,
+      ),
     );
   }
 
