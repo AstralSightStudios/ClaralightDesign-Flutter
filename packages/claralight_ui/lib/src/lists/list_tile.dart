@@ -42,6 +42,10 @@ class CLListTile extends StatefulWidget {
   final bool? expanded;
   final ValueChanged<bool>? onExpandedChanged;
 
+  /// Duration of the disclosure rotation. Dense, frequently operated trees
+  /// may use [Duration.zero] for immediate feedback.
+  final Duration disclosureAnimationDuration;
+
   const CLListTile({
     super.key,
     required this.label,
@@ -56,6 +60,7 @@ class CLListTile extends StatefulWidget {
     this.outlined = false,
     this.expanded,
     this.onExpandedChanged,
+    this.disclosureAnimationDuration = const Duration(milliseconds: 160),
   }) : assert(depth >= 0);
 
   @override
@@ -181,7 +186,7 @@ class _CLListTileState extends State<CLListTile> {
                       dimension: 16,
                       child: Center(
                         child: AnimatedRotation(
-                          duration: const Duration(milliseconds: 160),
+                          duration: widget.disclosureAnimationDuration,
                           turns: widget.expanded! ? 0.5 : 0,
                           child: CustomPaint(
                             size: const Size(11.5, 6.5),
