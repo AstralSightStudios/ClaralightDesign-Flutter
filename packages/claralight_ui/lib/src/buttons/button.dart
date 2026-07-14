@@ -101,10 +101,6 @@ class _CLButtonState extends State<CLButton> {
     CLControlSize.large => 24,
   };
 
-  bool get _iconOnly =>
-      widget.label.isEmpty &&
-      (widget.leadingIcon != null) != (widget.trailingIcon != null);
-
   bool get _enabled => widget.onPressed != null;
 
   @override
@@ -142,7 +138,7 @@ class _CLButtonState extends State<CLButton> {
           borderRadius: radius,
           pressedScale: 1 + 4 / _height / 2,
           child: SizedBox(
-            width: widget.width ?? (_iconOnly ? _height : null),
+            width: widget.width,
             height: _height,
             child: DecoratedBox(
               position: DecorationPosition.foreground,
@@ -172,32 +168,22 @@ class _CLButtonState extends State<CLButton> {
                         ),
                       ],
                 borderRadius: radius,
-                padding: _iconOnly
-                    ? EdgeInsets.zero
-                    : EdgeInsets.symmetric(horizontal: _hPadding),
-                child: _iconOnly
-                    ? Center(
-                        child: _iconSlot(
-                          widget.leadingIcon ?? widget.trailingIcon!,
-                          foreground,
-                        ),
-                      )
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          // `Expanded`, as used by ExportPage, gives this
-                          // button a tight width without setting
-                          // `widget.width`. Use the real constraint so either
-                          // route keeps the label centered.
-                          final fillsAvailableWidth =
-                              widget.width != null || constraints.hasTightWidth;
-                          return Align(
-                            widthFactor: fillsAvailableWidth ? null : 1,
-                            child: fillsAvailableWidth
-                                ? _fullWidthContent(textStyle, foreground)
-                                : _huggingContent(textStyle, foreground),
-                          );
-                        },
-                      ),
+                padding: EdgeInsets.symmetric(horizontal: _hPadding),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // `Expanded`, as used by ExportPage, gives this button a
+                    // tight width without setting `widget.width`. Use the real
+                    // constraint so either route keeps the label centered.
+                    final fillsAvailableWidth =
+                        widget.width != null || constraints.hasTightWidth;
+                    return Align(
+                      widthFactor: fillsAvailableWidth ? null : 1,
+                      child: fillsAvailableWidth
+                          ? _fullWidthContent(textStyle, foreground)
+                          : _huggingContent(textStyle, foreground),
+                    );
+                  },
+                ),
               ),
             ),
           ),

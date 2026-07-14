@@ -132,37 +132,6 @@ void main() {
     );
   });
 
-  testWidgets('CLButton keeps icon-only content centered and unclipped', (
-    WidgetTester tester,
-  ) async {
-    const iconKey = Key('icon-only-content');
-
-    for (final leading in [true, false]) {
-      await tester.pumpWidget(
-        host(
-          CLButton(
-            label: '',
-            width: 36,
-            size: CLControlSize.medium,
-            leadingIcon: leading
-                ? const SizedBox.square(key: iconKey, dimension: 18)
-                : null,
-            trailingIcon: leading
-                ? null
-                : const SizedBox.square(key: iconKey, dimension: 18),
-            onPressed: () {},
-          ),
-        ),
-      );
-
-      final buttonRect = tester.getRect(find.byType(CLSurface));
-      final iconRect = tester.getRect(find.byKey(iconKey));
-      expect(buttonRect.size, const Size.square(36));
-      expect(iconRect.size, const Size.square(18));
-      expect(iconRect.center, buttonRect.center);
-    }
-  });
-
   testWidgets('CLButton reports taps', (WidgetTester tester) async {
     var tapped = false;
 
