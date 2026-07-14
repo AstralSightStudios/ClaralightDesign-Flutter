@@ -96,7 +96,7 @@ void main() {
     ]);
     expect(icon.size, 18);
     expect(icon.color, theme.colors.onFloatingControl);
-    expect(outlineSide(tester), BorderSide.none);
+    expect(outlineSide(tester), BorderSide(color: theme.colors.outline));
 
     final lightTheme = CLThemeData(colors: const CLColorScheme.light());
     await tester.pumpWidget(
@@ -180,7 +180,7 @@ void main() {
       (CLIconButtonVariant.secondary, true),
       (CLIconButtonVariant.danger, true),
       (CLIconButtonVariant.ghost, false),
-      (CLIconButtonVariant.floating, false),
+      (CLIconButtonVariant.floating, true),
     ]) {
       await tester.pumpWidget(
         host(CLIconButton(icon: Icons.add, variant: variant, onPressed: () {})),
@@ -286,7 +286,6 @@ void main() {
 
     for (final variant in [
       CLIconButtonVariant.primary,
-      CLIconButtonVariant.floating,
       CLIconButtonVariant.danger,
     ]) {
       await tester.pumpWidget(
@@ -311,5 +310,28 @@ void main() {
         theme.colors.textDisabled,
       );
     }
+  });
+
+  testWidgets('CLIconButton disabled floating keeps its glass layer', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+    await tester.pumpWidget(
+      host(
+        const CLIconButton(
+          icon: Icons.add,
+          variant: CLIconButtonVariant.floating,
+          onPressed: null,
+        ),
+      ),
+    );
+
+    final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    expect(surface.fill, theme.colors.floatingControl);
+    expect(surface.shadow, isNotNull);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.add)).color,
+      theme.colors.textDisabled,
+    );
   });
 }

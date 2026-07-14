@@ -75,8 +75,7 @@ class CLIconButton extends StatefulWidget {
 
   /// Overrides whether the button draws a hairline outline.
   ///
-  /// Null outlines every variant except [CLIconButtonVariant.ghost] and
-  /// [CLIconButtonVariant.floating].
+  /// Null outlines every variant except [CLIconButtonVariant.ghost].
   final bool? outlined;
 
   /// Overrides the theme outline color when the outline is visible.
@@ -147,9 +146,7 @@ class _CLIconButtonState extends State<CLIconButton> {
         effectiveVariant == CLIconButtonVariant.floating ||
         effectiveVariant == CLIconButtonVariant.danger;
     final outlined =
-        widget.outlined ??
-        (effectiveVariant != CLIconButtonVariant.ghost &&
-            effectiveVariant != CLIconButtonVariant.floating);
+        widget.outlined ?? effectiveVariant != CLIconButtonVariant.ghost;
     var fill = widget.selected
         ? (widget.selectedFill ??
               (usesVariantColors
@@ -161,7 +158,7 @@ class _CLIconButtonState extends State<CLIconButton> {
                   : theme.colors.controlHighlight))
         : (widget.fill ??
               _fillColor(theme, effectiveVariant, isHovered: isHovered));
-    if (!_enabled) {
+    if (!_enabled && effectiveVariant != CLIconButtonVariant.floating) {
       fill = usesVariantColors && widget.fill == null
           ? theme.colors.control
           : fill.withValues(alpha: fill.a * 0.45);
@@ -210,8 +207,7 @@ class _CLIconButtonState extends State<CLIconButton> {
                 frostSigma: effectiveVariant == CLIconButtonVariant.floating
                     ? 10
                     : 36,
-                shadow:
-                    effectiveVariant == CLIconButtonVariant.floating && _enabled
+                shadow: effectiveVariant == CLIconButtonVariant.floating
                     ? const [
                         BoxShadow(
                           color: Color(0x33000000),

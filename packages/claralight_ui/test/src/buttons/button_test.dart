@@ -202,7 +202,7 @@ void main() {
       (CLButtonVariant.secondary, true),
       (CLButtonVariant.danger, true),
       (CLButtonVariant.ghost, false),
-      (CLButtonVariant.floating, false),
+      (CLButtonVariant.floating, true),
     ]) {
       await tester.pumpWidget(
         host(CLButton(label: '继续', variant: variant, onPressed: () {})),
@@ -304,6 +304,20 @@ void main() {
 
     final surface = tester.widget<CLSurface>(find.byType(CLSurface));
     expect(surface.fill, tint);
+  });
+
+  testWidgets('CLButton disabled floating keeps its glass fill', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+    await tester.pumpWidget(
+      host(const CLButton(label: '继续', variant: CLButtonVariant.floating)),
+    );
+
+    expect(
+      tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+      theme.colors.floatingControl,
+    );
   });
 
   testWidgets('CLButton disabled dims the fill and blocks taps', (

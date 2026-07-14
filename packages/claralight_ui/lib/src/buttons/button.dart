@@ -52,8 +52,7 @@ class CLButton extends StatefulWidget {
 
   /// Overrides whether the button draws a hairline outline.
   ///
-  /// Null outlines every variant except [CLButtonVariant.ghost] and
-  /// [CLButtonVariant.floating].
+  /// Null outlines every variant except [CLButtonVariant.ghost].
   final bool? outlined;
 
   /// Overrides the theme outline color when the outline is visible.
@@ -115,9 +114,7 @@ class _CLButtonState extends State<CLButton> {
         ? CLButtonVariant.ghost
         : widget.variant;
     final outlined =
-        widget.outlined ??
-        (effectiveVariant != CLButtonVariant.ghost &&
-            effectiveVariant != CLButtonVariant.floating);
+        widget.outlined ?? effectiveVariant != CLButtonVariant.ghost;
     final radius = BorderRadius.circular(theme.radii.capsule);
     final foreground = _foregroundColor(theme, effectiveVariant);
     final textStyle =
@@ -290,9 +287,10 @@ class _CLButtonState extends State<CLButton> {
             variant == CLButtonVariant.danger)) {
       fill = Color.lerp(fill, const Color(0xFFFFFFFF), 0.08)!;
     }
-    if (!_enabled) {
-      // Disabled buttons drop their variant color entirely — a colored
-      // button reads as tappable no matter how dim.
+    if (!_enabled && variant != CLButtonVariant.floating) {
+      // Semantic actions drop their variant color when disabled. Floating
+      // controls retain their glass layer so transient canvas gestures do not
+      // make the surrounding toolbar flash to a different surface.
       fill = colors.control;
     }
     return fill;

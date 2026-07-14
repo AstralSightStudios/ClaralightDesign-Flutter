@@ -12,8 +12,8 @@ void main() {
       expect(colors.frost, const Color(0x9CFFFFFF));
       expect(colors.control, const Color(0x1AB0A094));
       expect(colors.controlHighlight, const Color(0x33B0A094));
-      expect(colors.floatingControl, const Color(0x9B000000));
-      expect(colors.onFloatingControl, const Color(0xFFFFFFFF));
+      expect(colors.floatingControl, const Color(0x9CFFFFFF));
+      expect(colors.onFloatingControl, const Color(0xFF160A01));
       expect(colors.textPrimary, const Color(0xFF160A01));
       expect(colors.textSecondary, const Color(0xE6160A01));
       expect(colors.textTertiary, const Color(0xBF160A01));
