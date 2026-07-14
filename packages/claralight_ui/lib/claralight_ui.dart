@@ -5,6 +5,7 @@ export "src/theme/typography.dart";
 
 // Foundation
 export "src/foundation/control_size.dart";
+export "src/foundation/marquee_text.dart";
 export "src/foundation/shape.dart";
 
 // Surfaces

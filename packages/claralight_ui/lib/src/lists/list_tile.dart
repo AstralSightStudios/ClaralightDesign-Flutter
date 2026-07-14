@@ -15,6 +15,11 @@ import '../theme/theme.dart';
 /// for add-item rows ("新增样式").
 class CLListTile extends StatefulWidget {
   final String label;
+
+  /// Optional label content built with the tile's resolved text style.
+  ///
+  /// [label] remains the accessibility label when this is provided.
+  final Widget Function(BuildContext context, TextStyle style)? labelBuilder;
   final VoidCallback? onTap;
   final Widget? leading;
   final Widget? trailing;
@@ -40,6 +45,7 @@ class CLListTile extends StatefulWidget {
   const CLListTile({
     super.key,
     required this.label,
+    this.labelBuilder,
     this.onTap,
     this.leading,
     this.trailing,
@@ -143,12 +149,16 @@ class _CLListTileState extends State<CLListTile> {
                   const SizedBox(width: 10),
                 ],
                 Expanded(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textStyle,
-                  ),
+                  child: widget.labelBuilder == null
+                      ? Text(
+                          widget.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textStyle,
+                        )
+                      : ExcludeSemantics(
+                          child: widget.labelBuilder!(context, textStyle),
+                        ),
                 ),
                 if (widget.trailing != null) ...[
                   const SizedBox(width: 10),

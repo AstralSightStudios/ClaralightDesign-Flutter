@@ -155,6 +155,60 @@ void main() {
     expect(nextState, isFalse);
   });
 
+  testWidgets('CLListTile builds custom label content with its text style', (
+    WidgetTester tester,
+  ) async {
+    const tileKey = Key('tile');
+    const customLabelKey = Key('custom-label');
+    TextStyle? resolvedStyle;
+
+    await tester.pumpWidget(
+      host(
+        CLListTile(
+          key: tileKey,
+          label: 'A very long device family',
+          labelBuilder: (context, style) {
+            resolvedStyle = style;
+            return const SizedBox(key: customLabelKey, height: 18);
+          },
+        ),
+      ),
+    );
+
+    expect(find.byKey(customLabelKey), findsOneWidget);
+    expect(resolvedStyle?.fontSize, 14);
+    expect(
+      tester.getSemantics(find.byKey(tileKey)).label,
+      'A very long device family',
+    );
+  });
+
+  testWidgets('CLListTile preserves trailing control semantics', (
+    WidgetTester tester,
+  ) async {
+    const trailingKey = Key('trailing-control');
+
+    await tester.pumpWidget(
+      host(
+        CLListTile(
+          label: 'Setting',
+          trailing: Semantics(
+            key: trailingKey,
+            container: true,
+            button: true,
+            label: 'Trailing action',
+            child: SizedBox.square(dimension: 16),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.byKey(trailingKey)).label,
+      'Trailing action',
+    );
+  });
+
   testWidgets('CLListSection keeps its compact two-pixel spacing', (
     WidgetTester tester,
   ) async {
@@ -218,10 +272,7 @@ void main() {
     expect(secondRect.top - firstRect.bottom, 4);
     expect(list.scrollDirection, Axis.vertical);
     expect(list.controller, same(controller));
-    expect(
-      list.padding,
-      const EdgeInsets.only(top: 4, right: 10, bottom: 4),
-    );
+    expect(list.padding, const EdgeInsets.only(top: 4, right: 10, bottom: 4));
     expect(list.scrollbarVisibility, CLScrollbarVisibility.auto);
     expect(list.blurExtent, const EdgeInsets.all(24));
     expect(list.blurSigma, const EdgeInsets.all(16));
