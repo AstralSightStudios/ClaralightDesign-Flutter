@@ -181,6 +181,8 @@ CLColorScheme _lerpColorScheme(
     frost: lerp(start.frost, finish.frost),
     control: lerp(start.control, finish.control),
     controlHighlight: lerp(start.controlHighlight, finish.controlHighlight),
+    floatingControl: lerp(start.floatingControl, finish.floatingControl),
+    onFloatingControl: foreground.onFloatingControl,
     selection: lerp(start.selection, finish.selection),
     track: lerp(start.track, finish.track),
     separator: lerp(start.separator, finish.separator),

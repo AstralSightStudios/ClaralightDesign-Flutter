@@ -18,6 +18,9 @@ enum CLButtonVariant {
   /// No fill until hovered; for rows of quiet actions.
   ghost,
 
+  /// Dark glass action floating over arbitrary canvas content.
+  floating,
+
   /// Destructive action with the semantic danger color.
   danger,
 }
@@ -49,7 +52,8 @@ class CLButton extends StatefulWidget {
 
   /// Overrides whether the button draws a hairline outline.
   ///
-  /// Null outlines every variant except [CLButtonVariant.ghost].
+  /// Null outlines every variant except [CLButtonVariant.ghost] and
+  /// [CLButtonVariant.floating].
   final bool? outlined;
 
   /// Overrides the theme outline color when the outline is visible.
@@ -111,7 +115,9 @@ class _CLButtonState extends State<CLButton> {
         ? CLButtonVariant.ghost
         : widget.variant;
     final outlined =
-        widget.outlined ?? effectiveVariant != CLButtonVariant.ghost;
+        widget.outlined ??
+        (effectiveVariant != CLButtonVariant.ghost &&
+            effectiveVariant != CLButtonVariant.floating);
     final radius = BorderRadius.circular(theme.radii.capsule);
     final foreground = _foregroundColor(theme, effectiveVariant);
     final textStyle =
@@ -157,7 +163,9 @@ class _CLButtonState extends State<CLButton> {
                   pressedHover: _hovered && _enabled,
                 ),
                 frosted: effectiveVariant != CLButtonVariant.ghost,
-                frostSigma: 47.9,
+                frostSigma: effectiveVariant == CLButtonVariant.floating
+                    ? 10
+                    : 47.9,
                 shadow: effectiveVariant == CLButtonVariant.ghost
                     ? null
                     : const [
@@ -273,10 +281,12 @@ class _CLButtonState extends State<CLButton> {
       CLButtonVariant.ghost =>
         tint ??
             (pressedHover ? colors.controlHighlight : const Color(0x00000000)),
+      CLButtonVariant.floating => tint ?? colors.floatingControl,
       CLButtonVariant.danger => tint ?? colors.danger,
     };
     if (pressedHover &&
         (variant == CLButtonVariant.primary ||
+            variant == CLButtonVariant.floating ||
             variant == CLButtonVariant.danger)) {
       fill = Color.lerp(fill, const Color(0xFFFFFFFF), 0.08)!;
     }
@@ -294,6 +304,7 @@ class _CLButtonState extends State<CLButton> {
       CLButtonVariant.primary => colors.onAccent,
       CLButtonVariant.secondary => colors.textPrimary,
       CLButtonVariant.ghost => colors.textPrimary,
+      CLButtonVariant.floating => colors.onFloatingControl,
       CLButtonVariant.danger => colors.onDanger,
     };
     return _enabled ? color : colors.textDisabled;

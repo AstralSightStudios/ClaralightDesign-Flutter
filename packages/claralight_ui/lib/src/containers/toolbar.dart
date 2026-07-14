@@ -38,8 +38,8 @@ class CLToolbar extends StatefulWidget {
   /// Gap between children.
   final double spacing;
 
-  /// Overrides the control-level fill — the dark floating pills over the
-  /// editor canvas use `Colors/Gray Alpha/11` instead.
+  /// Overrides the control-level fill. Dark floating pills over the editor
+  /// canvas use `CLTheme.of(context).colors.floatingControl` instead.
   final Color? fill;
 
   /// Whether the capsule draws its hairline outline. Floating pills over

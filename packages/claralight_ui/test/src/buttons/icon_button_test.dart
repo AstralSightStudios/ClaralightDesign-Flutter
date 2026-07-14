@@ -48,10 +48,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tapped, isTrue);
 
-    for (final (size, extent) in [
-      (CLControlSize.small, 28.0),
-      (CLControlSize.medium, 36.0),
-      (CLControlSize.large, 44.0),
+    for (final (size, extent, iconSize) in [
+      (CLControlSize.small, 28.0, 16.0),
+      (CLControlSize.medium, 36.0, 19.0),
+      (CLControlSize.large, 44.0, 22.0),
     ]) {
       await tester.pumpWidget(
         host(CLIconButton(icon: Icons.add, size: size, onPressed: () {})),
@@ -61,7 +61,68 @@ void main() {
         Size.square(extent),
         reason: 'extent of $size',
       );
+      expect(
+        tester.widget<Icon>(find.byIcon(Icons.add)).size,
+        iconSize,
+        reason: 'icon size of $size',
+      );
     }
+  });
+
+  testWidgets('CLIconButton supports the exact Figma floating and bare sizes', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+
+    await tester.pumpWidget(
+      host(
+        CLIconButton(
+          icon: Icons.title_rounded,
+          size: CLControlSize.medium,
+          variant: CLIconButtonVariant.floating,
+          onPressed: () {},
+        ),
+      ),
+    );
+
+    var surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    var icon = tester.widget<Icon>(find.byIcon(Icons.title_rounded));
+    expect(tester.getSize(find.byType(CLSurface)), const Size.square(36));
+    expect(surface.fill, theme.colors.floatingControl);
+    expect(surface.frosted, isTrue);
+    expect(surface.frostSigma, 10);
+    expect(surface.shadow, const [
+      BoxShadow(color: Color(0x33000000), offset: Offset(0, 2), blurRadius: 10),
+    ]);
+    expect(icon.size, 18);
+    expect(icon.color, theme.colors.onFloatingControl);
+    expect(outlineSide(tester), BorderSide.none);
+
+    final lightTheme = CLThemeData(colors: const CLColorScheme.light());
+    await tester.pumpWidget(
+      CLTheme(
+        data: lightTheme,
+        child: host(
+          CLIconButton(
+            icon: Icons.title_rounded,
+            extent: 32,
+            iconSize: 18,
+            variant: CLIconButtonVariant.ghost,
+            iconColor: lightTheme.colors.textPrimary,
+            onPressed: () {},
+          ),
+        ),
+      ),
+    );
+
+    surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    icon = tester.widget<Icon>(find.byIcon(Icons.title_rounded));
+    expect(tester.getSize(find.byType(CLSurface)), const Size.square(32));
+    expect(surface.fill, const Color(0x00000000));
+    expect(surface.frosted, isFalse);
+    expect(surface.shadow, isNull);
+    expect(icon.size, 18);
+    expect(icon.color, const Color(0xFF160A01));
   });
 
   testWidgets('CLIconButton selected state uses the raised control fill', (
@@ -93,6 +154,11 @@ void main() {
 
     for (final (variant, fill, foreground) in [
       (CLIconButtonVariant.primary, theme.colors.accent, theme.colors.onAccent),
+      (
+        CLIconButtonVariant.floating,
+        theme.colors.floatingControl,
+        theme.colors.onFloatingControl,
+      ),
       (CLIconButtonVariant.danger, theme.colors.danger, theme.colors.onDanger),
     ]) {
       await tester.pumpWidget(
@@ -114,6 +180,7 @@ void main() {
       (CLIconButtonVariant.secondary, true),
       (CLIconButtonVariant.danger, true),
       (CLIconButtonVariant.ghost, false),
+      (CLIconButtonVariant.floating, false),
     ]) {
       await tester.pumpWidget(
         host(CLIconButton(icon: Icons.add, variant: variant, onPressed: () {})),
@@ -161,6 +228,7 @@ void main() {
 
     for (final (variant, fill) in [
       (CLIconButtonVariant.primary, theme.colors.accent),
+      (CLIconButtonVariant.floating, theme.colors.floatingControl),
       (CLIconButtonVariant.danger, theme.colors.danger),
     ]) {
       await tester.pumpWidget(
@@ -218,6 +286,7 @@ void main() {
 
     for (final variant in [
       CLIconButtonVariant.primary,
+      CLIconButtonVariant.floating,
       CLIconButtonVariant.danger,
     ]) {
       await tester.pumpWidget(

@@ -27,6 +27,9 @@ enum CLIconButtonVariant {
   /// Transparent until hovered, for quiet contextual actions.
   ghost,
 
+  /// Dark glass control floating over arbitrary canvas content.
+  floating,
+
   /// Destructive action with the semantic danger color.
   danger,
 }
@@ -42,6 +45,12 @@ class CLIconButton extends StatefulWidget {
   /// Configured size, defaulting to large outside a toolbar.
   CLControlSize get size => _sizeOverride ?? CLControlSize.large;
   final CLControlSize? _sizeOverride;
+
+  /// Overrides the square control extent while retaining [size] semantics.
+  final double? extent;
+
+  /// Overrides the icon glyph size.
+  final double? iconSize;
 
   final CLIconButtonShape shape;
 
@@ -66,7 +75,8 @@ class CLIconButton extends StatefulWidget {
 
   /// Overrides whether the button draws a hairline outline.
   ///
-  /// Null outlines every variant except [CLIconButtonVariant.ghost].
+  /// Null outlines every variant except [CLIconButtonVariant.ghost] and
+  /// [CLIconButtonVariant.floating].
   final bool? outlined;
 
   /// Overrides the theme outline color when the outline is visible.
@@ -80,6 +90,8 @@ class CLIconButton extends StatefulWidget {
     required this.icon,
     required this.onPressed,
     CLControlSize? size,
+    this.extent,
+    this.iconSize,
     this.shape = CLIconButtonShape.circle,
     CLIconButtonVariant? variant,
     this.selected = false,
@@ -89,7 +101,9 @@ class CLIconButton extends StatefulWidget {
     this.outlined,
     this.outlineColor,
     this.semanticLabel,
-  }) : variant = variant ?? CLIconButtonVariant.secondary,
+  }) : assert(extent == null || extent > 0),
+       assert(iconSize == null || iconSize > 0),
+       variant = variant ?? CLIconButtonVariant.secondary,
        _usesDefaultVariant = variant == null,
        _sizeOverride = size;
 
@@ -100,11 +114,14 @@ class CLIconButton extends StatefulWidget {
 class _CLIconButtonState extends State<CLIconButton> {
   bool _hovered = false;
 
-  double _iconSize(CLControlSize size) => switch (size) {
-    CLControlSize.small => 16,
-    CLControlSize.medium => 19,
-    CLControlSize.large => 22,
-  };
+  double _iconSize(CLControlSize size, CLIconButtonVariant variant) =>
+      widget.iconSize ??
+      switch ((size, variant)) {
+        (CLControlSize.small, _) => 16,
+        (CLControlSize.medium, CLIconButtonVariant.floating) => 18,
+        (CLControlSize.medium, _) => 19,
+        (CLControlSize.large, _) => 22,
+      };
 
   bool get _enabled => widget.onPressed != null;
 
@@ -113,7 +130,7 @@ class _CLIconButtonState extends State<CLIconButton> {
     final theme = CLTheme.of(context);
     final toolbar = CLToolbarScope.maybeOf(context);
     final size = widget._sizeOverride ?? toolbar?.size ?? CLControlSize.large;
-    final extent = size.controlHeight;
+    final extent = widget.extent ?? size.controlHeight;
     final radius = BorderRadius.circular(
       widget.shape == CLIconButtonShape.circle
           ? extent / 2
@@ -125,14 +142,17 @@ class _CLIconButtonState extends State<CLIconButton> {
     final effectiveVariant = widget._usesDefaultVariant && inToolbar
         ? CLIconButtonVariant.ghost
         : widget.variant;
-    final isSemanticVariant =
+    final usesVariantColors =
         effectiveVariant == CLIconButtonVariant.primary ||
+        effectiveVariant == CLIconButtonVariant.floating ||
         effectiveVariant == CLIconButtonVariant.danger;
     final outlined =
-        widget.outlined ?? effectiveVariant != CLIconButtonVariant.ghost;
+        widget.outlined ??
+        (effectiveVariant != CLIconButtonVariant.ghost &&
+            effectiveVariant != CLIconButtonVariant.floating);
     var fill = widget.selected
         ? (widget.selectedFill ??
-              (isSemanticVariant
+              (usesVariantColors
                   ? _fillColor(theme, effectiveVariant, isHovered: false)
                   : inToolbar
                   ? isHovered
@@ -142,7 +162,7 @@ class _CLIconButtonState extends State<CLIconButton> {
         : (widget.fill ??
               _fillColor(theme, effectiveVariant, isHovered: isHovered));
     if (!_enabled) {
-      fill = isSemanticVariant && widget.fill == null
+      fill = usesVariantColors && widget.fill == null
           ? theme.colors.control
           : fill.withValues(alpha: fill.a * 0.45);
     }
@@ -150,7 +170,7 @@ class _CLIconButtonState extends State<CLIconButton> {
     final iconColor = !_enabled
         ? theme.colors.textDisabled
         : widget.iconColor ??
-              (isSemanticVariant
+              (usesVariantColors
                   ? _foregroundColor(theme, effectiveVariant)
                   : widget.selected && !inToolbar
                   ? theme.colors.textPrimary
@@ -187,10 +207,23 @@ class _CLIconButtonState extends State<CLIconButton> {
                 borderRadius: radius,
                 frosted:
                     effectiveVariant != CLIconButtonVariant.ghost && fill.a > 0,
+                frostSigma: effectiveVariant == CLIconButtonVariant.floating
+                    ? 10
+                    : 36,
+                shadow:
+                    effectiveVariant == CLIconButtonVariant.floating && _enabled
+                    ? const [
+                        BoxShadow(
+                          color: Color(0x33000000),
+                          offset: Offset(0, 2),
+                          blurRadius: 10,
+                        ),
+                      ]
+                    : null,
                 child: Center(
                   child: Icon(
                     widget.icon,
-                    size: _iconSize(size),
+                    size: _iconSize(size, effectiveVariant),
                     color: iconColor,
                   ),
                 ),
@@ -217,6 +250,10 @@ class _CLIconButtonState extends State<CLIconButton> {
         isHovered ? colors.controlHighlight : colors.control,
       CLIconButtonVariant.ghost =>
         isHovered ? colors.controlHighlight : const Color(0x00000000),
+      CLIconButtonVariant.floating =>
+        isHovered
+            ? Color.lerp(colors.floatingControl, const Color(0xFFFFFFFF), 0.08)!
+            : colors.floatingControl,
       CLIconButtonVariant.danger =>
         isHovered
             ? Color.lerp(colors.danger, const Color(0xFFFFFFFF), 0.08)!
@@ -227,6 +264,7 @@ class _CLIconButtonState extends State<CLIconButton> {
   Color _foregroundColor(CLThemeData theme, CLIconButtonVariant variant) {
     return switch (variant) {
       CLIconButtonVariant.primary => theme.colors.onAccent,
+      CLIconButtonVariant.floating => theme.colors.onFloatingControl,
       CLIconButtonVariant.danger => theme.colors.onDanger,
       CLIconButtonVariant.secondary ||
       CLIconButtonVariant.ghost => theme.colors.textSecondary,

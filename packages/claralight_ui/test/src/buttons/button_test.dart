@@ -160,7 +160,36 @@ void main() {
 
     expect(await fillFor(CLButtonVariant.primary), theme.colors.accent);
     expect(await fillFor(CLButtonVariant.secondary), theme.colors.control);
+    expect(
+      await fillFor(CLButtonVariant.floating),
+      theme.colors.floatingControl,
+    );
     expect(await fillFor(CLButtonVariant.danger), theme.colors.danger);
+  });
+
+  testWidgets('CLButton floating uses the Figma glass treatment', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        CLButton(
+          label: '继续',
+          variant: CLButtonVariant.floating,
+          onPressed: () {},
+        ),
+      ),
+    );
+
+    final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    expect(surface.frosted, isTrue);
+    expect(surface.frostSigma, 10);
+    expect(surface.shadow, const [
+      BoxShadow(color: Color(0x33000000), offset: Offset(0, 2), blurRadius: 10),
+    ]);
+    expect(
+      tester.widget<Text>(find.text('继续')).style?.color,
+      CLThemeData().colors.onFloatingControl,
+    );
   });
 
   testWidgets('CLButton outlines non-ghost variants by default', (
@@ -173,6 +202,7 @@ void main() {
       (CLButtonVariant.secondary, true),
       (CLButtonVariant.danger, true),
       (CLButtonVariant.ghost, false),
+      (CLButtonVariant.floating, false),
     ]) {
       await tester.pumpWidget(
         host(CLButton(label: '继续', variant: variant, onPressed: () {})),
@@ -216,6 +246,7 @@ void main() {
     for (final (variant, frosted) in [
       (CLButtonVariant.primary, true),
       (CLButtonVariant.secondary, true),
+      (CLButtonVariant.floating, true),
       (CLButtonVariant.danger, true),
       (CLButtonVariant.ghost, false),
     ]) {
@@ -237,6 +268,7 @@ void main() {
 
     for (final (variant, foreground) in [
       (CLButtonVariant.primary, theme.colors.onAccent),
+      (CLButtonVariant.floating, theme.colors.onFloatingControl),
       (CLButtonVariant.danger, theme.colors.onDanger),
     ]) {
       await tester.pumpWidget(

@@ -28,6 +28,13 @@ class CLColorScheme {
   /// [control] while hovered or gently raised (`White Alpha/3`).
   final Color controlHighlight;
 
+  /// Dark translucent fill for controls floating over arbitrary canvas
+  /// content (Figma `Colors/Gray Alpha/11`).
+  final Color floatingControl;
+
+  /// Text/icons placed on top of [floatingControl].
+  final Color onFloatingControl;
+
   /// Fill of the selected row / segment and the scrollbar thumb.
   final Color selection;
 
@@ -99,6 +106,8 @@ class CLColorScheme {
     required this.frost,
     required this.control,
     required this.controlHighlight,
+    this.floatingControl = const Color(0x9B000000),
+    this.onFloatingControl = const Color(0xFFFFFFFF),
     required this.selection,
     required this.track,
     required this.separator,
@@ -131,6 +140,8 @@ class CLColorScheme {
         frost: const Color(0xBF161616),
         control: const Color(0x1AFFFFFF),
         controlHighlight: const Color(0x26FFFFFF),
+        floatingControl: const Color(0x9B000000),
+        onFloatingControl: const Color(0xFFFFFFFF),
         selection: const Color(0x29FFFFFF),
         track: const Color(0x1AFFFFFF),
         separator: const Color(0x1AFFFFFF),
@@ -162,6 +173,8 @@ class CLColorScheme {
         frost: const Color(0x9CFFFFFF),
         control: const Color(0x1AB0A094),
         controlHighlight: const Color(0x33B0A094),
+        floatingControl: const Color(0x9B000000),
+        onFloatingControl: const Color(0xFFFFFFFF),
         selection: const Color(0x1AB0A094),
         track: const Color(0x1AB0A094),
         separator: const Color(0x1A160A01),
@@ -191,6 +204,8 @@ class CLColorScheme {
     Color? frost,
     Color? control,
     Color? controlHighlight,
+    Color? floatingControl,
+    Color? onFloatingControl,
     Color? selection,
     Color? track,
     Color? separator,
@@ -219,6 +234,8 @@ class CLColorScheme {
       frost: frost ?? this.frost,
       control: control ?? this.control,
       controlHighlight: controlHighlight ?? this.controlHighlight,
+      floatingControl: floatingControl ?? this.floatingControl,
+      onFloatingControl: onFloatingControl ?? this.onFloatingControl,
       selection: selection ?? this.selection,
       track: track ?? this.track,
       separator: separator ?? this.separator,

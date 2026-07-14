@@ -66,6 +66,7 @@ class _IconButtonsSectionState extends State<_IconButtonsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = CLTheme.of(context);
     return _SectionCard(
       title: 'CLIconButton',
       child: Column(
@@ -98,6 +99,28 @@ class _IconButtonsSectionState extends State<_IconButtonsSection> {
               ),
               const SizedBox(width: 8),
               const CLIconButton(icon: Icons.block_rounded, onPressed: null),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              CLIconButton(
+                icon: Icons.title_rounded,
+                size: CLControlSize.medium,
+                variant: CLIconButtonVariant.floating,
+                semanticLabel: '文字工具（浮层）',
+                onPressed: () {},
+              ),
+              const SizedBox(width: 8),
+              CLIconButton(
+                icon: Icons.title_rounded,
+                extent: 32,
+                iconSize: 18,
+                variant: CLIconButtonVariant.ghost,
+                iconColor: theme.colors.textPrimary,
+                semanticLabel: '文字工具',
+                onPressed: () {},
+              ),
             ],
           ),
           const SizedBox(height: 12),
