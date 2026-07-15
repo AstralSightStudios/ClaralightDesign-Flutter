@@ -76,6 +76,11 @@ class CLColorScheme {
   /// Text/icons placed on top of [accent].
   final Color onAccent;
 
+  /// Checked selection controls — checklist marks and opt-in switches
+  /// (Figma `Colors/Indigo/9`). Distinct from [accent] so primary actions
+  /// and passive "which one is chosen" marks read differently.
+  final Color selectionAccent;
+
   /// Positive state (toggle on, success).
   final Color success;
 
@@ -121,6 +126,7 @@ class CLColorScheme {
     required this.accent,
     required this.accentBackground,
     required this.onAccent,
+    this.selectionAccent = const Color(0xFF3E63DD),
     required this.success,
     required this.warning,
     required this.warningBackground,
@@ -219,6 +225,7 @@ class CLColorScheme {
     Color? accent,
     Color? accentBackground,
     Color? onAccent,
+    Color? selectionAccent,
     Color? success,
     Color? warning,
     Color? warningBackground,
@@ -249,6 +256,7 @@ class CLColorScheme {
       accent: accent ?? this.accent,
       accentBackground: accentBackground ?? this.accentBackground,
       onAccent: onAccent ?? this.onAccent,
+      selectionAccent: selectionAccent ?? this.selectionAccent,
       success: success ?? this.success,
       warning: warning ?? this.warning,
       warningBackground: warningBackground ?? this.warningBackground,
