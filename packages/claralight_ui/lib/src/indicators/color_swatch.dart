@@ -87,6 +87,9 @@ class CLColorSwatchGroup extends StatefulWidget {
   final double swatchSize;
   final double spacing;
 
+  /// Insets that scroll with the swatches and contribute to the content extent.
+  final EdgeInsets padding;
+
   const CLColorSwatchGroup({
     super.key,
     required this.colors,
@@ -95,6 +98,7 @@ class CLColorSwatchGroup extends StatefulWidget {
     this.itemBuilder,
     this.swatchSize = 23,
     this.spacing = 8,
+    this.padding = EdgeInsets.zero,
   });
 
   @override
@@ -116,7 +120,8 @@ class _CLColorSwatchGroupState extends State<CLColorSwatchGroup> {
   @override
   void didUpdateWidget(covariant CLColorSwatchGroup oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selectedIndex != oldWidget.selectedIndex) {
+    if (widget.selectedIndex != oldWidget.selectedIndex ||
+        widget.padding != oldWidget.padding) {
       _scheduleSelectedReveal(_scrollDuration);
     }
   }
@@ -141,19 +146,27 @@ class _CLColorSwatchGroupState extends State<CLColorSwatchGroup> {
     final position = _controller.position;
     final itemWidth = widget.swatchSize + 8;
     final selectedWidth = widget.swatchSize * 2.6 + 8;
-    final selectedStart = index * (itemWidth + widget.spacing);
+    final selectedStart =
+        widget.padding.left + index * (itemWidth + widget.spacing);
     final selectedEnd = selectedStart + selectedWidth;
+    final revealStart = index == 0
+        ? selectedStart - widget.padding.left
+        : selectedStart;
+    final revealEnd = index == widget.colors.length - 1
+        ? selectedEnd + widget.padding.right
+        : selectedEnd;
     final visibleStart = position.pixels;
     final visibleEnd = visibleStart + position.viewportDimension;
 
     var target = visibleStart;
-    if (selectedStart < visibleStart) {
-      target = selectedStart;
-    } else if (selectedEnd > visibleEnd) {
-      target = selectedEnd - position.viewportDimension;
+    if (revealStart < visibleStart) {
+      target = revealStart;
+    } else if (revealEnd > visibleEnd) {
+      target = revealEnd - position.viewportDimension;
     }
 
     final contentWidth =
+        widget.padding.horizontal +
         widget.colors.length * itemWidth +
         (selectedWidth - itemWidth) +
         (widget.colors.length > 1
@@ -196,6 +209,7 @@ class _CLColorSwatchGroupState extends State<CLColorSwatchGroup> {
         controller: _controller,
         scrollDirection: Axis.horizontal,
         scrollbarVisibility: CLScrollbarVisibility.hidden,
+        padding: widget.padding,
         itemCount: widget.colors.length,
         separatorBuilder: (context, index) => SizedBox(width: widget.spacing),
         itemBuilder: (context, index) {

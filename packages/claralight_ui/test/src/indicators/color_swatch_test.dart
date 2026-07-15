@@ -62,6 +62,30 @@ void main() {
     expect(swatchCenters.map((center) => center.dy).toSet(), hasLength(1));
   });
 
+  testWidgets('CLColorSwatchGroup keeps padding inside its bounds', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        CLColorSwatchGroup(
+          colors: colors.take(2).toList(),
+          selectedIndex: 0,
+          onChanged: (_) {},
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        width: 240,
+      ),
+    );
+
+    final groupRect = tester.getRect(find.byType(CLColorSwatchGroup));
+    final listRect = tester.getRect(find.byType(CLList));
+    final firstSwatchRect = tester.getRect(
+      find.byType(CLColorSwatchItem).first,
+    );
+    expect(listRect, groupRect);
+    expect(firstSwatchRect.left, closeTo(listRect.left + 8, 0.01));
+  });
+
   testWidgets('CLColorSwatchGroup lets callers wrap individual swatches', (
     tester,
   ) async {
@@ -99,6 +123,7 @@ void main() {
           colors: colors,
           selectedIndex: colors.length - 1,
           onChanged: (_) {},
+          padding: const EdgeInsets.symmetric(horizontal: 8),
         ),
       ),
     );
@@ -107,6 +132,10 @@ void main() {
     final list = tester.widget<CLList>(find.byType(CLList));
     expect(list.controller!.offset, greaterThan(0));
     expectFullyVisible(tester, selectedSwatch());
+    expect(
+      tester.getRect(selectedSwatch()).right,
+      closeTo(tester.getRect(find.byType(CLList)).right - 8, 0.01),
+    );
   });
 
   testWidgets('CLColorSwatchGroup animates a new selection into view', (
