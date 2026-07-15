@@ -8,8 +8,8 @@ import 'package:flutter/widgets.dart';
 /// The preferred physical side of an anchored overlay.
 enum CLPopoverPosition { top, bottom, left, right }
 
-const double _arrowExtent = 10;
-const double _arrowHalfWidth = 13;
+const double _arrowExtent = 7;
+const double _arrowHalfWidth = 9;
 const double _anchorGap = 4;
 const double _screenMargin = 8;
 
@@ -791,17 +791,17 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
         return Path()
           ..moveTo(center - _arrowHalfWidth, baseY)
           ..cubicTo(
-            center - 7,
+            center - 5,
             baseY,
-            center - 6,
+            center - 4,
             size.height,
             center,
             size.height,
           )
           ..cubicTo(
-            center + 6,
+            center + 4,
             size.height,
-            center + 7,
+            center + 5,
             baseY,
             center + _arrowHalfWidth,
             baseY,
@@ -811,11 +811,11 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
         final baseY = body.top + overlap;
         return Path()
           ..moveTo(center - _arrowHalfWidth, baseY)
-          ..cubicTo(center - 7, baseY, center - 6, 0, center, 0)
+          ..cubicTo(center - 5, baseY, center - 4, 0, center, 0)
           ..cubicTo(
-            center + 6,
+            center + 4,
             0,
-            center + 7,
+            center + 5,
             baseY,
             center + _arrowHalfWidth,
             baseY,
@@ -827,17 +827,17 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
           ..moveTo(baseX, center - _arrowHalfWidth)
           ..cubicTo(
             baseX,
-            center - 7,
+            center - 5,
             size.width,
-            center - 6,
+            center - 4,
             size.width,
             center,
           )
           ..cubicTo(
             size.width,
-            center + 6,
+            center + 4,
             baseX,
-            center + 7,
+            center + 5,
             baseX,
             center + _arrowHalfWidth,
           )
@@ -846,12 +846,12 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
         final baseX = body.left + overlap;
         return Path()
           ..moveTo(baseX, center - _arrowHalfWidth)
-          ..cubicTo(baseX, center - 7, 0, center - 6, 0, center)
+          ..cubicTo(baseX, center - 5, 0, center - 4, 0, center)
           ..cubicTo(
             0,
-            center + 6,
+            center + 4,
             baseX,
-            center + 7,
+            center + 5,
             baseX,
             center + _arrowHalfWidth,
           )
