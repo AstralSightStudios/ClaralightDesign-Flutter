@@ -148,7 +148,7 @@ class CLSurface extends StatelessWidget {
           side: side,
           shadows: shadow,
         ),
-        child: ClipRSuperellipse(borderRadius: radius, child: content),
+        child: CLSmoothClip(borderRadius: radius, child: content),
       );
     }
 

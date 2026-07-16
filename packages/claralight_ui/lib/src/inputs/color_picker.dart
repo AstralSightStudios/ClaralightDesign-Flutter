@@ -226,7 +226,7 @@ class _SVArea extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: ClipRSuperellipse(
+                child: CLSmoothClip(
                   borderRadius: radius,
                   child: CustomPaint(painter: _SVPainter(hue: hsv.hue)),
                 ),

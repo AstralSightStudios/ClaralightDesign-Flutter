@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:progressive_blur/progressive_blur.dart';
 
+import '../foundation/shape.dart';
+
 /// Progressive edge blur and alpha mask driven by one or two scroll
 /// controllers.
 ///
@@ -281,7 +283,7 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
               );
             }
             if (widget.borderRadius != BorderRadius.zero) {
-              result = ClipRSuperellipse(
+              result = CLSmoothClip(
                 borderRadius: widget.borderRadius,
                 child: result,
               );

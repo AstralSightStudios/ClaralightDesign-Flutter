@@ -36,6 +36,12 @@ class CLSelect<T> extends StatefulWidget {
   /// not enough room below.
   final bool alignSelectedOption;
 
+  /// Overrides the trigger's corner radius. Pass [BorderRadius.zero] when
+  /// the field is a cell of a grouped grid whose outer clip owns the corner
+  /// rounding; null keeps the standalone control radius. The options panel
+  /// is unaffected.
+  final BorderRadius? borderRadius;
+
   const CLSelect({
     super.key,
     required this.options,
@@ -44,6 +50,7 @@ class CLSelect<T> extends StatefulWidget {
     this.size = CLControlSize.large,
     this.width,
     this.alignSelectedOption = true,
+    this.borderRadius,
   }) : assert(options.length > 0);
 
   @override
@@ -232,7 +239,8 @@ class _CLSelectState<T> extends State<CLSelect<T>>
             .copyWith(
               color: _enabled ? colors.textPrimary : colors.textDisabled,
             );
-    final radius = BorderRadius.circular(theme.radii.control);
+    final radius =
+        widget.borderRadius ?? BorderRadius.circular(theme.radii.control);
 
     return OverlayPortal(
       controller: _portal,

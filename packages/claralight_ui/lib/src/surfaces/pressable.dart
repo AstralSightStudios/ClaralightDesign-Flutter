@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/shape.dart';
 import '../theme/theme.dart';
 
 /// The Claralight press interaction, independent of the surface it wraps.
@@ -196,7 +197,7 @@ class _CLPressableState extends State<CLPressable>
                   result,
                   Positioned.fill(
                     child: IgnorePointer(
-                      child: ClipRSuperellipse(
+                      child: CLSmoothClip(
                         borderRadius: widget.borderRadius,
                         child: CustomPaint(
                           painter: _HighlightPainter(

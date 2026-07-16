@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 /// smooth outline.
 ///
 /// Use [clSmoothShape] wherever a `ShapeBorder` is needed and
-/// [ClipRSuperellipse] for clipping.
+/// [CLSmoothClip] for clipping.
 RoundedSuperellipseBorder clSmoothShape(
   BorderRadiusGeometry borderRadius, {
   BorderSide side = BorderSide.none,
@@ -28,4 +28,24 @@ ShapeDecoration clSmoothDecoration({
     shape: clSmoothShape(borderRadius, side: side),
     shadows: shadows,
   );
+}
+
+/// The corner clip that pairs with [clSmoothShape] decorations.
+///
+/// Impeller drops [ClipRSuperellipse] inside save-layer subtrees
+/// (BackdropFilter / ShaderMask ancestors — Flutter 3.44, observed on
+/// macOS), leaving square corners, so this clips with a circular-arc
+/// [ClipRRect] instead. The arc stays strictly inside the superellipse
+/// fill of the same radius, so clipped content never bleeds past the
+/// painted surface. Fold back into [ClipRSuperellipse] once the engine
+/// clips reliably.
+class CLSmoothClip extends StatelessWidget {
+  const CLSmoothClip({super.key, required this.borderRadius, this.child});
+
+  final BorderRadiusGeometry borderRadius;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) =>
+      ClipRRect(borderRadius: borderRadius, child: child);
 }

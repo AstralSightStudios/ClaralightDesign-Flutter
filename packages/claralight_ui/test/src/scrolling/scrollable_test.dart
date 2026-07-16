@@ -1042,7 +1042,7 @@ void main() {
       ),
     );
 
-    expect(find.byType(ClipRSuperellipse), findsOneWidget);
+    expect(find.byType(CLSmoothClip), findsOneWidget);
 
     final pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
       Offset(0, 0),

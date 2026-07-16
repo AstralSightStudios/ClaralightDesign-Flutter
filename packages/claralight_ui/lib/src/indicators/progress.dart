@@ -80,7 +80,7 @@ class _CLProgressBarState extends State<CLProgressBar>
             color: theme.colors.track,
             borderRadius: radius,
           ),
-          child: ClipRSuperellipse(
+          child: CLSmoothClip(
             borderRadius: radius,
             child: widget.value != null
                 ? Align(
