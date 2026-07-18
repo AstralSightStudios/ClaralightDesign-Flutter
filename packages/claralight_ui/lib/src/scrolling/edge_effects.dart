@@ -42,6 +42,7 @@ class CLEdgeEffects extends StatefulWidget {
 class _CLEdgeEffectsState extends State<CLEdgeEffects>
     with TickerProviderStateMixin {
   static const _transitionDuration = Duration(milliseconds: 160);
+
   static const _left = 0;
   static const _top = 1;
   static const _right = 2;
@@ -52,6 +53,18 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
   final List<bool> _targets = List<bool>.filled(4, false);
   bool _disableAnimations = false;
   bool _updateScheduled = false;
+
+  /// Whether the effect wrappers (blur + mask) are mounted around the child.
+  ///
+  /// This is deliberately driven by *scrollability* (whether the position has
+  /// a scrollable extent) rather than by the animated activation: mounting
+  /// and unmounting swaps the subtree around the scrollable, which recreates
+  /// the scrollable's state and resets its scroll offset. Scrollability only
+  /// changes when content or viewport sizes change — never mid-gesture — so
+  /// the subtree stays structurally stable while scrolling. While a position
+  /// is momentarily unattached or unmeasured, the previous value is kept.
+  bool _effectsMounted = false;
+  bool _effectsMountUpdateScheduled = false;
   ui.Image? _blurTexture;
   Size? _blurTextureSize;
   EdgeInsets? _blurTextureExtent;
@@ -162,6 +175,7 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
   void _updateTargets() {
     final horizontal = _horizontalPosition;
     final vertical = _verticalPosition;
+    _scheduleEffectsMountUpdate();
 
     if (widget.horizontalAxisDirection != null &&
         horizontal != null &&
@@ -208,6 +222,43 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
     }
   }
 
+  void _scheduleEffectsMountUpdate() {
+    if (_effectsMountUpdateScheduled) return;
+    _effectsMountUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _effectsMountUpdateScheduled = false;
+      if (mounted) _updateEffectsMount();
+    });
+  }
+
+  /// Recomputes [_effectsMounted] from the positions' scrollable extents (see
+  /// the field's documentation). Positions that are unattached or not yet
+  /// measured do not change the current value.
+  void _updateEffectsMount() {
+    var scrollable = false;
+    var decided = widget.blurExtent != EdgeInsets.zero;
+    final horizontal = _horizontalPosition;
+    final vertical = _verticalPosition;
+    if (widget.horizontalAxisDirection != null) {
+      if (horizontal == null || !horizontal.hasContentDimensions) {
+        decided = false;
+      } else {
+        scrollable =
+            scrollable || horizontal.maxScrollExtent > precisionErrorTolerance;
+      }
+    }
+    if (widget.verticalAxisDirection != null) {
+      if (vertical == null || !vertical.hasContentDimensions) {
+        decided = false;
+      } else {
+        scrollable =
+            scrollable || vertical.maxScrollExtent > precisionErrorTolerance;
+      }
+    }
+    if (!decided || scrollable == _effectsMounted) return;
+    setState(() => _effectsMounted = scrollable);
+  }
+
   void _setTarget(int index, bool target) {
     if (_targets[index] == target) return;
     _targets[index] = target;
@@ -238,12 +289,7 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
         return LayoutBuilder(
           builder: (context, constraints) {
             Widget result = child!;
-            final hasDimensions =
-                (widget.horizontalAxisDirection == null ||
-                    (_horizontalPosition?.hasContentDimensions ?? false)) &&
-                (widget.verticalAxisDirection == null ||
-                    (_verticalPosition?.hasContentDimensions ?? false));
-            if (activation != EdgeInsets.zero && hasDimensions) {
+            if (_effectsMounted) {
               final viewportSize = Size(
                 _horizontalPosition?.viewportDimension ?? constraints.maxWidth,
                 _verticalPosition?.viewportDimension ?? constraints.maxHeight,
@@ -252,26 +298,18 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
                 widget.blurExtent,
                 widget.blurSigma,
               );
-              if (globalSigma > 0 && !viewportSize.isEmpty) {
-                final blurTexture = _getBlurTexture(
-                  viewportSize,
-                  extent: widget.blurExtent,
-                  sigma: widget.blurSigma,
-                  activation: activation,
-                  globalSigma: globalSigma,
-                );
-                result = ProgressiveBlurWidget.custom(
-                  sigma: globalSigma,
-                  blurTexture: blurTexture,
-                  child: result,
-                );
-              } else {
-                _replaceBlurTexture(null);
-              }
-            } else {
-              _replaceBlurTexture(null);
-            }
-            if (activation != EdgeInsets.zero) {
+              final blurTexture = _getBlurTexture(
+                viewportSize,
+                extent: widget.blurExtent,
+                sigma: widget.blurSigma,
+                activation: activation,
+                globalSigma: globalSigma,
+              );
+              result = ProgressiveBlurWidget.custom(
+                sigma: globalSigma,
+                blurTexture: blurTexture,
+                child: result,
+              );
               result = ShaderMask(
                 blendMode: BlendMode.dstIn,
                 shaderCallback: (bounds) => _createMaskShader(
@@ -281,6 +319,8 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
                 ),
                 child: result,
               );
+            } else {
+              _replaceBlurTexture(null);
             }
             if (widget.borderRadius != BorderRadius.zero) {
               result = CLSmoothClip(
