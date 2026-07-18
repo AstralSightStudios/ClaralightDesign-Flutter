@@ -22,6 +22,59 @@ CLTheme(
 Widgets also work without an ancestor `CLTheme` by falling back to the
 default dark theme.
 
+## Responsive overflow toolbars
+
+`CLOverflowToolbar` keeps fixed-width tools on a `CLToolbar` until the
+available width is exhausted, then moves the lowest-priority overflowable
+items into a `CLMenu`:
+
+```dart
+CLOverflowToolbar<int>(
+  items: [
+    CLOverflowToolbarItem<int>(
+      id: 0,
+      extent: 36,
+      retention: CLToolbarItemRetention.pinned,
+      toolbarBuilder: (_) => CLIconButton(
+        icon: Icons.image_outlined,
+        onPressed: () {},
+      ),
+    ),
+    CLOverflowToolbarItem<int>(
+      id: 1,
+      extent: 36,
+      retention: CLToolbarItemRetention.overflowable,
+      overflowPriority: 0,
+      toolbarBuilder: (_) => CLIconButton(
+        icon: Icons.auto_awesome_outlined,
+        onPressed: () {},
+      ),
+      overflowBuilder: (context, closeMenu) => CLListTile(
+        label: 'Effects',
+        onTap: closeMenu,
+      ),
+    ),
+  ],
+  overflowTriggerBuilder: (context, hiddenIds, toggle) => CLIconButton(
+    icon: Icons.more_horiz,
+    selected: hiddenIds.isNotEmpty,
+    onPressed: toggle,
+  ),
+)
+```
+
+Each item declares its main-axis `extent` explicitly. That lets visibility be
+decided before calling a toolbar builder, avoiding a one-frame overflow and
+avoiding hidden focus, hit-test, and semantics nodes. Item IDs remain in their
+original logical order in the menu; pinned items are never moved. If even the
+pinned items and More trigger cannot fit, the toolbar uses an explicit
+horizontal scroll fallback. The More trigger is keyboard focusable and opens
+with Enter or Space. Set `overflowEnabled: false` to disable pointer, keyboard,
+focus, and trigger semantics together; the trigger builder then receives a
+null callback. A custom `toolbarBuilder` must use the same `spacing` and
+`horizontalPadding` passed to `CLOverflowToolbar`; those values form the
+component's deterministic width-allocation contract.
+
 ## Progressive scrolling
 
 Precache the shader shared by `CLScrollable` and `CLList` before the first
@@ -113,7 +166,7 @@ Three free-for-commercial-use families ship with the package (see
 - **Inputs** — `CLTextField` (`mono:` and external `error:` states),
   `CLSearchField`, `CLSelect`, `CLStepper`, `CLColorPicker`
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
-  `CLToolbar`, `CLSideBar`
+  `CLToolbar`, `CLOverflowToolbar`, `CLSideBar`
 - **Lists** — `CLTreeView`, `CLListSection`, `CLListTile` (progressive
   scrolling, selection, tree guides, disclosure, tint, `outlined:` add-rows)
 - **Menus** — `CLMenu` (morphs out of its anchor with the jelly spring and

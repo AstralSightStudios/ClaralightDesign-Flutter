@@ -35,6 +35,7 @@ export "src/containers/dialog.dart";
 export "src/containers/panel.dart";
 export "src/containers/sheet.dart";
 export "src/containers/toolbar.dart";
+export "src/containers/overflow_toolbar.dart";
 export "src/lists/list_tile.dart";
 
 // Overlays, menus & navigation

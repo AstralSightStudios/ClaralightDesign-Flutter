@@ -221,6 +221,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   @override
   void dispose() {
     _controller._detach(_handleControllerState);
+    _restorePreviousFocus();
     _morphW
       ..removeListener(_handleMorphTick)
       ..dispose();
@@ -418,10 +419,14 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     if (!_closing) return;
     _closing = false;
     if (_portal.isShowing) _portal.hide();
+    _restorePreviousFocus();
+    if (mounted) setState(() {});
+  }
+
+  void _restorePreviousFocus() {
     final previousFocus = _previousFocus;
     _previousFocus = null;
     if (previousFocus?.canRequestFocus ?? false) previousFocus!.requestFocus();
-    if (mounted) setState(() {});
   }
 
   void _handlePanelPointerDown(PointerDownEvent event) {

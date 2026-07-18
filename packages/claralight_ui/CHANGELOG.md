@@ -1,5 +1,8 @@
 ## Unreleased
 
+* Added `CLOverflowToolbar<T>` and `CLOverflowToolbarItem<T>` for fixed-extent
+  responsive toolbars that preserve pinned tools and move low-priority tools
+  into a `CLMenu` without building hidden toolbar widgets.
 * Added `CLControlSize.controlHeight` as the shared 28/36/44px control
   height contract. `CLButton`, `CLIconButton`, `CLTextField`, and `CLSelect`
   now use it; `CLButton.large` is 44px tall instead of 48px.
