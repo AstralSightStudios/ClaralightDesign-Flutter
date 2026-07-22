@@ -1594,50 +1594,59 @@ void main() {
     expect(pixels[1].g, lessThan(0.02));
   });
 
-  testWidgets('keyboard scroll intents target their matching axis', (
-    tester,
-  ) async {
-    final horizontal = ScrollController();
-    final vertical = ScrollController();
-    addTearDown(horizontal.dispose);
-    addTearDown(vertical.dispose);
+  for (final disableAnimations in [false, true]) {
+    testWidgets('keyboard scroll intents are immediate '
+        'with disableAnimations: $disableAnimations', (tester) async {
+      final horizontal = ScrollController();
+      final vertical = ScrollController();
+      addTearDown(horizontal.dispose);
+      addTearDown(vertical.dispose);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Center(
-          child: SizedBox(
-            width: 100,
-            height: 80,
-            child: CLScrollable(
-              horizontalController: horizontal,
-              verticalController: vertical,
-              child: const Focus(
-                autofocus: true,
-                child: SizedBox(width: 240, height: 200),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(disableAnimations: disableAnimations),
+            child: Center(
+              child: SizedBox(
+                width: 100,
+                height: 80,
+                child: CLScrollable(
+                  horizontalController: horizontal,
+                  verticalController: vertical,
+                  child: const Focus(
+                    autofocus: true,
+                    child: SizedBox(width: 240, height: 200),
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final modifier = defaultTargetPlatform == TargetPlatform.macOS
-        ? LogicalKeyboardKey.metaLeft
-        : LogicalKeyboardKey.controlLeft;
+      );
+      await tester.pumpAndSettle();
+      final modifier = defaultTargetPlatform == TargetPlatform.macOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
 
-    await tester.sendKeyDownEvent(modifier);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyUpEvent(modifier);
-    await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(modifier);
 
-    expect(horizontal.offset, greaterThan(0));
-    expect(vertical.offset, 0);
+      final horizontalOffset = horizontal.offset;
+      expect(horizontalOffset, greaterThan(0));
+      expect(vertical.offset, 0);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(horizontal.offset, horizontalOffset);
 
-    await tester.sendKeyDownEvent(modifier);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyUpEvent(modifier);
-    await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyUpEvent(modifier);
 
-    expect(vertical.offset, greaterThan(0));
-  });
+      final verticalOffset = vertical.offset;
+      expect(verticalOffset, greaterThan(0));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(horizontal.offset, horizontalOffset);
+      expect(vertical.offset, verticalOffset);
+    });
+  }
 }

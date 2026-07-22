@@ -273,11 +273,7 @@ class CLScrollable extends StatefulWidget {
       ScrollIncrementType.page => position.viewportDimension * 0.8,
     };
     final delta = intent.direction == axisDirection ? increment : -increment;
-    position.moveTo(
-      position.pixels + delta,
-      duration: const Duration(milliseconds: 100),
-      curve: Curves.easeInOut,
-    );
+    position.moveTo(position.pixels + delta);
     return null;
   }
 
