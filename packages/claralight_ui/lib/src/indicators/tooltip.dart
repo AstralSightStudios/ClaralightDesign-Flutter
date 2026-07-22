@@ -96,17 +96,24 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
 
   void _hide() {
     _dwell?.cancel();
-    if (_reveal.value > 0) {
-      _reveal.reverse();
-      _spring.animateWith(
-        SpringSimulation(
-          const SpringDescription(mass: 1, stiffness: 620, damping: 40),
-          _spring.value,
-          0,
-          0,
-        ),
-      );
+    final revealActive = _reveal.isAnimating || _reveal.value > 0;
+    if (!revealActive) {
+      _spring
+        ..stop()
+        ..value = 0;
+      if (_portal.isShowing) _portal.hide();
+      return;
     }
+
+    _reveal.reverse();
+    _spring.animateWith(
+      SpringSimulation(
+        const SpringDescription(mass: 1, stiffness: 620, damping: 40),
+        _spring.value,
+        0,
+        0,
+      ),
+    );
   }
 
   @override

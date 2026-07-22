@@ -22,10 +22,14 @@ void main() {
 
     expect(find.text('这按钮是干嘛的'), findsNothing);
 
-    await tester.longPress(find.byType(CLIconButton));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(CLIconButton)),
+    );
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('这按钮是干嘛的'), findsOneWidget);
+    await gesture.up();
     await tester.pumpAndSettle();
   });
 
@@ -56,6 +60,42 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('Hover only'), findsNothing);
+  });
+
+  testWidgets('CLTooltip hides before its first reveal frame', (
+    WidgetTester tester,
+  ) async {
+    const anchorKey = Key('same-frame-anchor');
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CLTooltip(
+              delay: Duration.zero,
+              message: 'Same-frame tooltip',
+              child: SizedBox(
+                key: anchorKey,
+                width: 40,
+                height: 40,
+                child: ColoredBox(color: Colors.transparent),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    final anchor = tester.getRect(find.byKey(anchorKey));
+
+    await mouse.moveTo(anchor.center);
+    await tester.pump();
+    await mouse.moveTo(Offset(anchor.center.dx, anchor.top - 2));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Same-frame tooltip'), findsNothing);
   });
 
   testWidgets('CLTooltip does not re-enter mouse tracking while animating', (
@@ -95,7 +135,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
     }
 
+    await tester.pumpAndSettle();
+
     expect(tester.takeException(), isNull);
+    expect(find.text('Hover tooltip'), findsNothing);
   });
 
   testWidgets('CLTooltip supports physical positions without an arrow', (
@@ -122,11 +165,16 @@ void main() {
       ),
     );
 
-    await tester.longPress(find.byKey(anchorKey));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(anchorKey)),
+    );
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 250));
 
     final anchor = tester.getRect(find.byKey(anchorKey));
     final message = tester.getRect(find.text('Right tooltip'));
     expect(message.left, greaterThan(anchor.right));
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 }
