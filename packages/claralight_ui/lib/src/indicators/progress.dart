@@ -35,6 +35,8 @@ class _CLProgressBarState extends State<CLProgressBar>
   static const _sweepPeriod = Duration(milliseconds: 1300);
   static const _indicatorFraction = 0.32;
   static const _reducedMotionPosition = 0.5;
+  static const _determinateDuration = Duration(milliseconds: 200);
+  static const _determinateCurve = Cubic(0.23, 1, 0.32, 1);
 
   late final AnimationController _sweep;
   final Key _visibilityKey = UniqueKey();
@@ -138,19 +140,23 @@ class _CLProgressBarState extends State<CLProgressBar>
             child: CLSmoothClip(
               borderRadius: radius,
               child: widget.value != null
-                  ? Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: AnimatedFractionallySizedBox(
-                        duration: const Duration(milliseconds: 380),
-                        curve: Curves.easeOutCubic,
-                        widthFactor: widget.value!.clamp(0.0, 1.0),
-                        heightFactor: 1,
-                        child: DecoratedBox(
-                          decoration: clSmoothDecoration(
-                            color: fillColor,
-                            borderRadius: radius,
-                          ),
+                  ? TweenAnimationBuilder<double>(
+                      key: ValueKey(_animationsDisabled),
+                      tween: Tween<double>(
+                        end: widget.value!.clamp(0.0, 1.0).toDouble(),
+                      ),
+                      duration: _animationsDisabled
+                          ? Duration.zero
+                          : _determinateDuration,
+                      curve: _determinateCurve,
+                      builder: (context, animatedValue, _) => CustomPaint(
+                        painter: _DeterminateFillPainter(
+                          value: animatedValue,
+                          color: fillColor,
+                          radius: widget.height / 2,
+                          textDirection: Directionality.of(context),
                         ),
+                        size: Size.infinite,
                       ),
                     )
                   : _animationsDisabled
@@ -181,6 +187,41 @@ class _CLProgressBarState extends State<CLProgressBar>
       ),
     );
   }
+}
+
+class _DeterminateFillPainter extends CustomPainter {
+  const _DeterminateFillPainter({
+    required this.value,
+    required this.color,
+    required this.radius,
+    required this.textDirection,
+  });
+
+  final double value;
+  final Color color;
+  final double radius;
+  final TextDirection textDirection;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final progress = value.clamp(0.0, 1.0).toDouble();
+    if (progress == 0 || size.isEmpty) return;
+
+    final width = size.width * progress;
+    final left = textDirection == TextDirection.rtl ? size.width - width : 0.0;
+    final rect = Rect.fromLTWH(left, 0, width, size.height);
+    canvas.drawRSuperellipse(
+      RSuperellipse.fromRectAndRadius(rect, Radius.circular(radius)),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DeterminateFillPainter oldDelegate) =>
+      value != oldDelegate.value ||
+      color != oldDelegate.color ||
+      radius != oldDelegate.radius ||
+      textDirection != oldDelegate.textDirection;
 }
 
 class _SweepPainter extends CustomPainter {
