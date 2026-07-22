@@ -632,16 +632,28 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                   followerAnchor: _anchor,
                   child: Align(
                     alignment: _anchor,
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge([
-                        _morphW,
-                        _morphH,
-                        _content,
-                        _resize,
-                        _pressGlow,
-                      ]),
-                      builder: (context, _) => _buildPanel(),
-                    ),
+                    child: _measuring
+                        ? IgnorePointer(
+                            child: Opacity(
+                              opacity: 0,
+                              child: _buildMeasuredList(
+                                maxHeight: _measurementLimit,
+                              ),
+                            ),
+                          )
+                        : AnimatedBuilder(
+                            animation: Listenable.merge([
+                              _morphW,
+                              _morphH,
+                              _content,
+                              _resize,
+                              _pressGlow,
+                            ]),
+                            child: _buildMeasuredList(
+                              maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                            ),
+                            builder: (context, child) => _buildPanel(child!),
+                          ),
                   ),
                 ),
               ],
@@ -652,16 +664,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildPanel() {
-    if (_measuring) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0,
-          child: _buildMeasuredList(maxHeight: _measurementLimit),
-        ),
-      );
-    }
-
+  Widget _buildPanel(Widget measuredList) {
     final theme = CLTheme.of(context);
     final tW = _morphW.value.clamp(0.0, 1.3);
     final tH = _morphH.value.clamp(0.0, 1.3);
@@ -741,23 +744,16 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                  OverflowBox(
-                    alignment: _anchor,
-                    minWidth: widget.menuWidth,
-                    maxWidth: widget.menuWidth,
-                    minHeight: 0,
-                    maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                    child: Transform.scale(
-                      scale: _disableAnimations
-                          ? 1.0
-                          : 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
-                      alignment: _anchor,
-                      child: Opacity(
-                        opacity: opacity.clamp(0.0, 1.0),
-                        child: _buildMeasuredList(
-                          maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                        ),
+                  Opacity(
+                    opacity: opacity.clamp(0.0, 1.0).toDouble(),
+                    child: Flow(
+                      delegate: _CLMenuMorphFlowDelegate(
+                        targetWidth: widget.menuWidth,
+                        maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                        alignment: _anchor,
+                        scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
                       ),
+                      children: [measuredList],
                     ),
                   ),
                 ],
@@ -787,6 +783,64 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+class _CLMenuMorphFlowDelegate extends FlowDelegate {
+  const _CLMenuMorphFlowDelegate({
+    required this.targetWidth,
+    required this.maxHeight,
+    required this.alignment,
+    required this.scale,
+  });
+
+  final double targetWidth;
+  final double maxHeight;
+  final Alignment alignment;
+  final double scale;
+
+  @override
+  Size getSize(BoxConstraints constraints) => constraints.biggest;
+
+  @override
+  BoxConstraints getConstraintsForChild(int i, BoxConstraints constraints) {
+    return BoxConstraints(
+      minWidth: targetWidth,
+      maxWidth: targetWidth,
+      minHeight: 0,
+      maxHeight: maxHeight,
+    );
+  }
+
+  @override
+  void paintChildren(FlowPaintingContext context) {
+    final childSize = context.getChildSize(0);
+    if (childSize == null) return;
+
+    final alignedOffset = Offset(
+      (context.size.width - childSize.width) * (alignment.x + 1) / 2,
+      (context.size.height - childSize.height) * (alignment.y + 1) / 2,
+    );
+    final anchorPoint = Offset(
+      childSize.width * (alignment.x + 1) / 2,
+      childSize.height * (alignment.y + 1) / 2,
+    );
+    final transform = Matrix4.identity()
+      ..translateByDouble(alignedOffset.dx, alignedOffset.dy, 0, 1)
+      ..translateByDouble(anchorPoint.dx, anchorPoint.dy, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1)
+      ..translateByDouble(-anchorPoint.dx, -anchorPoint.dy, 0, 1);
+
+    context.paintChild(0, transform: transform);
+  }
+
+  @override
+  bool shouldRelayout(_CLMenuMorphFlowDelegate oldDelegate) =>
+      targetWidth != oldDelegate.targetWidth ||
+      maxHeight != oldDelegate.maxHeight;
+
+  @override
+  bool shouldRepaint(_CLMenuMorphFlowDelegate oldDelegate) =>
+      alignment != oldDelegate.alignment || scale != oldDelegate.scale;
 }
 
 class _CLMenuPressGlowPainter extends CustomPainter {
