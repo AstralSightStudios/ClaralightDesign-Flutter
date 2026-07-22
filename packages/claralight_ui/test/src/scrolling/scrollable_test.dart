@@ -33,6 +33,65 @@ Future<List<Color>> _readPixels(
   }))!;
 }
 
+const _autoScrollbarViewportKey = Key('auto-scrollbar-timing-viewport');
+
+Widget _buildAutoScrollbarHarness({
+  required ScrollController controller,
+  bool disableAnimations = false,
+}) {
+  final colors = const CLColorScheme.dark().copyWith(selection: Colors.white);
+  return MaterialApp(
+    home: CLTheme(
+      data: CLThemeData(colors: colors),
+      child: MediaQuery(
+        data: MediaQueryData(disableAnimations: disableAnimations),
+        child: Center(
+          child: SizedBox(
+            key: _autoScrollbarViewportKey,
+            width: 100,
+            height: 80,
+            child: CLScrollable(
+              direction: CLScrollDirection.vertical,
+              blurExtent: EdgeInsets.zero,
+              blurSigma: EdgeInsets.zero,
+              horizontalScrollbar: CLScrollbarVisibility.hidden,
+              verticalScrollbar: CLScrollbarVisibility.auto,
+              verticalController: controller,
+              child: const SizedBox(height: 200),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+RawScrollbar _autoScrollbar(WidgetTester tester) {
+  return tester.widget<RawScrollbar>(
+    find.byKey(const ValueKey<Axis>(Axis.vertical)),
+  );
+}
+
+double _autoScrollbarAlpha(WidgetTester tester) {
+  return _autoScrollbar(tester).thumbColor!.a;
+}
+
+void _expectAutoScrollbarAlpha(WidgetTester tester, double expected) {
+  expect(_autoScrollbarAlpha(tester), closeTo(expected, 1e-3 + 1 / 255));
+}
+
+Future<void> _revealAutoScrollbar(WidgetTester tester) async {
+  final gesture = await tester.startGesture(
+    tester.getCenter(find.byKey(_autoScrollbarViewportKey)),
+  );
+  await gesture.moveBy(const Offset(0, -20));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 160));
+  _expectAutoScrollbarAlpha(tester, 1);
+  await gesture.up();
+  await tester.pump();
+}
+
 void main() {
   test('CLScrollable has stable public defaults', () {
     const scrollable = CLScrollable(child: SizedBox());
@@ -1444,146 +1503,155 @@ void main() {
     expect(horizontal.offset, 0);
   });
 
-  testWidgets('auto scrollbars fade in when the viewport is hovered', (
+  testWidgets('auto scrollbar holds then follows the exact exit curve', (
     tester,
   ) async {
-    const boundaryKey = Key('auto-scrollbar-boundary');
-    final colors = const CLColorScheme.dark().copyWith(selection: Colors.green);
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    const exitCurve = Cubic(0.32, 0, 0.67, 0);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CLTheme(
-          data: CLThemeData(colors: colors),
-          child: Center(
-            child: RepaintBoundary(
-              key: boundaryKey,
-              child: ColoredBox(
-                color: Colors.black,
-                child: SizedBox(
-                  width: 100,
-                  height: 80,
-                  child: CLScrollable(
-                    blurExtent: EdgeInsets.zero,
-                    blurSigma: EdgeInsets.zero,
-                    horizontalScrollbar: CLScrollbarVisibility.auto,
-                    verticalScrollbar: CLScrollbarVisibility.auto,
-                    child: const ColoredBox(
-                      color: Colors.black,
-                      child: SizedBox(width: 200, height: 200),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await tester.pumpWidget(_buildAutoScrollbarHarness(controller: controller));
+    await _revealAutoScrollbar(tester);
 
-    var pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-      Offset(10, 78),
-    ]);
-    expect(pixels[0].g, lessThan(0.02));
-    expect(pixels[1].g, lessThan(0.02));
-
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: tester.getCenter(find.byKey(boundaryKey)));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 160));
-
-    pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-      Offset(10, 78),
-    ]);
-    expect(pixels[0].g, greaterThan(pixels[0].r));
-    expect(pixels[1].g, greaterThan(pixels[1].r));
-
-    await mouse.removePointer();
-    await tester.pump();
     await tester.pump(const Duration(milliseconds: 299));
-    pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-    ]);
-    expect(pixels.single.g, greaterThan(pixels.single.r));
+    _expectAutoScrollbarAlpha(tester, 1);
+    await tester.pump(const Duration(milliseconds: 1));
+    _expectAutoScrollbarAlpha(tester, 1);
+
+    for (final elapsed in [45, 90, 135]) {
+      await tester.pump(const Duration(milliseconds: 45));
+      _expectAutoScrollbarAlpha(tester, 1 - exitCurve.transform(elapsed / 180));
+    }
+
+    await tester.pump(const Duration(milliseconds: 44));
+    expect(_autoScrollbarAlpha(tester), greaterThan(0));
+    expect(_autoScrollbar(tester).interactive, isTrue);
 
     await tester.pump(const Duration(milliseconds: 1));
-    await tester.pump(const Duration(milliseconds: 150));
-    pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-    ]);
-    expect(pixels.single.g, greaterThan(0.5));
-
-    await tester.pump(const Duration(milliseconds: 150));
-    pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-    ]);
-    expect(pixels.single.g, lessThan(0.02));
+    _expectAutoScrollbarAlpha(tester, 0);
+    expect(_autoScrollbar(tester).interactive, isFalse);
   });
 
-  testWidgets('disabled animations keep the auto scrollbar hide delay', (
+  testWidgets('scroll activity reverses the auto scrollbar exit', (
     tester,
   ) async {
-    const boundaryKey = Key('reduced-motion-scrollbar-boundary');
-    final colors = const CLColorScheme.dark().copyWith(selection: Colors.green);
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CLTheme(
-          data: CLThemeData(colors: colors),
-          child: MediaQuery(
-            data: const MediaQueryData(disableAnimations: true),
-            child: Center(
-              child: RepaintBoundary(
-                key: boundaryKey,
-                child: ColoredBox(
-                  color: Colors.black,
-                  child: SizedBox(
-                    width: 100,
-                    height: 80,
-                    child: CLScrollable(
-                      direction: CLScrollDirection.vertical,
-                      blurExtent: EdgeInsets.zero,
-                      blurSigma: EdgeInsets.zero,
-                      horizontalScrollbar: CLScrollbarVisibility.hidden,
-                      verticalScrollbar: CLScrollbarVisibility.auto,
-                      child: const ColoredBox(
-                        color: Colors.black,
-                        child: SizedBox(height: 200),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    await tester.pumpWidget(_buildAutoScrollbarHarness(controller: controller));
+    await _revealAutoScrollbar(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 60));
+    final exitAlpha = _autoScrollbarAlpha(tester);
+
+    controller.jumpTo(controller.offset + 10);
+    await tester.pump();
+
+    _expectAutoScrollbarAlpha(tester, exitAlpha);
+    expect(exitAlpha, isNot(anyOf(0, 1)));
+    await tester.pump(const Duration(milliseconds: 80));
+    _expectAutoScrollbarAlpha(
+      tester,
+      exitAlpha + (1 - exitAlpha) * Curves.easeOutCubic.transform(80 / 160),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 80));
+    _expectAutoScrollbarAlpha(tester, 1);
+  });
+
+  testWidgets('thumb drag reverses the auto scrollbar exit', (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(_buildAutoScrollbarHarness(controller: controller));
+    await _revealAutoScrollbar(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 60));
+    final exitAlpha = _autoScrollbarAlpha(tester);
+    final viewportTopLeft = tester.getTopLeft(
+      find.byKey(_autoScrollbarViewportKey),
+    );
+
+    final drag = await tester.startGesture(
+      viewportTopLeft + const Offset(98, 15),
+    );
+    await drag.moveBy(const Offset(0, 8));
+    await tester.pump();
+
+    expect(controller.offset, greaterThan(20));
+    _expectAutoScrollbarAlpha(tester, exitAlpha);
+    await tester.pump(const Duration(milliseconds: 80));
+    _expectAutoScrollbarAlpha(
+      tester,
+      exitAlpha + (1 - exitAlpha) * Curves.easeOutCubic.transform(80 / 160),
+    );
+    await tester.pump(const Duration(milliseconds: 80));
+    _expectAutoScrollbarAlpha(tester, 1);
+    await drag.up();
+  });
+
+  testWidgets('hover reverses the auto scrollbar exit ten milliseconds early', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(_buildAutoScrollbarHarness(controller: controller));
+    await _revealAutoScrollbar(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 170));
+    final exitAlpha = _autoScrollbarAlpha(tester);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: tester.getCenter(find.byKey(boundaryKey)));
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byKey(_autoScrollbarViewportKey)));
     await tester.pump();
-    var pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-    ]);
-    expect(pixels.single.g, greaterThan(pixels.single.r));
+
+    _expectAutoScrollbarAlpha(tester, exitAlpha);
+    expect(exitAlpha, isNot(anyOf(0, 1)));
+    await tester.pump(const Duration(milliseconds: 80));
+    _expectAutoScrollbarAlpha(
+      tester,
+      exitAlpha + (1 - exitAlpha) * Curves.easeOutCubic.transform(80 / 160),
+    );
+    await tester.pump(const Duration(milliseconds: 79));
+    expect(_autoScrollbarAlpha(tester), lessThan(1));
+    await tester.pump(const Duration(milliseconds: 1));
+    _expectAutoScrollbarAlpha(tester, 1);
 
     await mouse.removePointer();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 299));
-    pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-    ]);
-    expect(pixels.single.g, greaterThan(pixels.single.r));
+  });
 
+  testWidgets('disabled animations snap around the auto scrollbar hide delay', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildAutoScrollbarHarness(
+        controller: controller,
+        disableAnimations: true,
+      ),
+    );
+    await tester.pump();
+    _expectAutoScrollbarAlpha(tester, 0);
+    expect(_autoScrollbar(tester).interactive, isFalse);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(_autoScrollbarViewportKey)),
+    );
+    await gesture.moveBy(const Offset(0, -20));
+    await tester.pump();
+    _expectAutoScrollbarAlpha(tester, 1);
+    expect(_autoScrollbar(tester).interactive, isTrue);
+    await gesture.up();
+    await tester.pump();
+
+    await tester.pump(const Duration(milliseconds: 299));
+    _expectAutoScrollbarAlpha(tester, 1);
     await tester.pump(const Duration(milliseconds: 1));
-    pixels = await _readPixels(tester, find.byKey(boundaryKey), const [
-      Offset(98, 10),
-    ]);
-    expect(pixels.single.g, lessThan(0.02));
+    _expectAutoScrollbarAlpha(tester, 0);
+    expect(_autoScrollbar(tester).interactive, isFalse);
   });
 
   testWidgets('scroll activity reveals auto scrollbars without hover', (

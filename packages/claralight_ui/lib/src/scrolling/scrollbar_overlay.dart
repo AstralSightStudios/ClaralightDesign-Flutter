@@ -39,7 +39,8 @@ class _CLScrollbarOverlayState extends State<CLScrollbarOverlay>
     with SingleTickerProviderStateMixin {
   static const _fadeInDuration = Duration(milliseconds: 160);
   static const _fadeOutDelay = Duration(milliseconds: 300);
-  static const _fadeOutDuration = Duration(milliseconds: 300);
+  static const _fadeOutDuration = Duration(milliseconds: 180);
+  static const _fadeOutCurve = Cubic(0.32, 0, 0.67, 0);
 
   late final AnimationController _opacity;
   Timer? _hideTimer;
@@ -161,11 +162,12 @@ class _CLScrollbarOverlayState extends State<CLScrollbarOverlay>
   void _showAutoScrollbars() {
     if (!_hasAuto) return;
     _hideTimer?.cancel();
+    final wasVisibleTarget = _visibleTarget;
     _visibleTarget = true;
     if (_disableAnimations) {
       _opacity.value = 1;
     } else if (_opacity.value != 1 &&
-        !(_opacity.isAnimating && _opacity.status == AnimationStatus.forward)) {
+        (!wasVisibleTarget || !_opacity.isAnimating)) {
       _opacity.animateTo(
         1,
         duration: _fadeInDuration,
@@ -186,11 +188,7 @@ class _CLScrollbarOverlayState extends State<CLScrollbarOverlay>
     if (_disableAnimations) {
       _opacity.value = 0;
     } else {
-      _opacity.animateTo(
-        0,
-        duration: _fadeOutDuration,
-        curve: Curves.easeInCubic,
-      );
+      _opacity.animateTo(0, duration: _fadeOutDuration, curve: _fadeOutCurve);
     }
   }
 
