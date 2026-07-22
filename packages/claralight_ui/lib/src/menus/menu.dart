@@ -633,11 +633,15 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                   child: Align(
                     alignment: _anchor,
                     child: _measuring
-                        ? IgnorePointer(
-                            child: Opacity(
-                              opacity: 0,
-                              child: _buildMeasuredList(
-                                maxHeight: _measurementLimit,
+                        ? ExcludeFocus(
+                            child: ExcludeSemantics(
+                              child: IgnorePointer(
+                                child: Opacity(
+                                  opacity: 0,
+                                  child: _buildMeasuredList(
+                                    maxHeight: _measurementLimit,
+                                  ),
+                                ),
                               ),
                             ),
                           )
@@ -692,71 +696,77 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
     return IgnorePointer(
       ignoring: !_open,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: _handlePanelPointerDown,
-        onPointerMove: _handlePanelPointerMove,
-        onPointerUp: _handlePanelPointerEnd,
-        onPointerCancel: _handlePanelPointerEnd,
-        child: Opacity(
-          opacity: presence,
-          child: SizedBox(
-            width: width,
-            height: height,
-            child: CLSurface(
-              frosted: true,
-              borderRadius: borderRadius,
-              outlined: true,
-              outlineColor: theme.colors.outlineStrong,
-              shadow: [
-                BoxShadow(
-                  color: Color.fromARGB(
-                    (0x40 * shadowStrength).round(),
-                    0,
-                    0,
-                    0,
-                  ),
-                  blurRadius: 36,
-                  offset: const Offset(0, 14),
-                ),
-              ],
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  IgnorePointer(
-                    child: ColoredBox(
-                      color: Color.fromRGBO(
-                        255,
-                        255,
-                        255,
-                        0.06 * (1 - reveal) * math.sqrt(shadowStrength),
+      child: ExcludeFocus(
+        excluding: !_open,
+        child: ExcludeSemantics(
+          excluding: !_open,
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _handlePanelPointerDown,
+            onPointerMove: _handlePanelPointerMove,
+            onPointerUp: _handlePanelPointerEnd,
+            onPointerCancel: _handlePanelPointerEnd,
+            child: Opacity(
+              opacity: presence,
+              child: SizedBox(
+                width: width,
+                height: height,
+                child: CLSurface(
+                  frosted: true,
+                  borderRadius: borderRadius,
+                  outlined: true,
+                  outlineColor: theme.colors.outlineStrong,
+                  shadow: [
+                    BoxShadow(
+                      color: Color.fromARGB(
+                        (0x40 * shadowStrength).round(),
+                        0,
+                        0,
+                        0,
                       ),
+                      blurRadius: 36,
+                      offset: const Offset(0, 14),
                     ),
-                  ),
-                  IgnorePointer(
-                    child: CustomPaint(
-                      painter: _CLMenuPressGlowPainter(
-                        pointer: _pressPosition,
-                        color: theme.colors.textPrimary,
-                        strength: Curves.easeOutCubic.transform(
-                          _pressGlow.value,
+                  ],
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      IgnorePointer(
+                        child: ColoredBox(
+                          color: Color.fromRGBO(
+                            255,
+                            255,
+                            255,
+                            0.06 * (1 - reveal) * math.sqrt(shadowStrength),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  Opacity(
-                    opacity: opacity.clamp(0.0, 1.0).toDouble(),
-                    child: Flow(
-                      delegate: _CLMenuMorphFlowDelegate(
-                        targetWidth: widget.menuWidth,
-                        maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                        alignment: _anchor,
-                        scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
+                      IgnorePointer(
+                        child: CustomPaint(
+                          painter: _CLMenuPressGlowPainter(
+                            pointer: _pressPosition,
+                            color: theme.colors.textPrimary,
+                            strength: Curves.easeOutCubic.transform(
+                              _pressGlow.value,
+                            ),
+                          ),
+                        ),
                       ),
-                      children: [measuredList],
-                    ),
+                      Opacity(
+                        opacity: opacity.clamp(0.0, 1.0).toDouble(),
+                        child: Flow(
+                          delegate: _CLMenuMorphFlowDelegate(
+                            targetWidth: widget.menuWidth,
+                            maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                            alignment: _anchor,
+                            scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
+                          ),
+                          children: [measuredList],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

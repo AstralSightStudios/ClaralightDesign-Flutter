@@ -1,5 +1,6 @@
 import 'package:claralight_ui/claralight_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -482,6 +483,533 @@ void main() {
     expect(first.top, lessThan(second.top));
   });
 
+  testWidgets('migrates outgoing item and incoming More for exactly 160ms', (
+    tester,
+  ) async {
+    var width = 130.0;
+    late StateSetter update;
+    final items = _items(
+      count: 3,
+      extent: 40,
+      pinnedIds: const {0},
+      priorities: const {1: 0, 2: 2},
+    );
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(width: width, items: items, overflowExtent: 30);
+        },
+      ),
+    );
+    final initialItemCenter = _logicalCenterX(
+      tester,
+      find.byKey(const Key('tool-1')),
+    );
+    final pinnedCenter = _logicalCenterX(
+      tester,
+      find.byKey(const Key('tool-0')),
+    );
+
+    update(() => width = 120);
+    await tester.pump();
+
+    final outgoing = find.byKey(const Key('tool-1'));
+    final more = find.byKey(_moreKey);
+    expect(outgoing, findsOneWidget);
+    expect(more, findsOneWidget);
+    expect(_opacityOf(tester, outgoing), 1);
+    expect(_scaleXOf(tester, outgoing), 1);
+    expect(_opacityOf(tester, more), 0);
+    expect(_logicalCenterX(tester, outgoing), closeTo(initialItemCenter, 0.01));
+
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(_opacityOf(tester, outgoing), inExclusiveRange(0, 1));
+    expect(_scaleXOf(tester, outgoing), inExclusiveRange(0.8, 1));
+    expect(_logicalCenterX(tester, outgoing), greaterThan(initialItemCenter));
+    expect(_opacityOf(tester, more), inExclusiveRange(0, 1));
+    expect(
+      _logicalCenterX(tester, find.byKey(const Key('tool-0'))),
+      pinnedCenter,
+    );
+
+    await tester.pump(const Duration(milliseconds: 79));
+    expect(outgoing, findsOneWidget);
+    expect(_opacityOf(tester, outgoing), greaterThan(0));
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(outgoing, findsNothing);
+    expect(more, findsOneWidget);
+    expect(_opacityOf(tester, more), 1);
+  });
+
+  testWidgets(
+    'restored item emerges from More and retained geometry stays active',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      var width = 120.0;
+      late StateSetter update;
+      final taps = <int, int>{};
+      final items = [
+        for (var id = 0; id < 3; id++)
+          _item(
+            id,
+            extent: 40,
+            retention: id == 0
+                ? CLToolbarItemRetention.pinned
+                : CLToolbarItemRetention.overflowable,
+            priority: id == 1 ? 0 : 2,
+            toolbarBuilder: (_) => Semantics(
+              label: 'Action $id',
+              button: true,
+              child: GestureDetector(
+                key: Key('action-$id'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => taps[id] = (taps[id] ?? 0) + 1,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+      ];
+
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            update = setState;
+            return _host(width: width, items: items, overflowExtent: 30);
+          },
+        ),
+      );
+      final retainedStart = tester.getCenter(find.byKey(const Key('action-2')));
+
+      update(() => width = 130);
+      await tester.pump();
+      expect(find.byKey(const Key('action-1')), findsOneWidget);
+      expect(_opacityOf(tester, find.byKey(const Key('action-1'))), 0);
+      expect(find.bySemanticsLabel('Action 1'), findsNothing);
+      expect(find.bySemanticsLabel('Action 2'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 80));
+      final incoming = find.byKey(const Key('action-1'));
+      final retained = find.byKey(const Key('action-2'));
+      expect(find.byKey(const ValueKey<int>(2)), findsOneWidget);
+      expect(_opacityOf(tester, incoming), inExclusiveRange(0, 1));
+      expect(
+        tester.getCenter(incoming).dx,
+        lessThan(tester.getCenter(find.byKey(_moreKey)).dx),
+      );
+      expect(tester.getCenter(retained).dx, greaterThan(retainedStart.dx));
+      expect(find.bySemanticsLabel('Action 1'), findsOneWidget);
+      expect(find.bySemanticsLabel('Action 2'), findsOneWidget);
+
+      final retainedRect = tester.getRect(retained);
+      final retainedSemanticsRect = _globalSemanticsRect(
+        tester,
+        tester.getSemantics(retained),
+      );
+      expect(
+        retainedSemanticsRect.center.dx,
+        closeTo(retainedRect.center.dx, 0.01),
+      );
+      await tester.tapAt(retainedRect.center);
+      await tester.pump();
+      expect(taps[2], 1);
+
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.pumpAndSettle();
+      expect(find.byKey(_moreKey), findsNothing);
+      expect(find.byKey(const Key('action-1')), findsOneWidget);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets('rapid reversal captures current visuals and caps stale layers', (
+    tester,
+  ) async {
+    var width = 130.0;
+    late StateSetter update;
+    final items = _items(
+      count: 3,
+      extent: 40,
+      pinnedIds: const {0},
+      priorities: const {1: 0, 2: 2},
+    );
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(width: width, items: items, overflowExtent: 30);
+        },
+      ),
+    );
+
+    update(() => width = 120);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    final beforeReverse = _logicalCenterX(
+      tester,
+      find.byKey(const Key('tool-1')),
+    );
+    final opacityBefore = _opacityOf(tester, find.byKey(const Key('tool-1')));
+
+    update(() => width = 130);
+    await tester.pump();
+    expect(
+      _logicalCenterX(tester, find.byKey(const Key('tool-1'))),
+      closeTo(beforeReverse, 0.01),
+    );
+    expect(
+      _opacityOf(tester, find.byKey(const Key('tool-1'))),
+      closeTo(opacityBefore, 0.001),
+    );
+    expect(
+      find.byType(PositionedDirectional).evaluate().length,
+      lessThanOrEqualTo(2),
+    );
+
+    update(() => width = 120);
+    await tester.pump(const Duration(milliseconds: 40));
+    update(() => width = 130);
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(
+      find.byType(PositionedDirectional).evaluate().length,
+      lessThanOrEqualTo(2),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tool-1')), findsOneWidget);
+    expect(find.byKey(const Key('tool-2')), findsOneWidget);
+    expect(find.byKey(_moreKey), findsNothing);
+    expect(find.byType(PositionedDirectional), findsNothing);
+  });
+
+  testWidgets('outgoing visuals are inert and semantics stay singular', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    var width = 130.0;
+    late StateSetter update;
+    var outgoingTaps = 0;
+    final items = [
+      _item(0, extent: 40, retention: CLToolbarItemRetention.pinned),
+      _item(
+        1,
+        extent: 40,
+        priority: 0,
+        toolbarBuilder: (_) => Semantics(
+          label: 'Migrating action',
+          button: true,
+          child: GestureDetector(
+            key: const Key('migrating-action'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => outgoingTaps++,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+      _item(2, extent: 40, priority: 2),
+    ];
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(width: width, items: items, overflowExtent: 30);
+        },
+      ),
+    );
+    update(() => width = 120);
+    await tester.pump();
+
+    for (var frame = 0; frame < 3; frame++) {
+      if (frame > 0) await tester.pump(const Duration(milliseconds: 40));
+      expect(find.bySemanticsLabel('Migrating action'), findsNothing);
+      final outgoing = find.byKey(const Key('migrating-action'));
+      await tester.tapAt(tester.getCenter(outgoing));
+      await tester.pump();
+      expect(outgoingTaps, 0);
+      expect(
+        find.bySemanticsLabel('More'),
+        frame == 0 ? findsNothing : findsOneWidget,
+      );
+    }
+    semantics.dispose();
+  });
+
+  testWidgets('open-menu resize closes and snaps before close animation', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    var width = 120.0;
+    late StateSetter update;
+    final rowFocus = FocusNode();
+    addTearDown(rowFocus.dispose);
+    final items = [
+      _item(0, extent: 40, retention: CLToolbarItemRetention.pinned),
+      _item(
+        1,
+        extent: 40,
+        priority: 0,
+        overflowBuilder: (context, closeMenu) => TextButton(
+          key: const Key('closing-row'),
+          focusNode: rowFocus,
+          onPressed: closeMenu,
+          child: const Text('Closing row'),
+        ),
+      ),
+      _item(2, extent: 40, priority: 2),
+    ];
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(width: width, items: items, overflowExtent: 30);
+        },
+      ),
+    );
+    await _openMenu(tester);
+    expect(rowFocus.hasFocus, isTrue);
+
+    update(() => width = 130);
+    await tester.pump();
+
+    expect(find.byKey(const Key('tool-1')), findsOneWidget);
+    expect(find.byKey(_moreKey), findsNothing);
+    expect(find.byType(PositionedDirectional), findsNothing);
+    expect(find.bySemanticsLabel('Closing row'), findsNothing);
+    expect(rowFocus.hasFocus, isFalse);
+    semantics.dispose();
+  });
+
+  testWidgets('reduced motion and scroll fallback snap immediately', (
+    tester,
+  ) async {
+    var width = 160.0;
+    late StateSetter update;
+    var reduced = true;
+    final items = [
+      _item(0, extent: 50, retention: CLToolbarItemRetention.pinned),
+      _item(1, extent: 50, retention: CLToolbarItemRetention.pinned),
+      _item(2, extent: 50),
+    ];
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(width: width, items: items, disableAnimations: reduced);
+        },
+      ),
+    );
+    update(() => width = 150);
+    await tester.pump();
+    expect(find.byKey(const Key('tool-2')), findsNothing);
+    expect(find.byType(PositionedDirectional), findsNothing);
+
+    update(() {
+      reduced = false;
+      width = 110;
+    });
+    await tester.pump();
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.byType(PositionedDirectional), findsNothing);
+    expect(find.byKey(const Key('tool-0')), findsOneWidget);
+    expect(find.byKey(const Key('tool-1')), findsOneWidget);
+  });
+
+  testWidgets('RTL and custom shell use declared logical geometry', (
+    tester,
+  ) async {
+    var width = 144.0;
+    late StateSetter update;
+    final items = _items(
+      count: 3,
+      extent: 40,
+      pinnedIds: const {0},
+      priorities: const {1: 0, 2: 2},
+    );
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(
+            width: width,
+            items: items,
+            overflowExtent: 30,
+            spacing: 5,
+            horizontalPadding: 7,
+            textDirection: TextDirection.rtl,
+            toolbarBuilder: (context, children) => SizedBox(
+              height: 44,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var index = 0; index < children.length; index++) ...[
+                      if (index > 0) const SizedBox(width: 5),
+                      children[index],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    final oldCenter = _rtlLogicalCenterX(
+      tester,
+      find.byKey(const Key('tool-1')),
+    );
+
+    update(() => width = 134);
+    await tester.pump();
+    expect(
+      _rtlLogicalCenterX(tester, find.byKey(const Key('tool-1'))),
+      closeTo(oldCenter, 0.01),
+    );
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(
+      _rtlLogicalCenterX(tester, find.byKey(const Key('tool-1'))),
+      greaterThan(oldCenter),
+    );
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.byKey(const Key('tool-1')), findsNothing);
+  });
+
+  testWidgets('target reports and order update before visual completion', (
+    tester,
+  ) async {
+    var width = 130.0;
+    late StateSetter update;
+    final reports = <Set<int>>[];
+    final items = _items(
+      count: 3,
+      extent: 40,
+      pinnedIds: const {0},
+      priorities: const {1: 0, 2: 2},
+    );
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(
+            width: width,
+            items: items,
+            overflowExtent: 30,
+            onOverflowChanged: reports.add,
+          );
+        },
+      ),
+    );
+    expect(reports, [<int>{}]);
+
+    update(() => width = 120);
+    await tester.pump();
+    expect(reports, [
+      <int>{},
+      <int>{1},
+    ]);
+    expect(find.byKey(const Key('tool-1')), findsOneWidget);
+    expect(
+      tester.getCenter(find.byKey(const Key('tool-0'))).dx,
+      lessThan(tester.getCenter(find.byKey(const Key('tool-2'))).dx),
+    );
+    await tester.pump(const Duration(milliseconds: 160));
+    expect(
+      tester.getCenter(find.byKey(const Key('tool-2'))).dx,
+      lessThan(tester.getCenter(find.byKey(_moreKey)).dx),
+    );
+  });
+
+  testWidgets('configuration changes and unchanged membership snap', (
+    tester,
+  ) async {
+    var width = 130.0;
+    var extent = 40.0;
+    late StateSetter update;
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(
+            width: width,
+            items: _items(
+              count: 3,
+              extent: extent,
+              pinnedIds: const {0},
+              priorities: const {1: 0, 2: 2},
+            ),
+            overflowExtent: 30,
+          );
+        },
+      ),
+    );
+
+    update(() => extent = 45);
+    await tester.pump();
+    expect(find.byKey(const Key('tool-1')), findsNothing);
+    expect(find.byKey(_moreKey), findsOneWidget);
+    expect(find.byType(PositionedDirectional), findsNothing);
+
+    final moreCenter = _logicalCenterX(tester, find.byKey(_moreKey));
+    update(() => width = 131);
+    await tester.pump();
+    expect(find.byType(PositionedDirectional), findsNothing);
+    expect(_logicalCenterX(tester, find.byKey(_moreKey)), moreCenter);
+  });
+
+  testWidgets('disabled outgoing More is visual-only with a null toggle', (
+    tester,
+  ) async {
+    var width = 120.0;
+    late StateSetter update;
+    final toggles = <VoidCallback?>[];
+    final hiddenSets = <Set<int>>[];
+    final items = _items(
+      count: 3,
+      extent: 40,
+      pinnedIds: const {0},
+      priorities: const {1: 0, 2: 2},
+    );
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(
+            width: width,
+            items: items,
+            overflowExtent: 30,
+            overflowEnabled: false,
+            overflowTriggerBuilder: (context, hiddenIds, toggle) {
+              toggles.add(toggle);
+              hiddenSets.add(hiddenIds);
+              return _trigger(context, hiddenIds, toggle);
+            },
+          );
+        },
+      ),
+    );
+
+    update(() => width = 130);
+    await tester.pump();
+    expect(find.byType(CLMenu), findsNothing);
+    expect(find.byKey(_moreKey), findsOneWidget);
+    expect(toggles, everyElement(isNull));
+    expect(hiddenSets, everyElement(<int>{1}));
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.byType(CLMenu), findsNothing);
+    expect(toggles, everyElement(isNull));
+  });
+
   test('duplicate IDs, invalid extents, and missing builders assert', () {
     final duplicate = _item(1, retention: CLToolbarItemRetention.pinned);
     expect(
@@ -535,27 +1063,91 @@ Widget _host({
   double overflowExtent = 30,
   CLOverflowToolbarTriggerBuilder<int> overflowTriggerBuilder = _trigger,
   bool overflowEnabled = true,
+  bool disableAnimations = false,
+  double spacing = 2,
+  double horizontalPadding = 3,
+  CLOverflowToolbarBuilder? toolbarBuilder,
   ValueChanged<Set<int>>? onOverflowChanged,
 }) {
   return MaterialApp(
-    home: Directionality(
-      textDirection: textDirection,
-      child: Scaffold(
-        body: Center(
-          child: SizedBox(
-            width: width,
-            child: CLOverflowToolbar<int>(
-              items: items,
-              overflowTriggerBuilder: overflowTriggerBuilder,
-              overflowExtent: overflowExtent,
-              overflowEnabled: overflowEnabled,
-              onOverflowChanged: onOverflowChanged,
+    home: Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(disableAnimations: disableAnimations),
+        child: Directionality(
+          textDirection: textDirection,
+          child: Scaffold(
+            body: Center(
+              child: SizedBox(
+                key: const Key('overflow-host'),
+                width: width,
+                child: CLOverflowToolbar<int>(
+                  items: items,
+                  overflowTriggerBuilder: overflowTriggerBuilder,
+                  toolbarBuilder: toolbarBuilder,
+                  spacing: spacing,
+                  horizontalPadding: horizontalPadding,
+                  overflowExtent: overflowExtent,
+                  overflowEnabled: overflowEnabled,
+                  onOverflowChanged: onOverflowChanged,
+                ),
+              ),
             ),
           ),
         ),
       ),
     ),
   );
+}
+
+Rect _globalSemanticsRect(WidgetTester tester, SemanticsNode node) {
+  var globalTransform = node.transform ?? Matrix4.identity();
+  for (
+    SemanticsNode? parent = node.parent;
+    parent != null;
+    parent = parent.parent
+  ) {
+    if (parent.transform != null) {
+      globalTransform = parent.transform!.multiplied(globalTransform);
+    }
+  }
+  final physicalRect = MatrixUtils.transformRect(globalTransform, node.rect);
+  final pixelRatio = tester.view.devicePixelRatio;
+  return Rect.fromLTRB(
+    physicalRect.left / pixelRatio,
+    physicalRect.top / pixelRatio,
+    physicalRect.right / pixelRatio,
+    physicalRect.bottom / pixelRatio,
+  );
+}
+
+double _logicalCenterX(WidgetTester tester, Finder child) {
+  return tester.getCenter(child).dx -
+      tester.getTopLeft(find.byKey(const Key('overflow-host'))).dx;
+}
+
+double _rtlLogicalCenterX(WidgetTester tester, Finder child) {
+  return tester.getTopRight(find.byKey(const Key('overflow-host'))).dx -
+      tester.getCenter(child).dx;
+}
+
+double _opacityOf(WidgetTester tester, Finder child) {
+  final opacities = tester
+      .widgetList<Opacity>(
+        find.ancestor(of: child, matching: find.byType(Opacity)),
+      )
+      .map((opacity) => opacity.opacity);
+  return opacities.reduce((first, second) => first < second ? first : second);
+}
+
+double _scaleXOf(WidgetTester tester, Finder child) {
+  final transforms = tester.widgetList<Transform>(
+    find.ancestor(of: child, matching: find.byType(Transform)),
+  );
+  return transforms
+      .map((transform) => transform.transform.storage[0])
+      .firstWhere((scale) => scale != 1, orElse: () => 1);
 }
 
 Widget _trigger(

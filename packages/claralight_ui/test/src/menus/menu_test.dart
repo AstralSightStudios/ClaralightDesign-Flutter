@@ -584,6 +584,65 @@ void main() {
     expect(layoutCount, visibleLayoutCount);
   });
 
+  testWidgets('measurement and logically closed panels are immediately inert', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final controller = CLMenuController();
+    final rowFocus = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(rowFocus.dispose);
+    await tester.pumpWidget(
+      buildMenu(
+        controller: controller,
+        children: [
+          Semantics(
+            label: 'Guarded row',
+            button: true,
+            child: TextButton(
+              key: _rowKey,
+              focusNode: rowFocus,
+              onPressed: () {},
+              child: const Text('Guarded row'),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    controller.open();
+    await tester.pump();
+    expect(find.byType(CLList), findsOneWidget);
+    expect(find.bySemanticsLabel('Guarded row'), findsNothing);
+    expect(rowFocus.hasFocus, isFalse);
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 24));
+    expect(find.bySemanticsLabel('Guarded row'), findsWidgets);
+    expect(rowFocus.hasFocus, isTrue);
+
+    controller.close();
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byType(CLList), findsOneWidget);
+    expect(
+      tester
+          .widgetList<ExcludeSemantics>(
+            find.ancestor(
+              of: find.byKey(_rowKey),
+              matching: find.byType(ExcludeSemantics),
+            ),
+          )
+          .map((widget) => widget.excluding),
+      contains(true),
+    );
+    expect(_semanticsTreeHasLabel(tester, 'Guarded row'), isFalse);
+    expect(rowFocus.hasFocus, isFalse);
+
+    await tester.pumpAndSettle();
+    expect(find.byType(CLList), findsNothing);
+    semantics.dispose();
+  });
+
   testWidgets('anchor keyboard activation opens and Escape closes', (
     tester,
   ) async {
@@ -627,6 +686,24 @@ void main() {
     expect(find.byType(CLList), findsNothing);
     expect(FocusManager.instance.primaryFocus, same(anchorFocus));
   });
+}
+
+bool _semanticsTreeHasLabel(WidgetTester tester, String label) {
+  final root =
+      tester.binding.rootPipelineOwner.semanticsOwner?.rootSemanticsNode;
+  if (root == null) return false;
+  var found = false;
+
+  void visit(SemanticsNode node) {
+    if (node.getSemanticsData().label == label) found = true;
+    node.visitChildren((child) {
+      visit(child);
+      return !found;
+    });
+  }
+
+  visit(root);
+  return found;
 }
 
 class _LayoutProbe extends SingleChildRenderObjectWidget {

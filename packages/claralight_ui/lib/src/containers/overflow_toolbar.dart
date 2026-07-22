@@ -49,6 +49,19 @@ class _CLOverflowToolbarTriggerKey extends LocalKey {
   const _CLOverflowToolbarTriggerKey();
 }
 
+typedef _CLOverflowToolbarShellBuilder<T> =
+    Widget Function(
+      BuildContext context,
+      List<Widget> children,
+      _CLOverflowToolbarAllocation<T> allocation,
+    );
+
+typedef _CLOverflowActiveTriggerBuilder<T> =
+    Widget Function(
+      BuildContext context,
+      _CLOverflowToolbarAllocation<T> allocation,
+    );
+
 /// A fixed-width item understood by [CLOverflowToolbar].
 ///
 /// [extent] is the item's main-axis width, not a value measured from the
@@ -186,7 +199,8 @@ class CLOverflowToolbar<T> extends StatefulWidget {
 }
 
 class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
-  final _menuController = CLMenuController();
+  CLMenuController _menuController = CLMenuController();
+  final List<CLMenuController> _retiredMenuControllers = [];
   _CLOverflowToolbarAllocation<T>? _lastAllocation;
   Set<T>? _lastReportedHiddenIds;
   Set<T>? _pendingHiddenIds;
@@ -208,6 +222,11 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
   void dispose() {
     _menuController.close();
     _menuController.dispose();
+    for (final controller in _retiredMenuControllers) {
+      controller.close();
+      controller.dispose();
+    }
+    _retiredMenuControllers.clear();
     super.dispose();
   }
 
@@ -215,54 +234,53 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final menuWasOpen = _menuController.isOpen;
         final allocation = _allocate(constraints.maxWidth);
         _recordAllocation(allocation);
 
-        final toolbarChildren = <Widget>[];
-        for (final index in allocation.visibleIndices) {
-          final item = widget.items[index];
-          toolbarChildren.add(
-            KeyedSubtree(
-              key: ValueKey<T>(item.id),
-              child: SizedBox(
-                width: item.extent,
-                child: item.toolbarBuilder(context),
-              ),
-            ),
-          );
-        }
-
-        if (allocation.hasOverflow) {
-          toolbarChildren.add(
-            KeyedSubtree(
-              key: const _CLOverflowToolbarTriggerKey(),
-              child: _buildOverflowMenu(context, allocation),
-            ),
-          );
-        }
-
-        final toolbar =
-            widget.toolbarBuilder?.call(
-              context,
-              List<Widget>.unmodifiable(toolbarChildren),
-            ) ??
-            CLToolbar(
-              spacing: widget.spacing,
-              padding: widget.horizontalPadding,
-              children: toolbarChildren,
-            );
-
-        if (!allocation.useHorizontalScroll) return toolbar;
-
-        // Pinned items must remain present even when their minimum allocation
-        // is wider than the viewport. Scrolling the deterministic toolbar
-        // shell is explicit rather than hiding a pinned child or overflowing
-        // the Row.
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(width: allocation.toolbarWidth, child: toolbar),
+        return _CLOverflowMigrationSurface<T>(
+          allocation: allocation,
+          items: widget.items,
+          textDirection: Directionality.of(context),
+          spacing: widget.spacing,
+          horizontalPadding: widget.horizontalPadding,
+          overflowExtent: widget.overflowExtent,
+          overflowEnabled: widget.overflowEnabled,
+          menuWidth: widget.menuWidth,
+          menuPadding: widget.menuPadding,
+          usesCustomShell: widget.toolbarBuilder != null,
+          animate: !MediaQuery.disableAnimationsOf(context) && !menuWasOpen,
+          shellBuilder: _buildToolbarShell,
+          activeTriggerBuilder: _buildOverflowMenu,
+          visualTriggerBuilder: widget.overflowTriggerBuilder,
         );
       },
+    );
+  }
+
+  Widget _buildToolbarShell(
+    BuildContext context,
+    List<Widget> toolbarChildren,
+    _CLOverflowToolbarAllocation<T> allocation,
+  ) {
+    final toolbar =
+        widget.toolbarBuilder?.call(
+          context,
+          List<Widget>.unmodifiable(toolbarChildren),
+        ) ??
+        CLToolbar(
+          spacing: widget.spacing,
+          padding: widget.horizontalPadding,
+          children: toolbarChildren,
+        );
+
+    if (!allocation.useHorizontalScroll) return toolbar;
+
+    // Pinned items must remain present even when their minimum allocation is
+    // wider than the viewport.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(width: allocation.toolbarWidth, child: toolbar),
     );
   }
 
@@ -454,12 +472,24 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
     final previous = _lastAllocation;
     _lastAllocation = allocation;
 
-    if (previous != null &&
-        !previous.isEquivalentTo(allocation) &&
-        _menuController.isOpen) {
-      // Closing before the new menu children are mounted prevents CLMenu from
-      // restoring focus into an allocation that no longer exists.
-      _menuController.close();
+    if (previous != null && !previous.isEquivalentTo(allocation)) {
+      if (_menuController.isOpen) {
+        // Closing before the new menu children are mounted prevents CLMenu
+        // from restoring focus into an allocation that no longer exists.
+        _menuController.close();
+      }
+      if (previous.hasOverflow &&
+          (!allocation.hasOverflow ||
+              previous.useHorizontalScroll != allocation.useHorizontalScroll)) {
+        final retiredController = _menuController;
+        _retiredMenuControllers.add(retiredController);
+        _menuController = CLMenuController();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_retiredMenuControllers.remove(retiredController)) {
+            retiredController.dispose();
+          }
+        });
+      }
     }
 
     final callback = widget.onOverflowChanged;
@@ -481,6 +511,448 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
     });
   }
 }
+
+class _CLOverflowMigrationSurface<T> extends StatefulWidget {
+  const _CLOverflowMigrationSurface({
+    required this.allocation,
+    required this.items,
+    required this.textDirection,
+    required this.spacing,
+    required this.horizontalPadding,
+    required this.overflowExtent,
+    required this.overflowEnabled,
+    required this.menuWidth,
+    required this.menuPadding,
+    required this.usesCustomShell,
+    required this.animate,
+    required this.shellBuilder,
+    required this.activeTriggerBuilder,
+    required this.visualTriggerBuilder,
+  });
+
+  final _CLOverflowToolbarAllocation<T> allocation;
+  final List<CLOverflowToolbarItem<T>> items;
+  final TextDirection textDirection;
+  final double spacing;
+  final double horizontalPadding;
+  final double overflowExtent;
+  final bool overflowEnabled;
+  final double menuWidth;
+  final EdgeInsetsGeometry menuPadding;
+  final bool usesCustomShell;
+  final bool animate;
+  final _CLOverflowToolbarShellBuilder<T> shellBuilder;
+  final _CLOverflowActiveTriggerBuilder<T> activeTriggerBuilder;
+  final CLOverflowToolbarTriggerBuilder<T> visualTriggerBuilder;
+
+  @override
+  State<_CLOverflowMigrationSurface<T>> createState() =>
+      _CLOverflowMigrationSurfaceState<T>();
+}
+
+class _CLOverflowMigrationSurfaceState<T>
+    extends State<_CLOverflowMigrationSurface<T>>
+    with SingleTickerProviderStateMixin {
+  static const _migrationDuration = Duration(milliseconds: 160);
+  static const _migrationCurve = Cubic(0.23, 1, 0.32, 1);
+  static const _collapsedScaleX = 0.8;
+
+  late final AnimationController _migration;
+  Map<LocalKey, _CLOverflowVisualState> _from = const {};
+  Map<LocalKey, _CLOverflowVisualState> _to = const {};
+  _CLOverflowToolbarAllocation<T>? _settledAllocation;
+  Set<T> _outgoingMoreHiddenIds = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _migration = AnimationController(
+      vsync: this,
+      duration: _migrationDuration,
+      value: 1,
+    )..addStatusListener(_handleMigrationStatus);
+    _commitImmediately(widget.allocation);
+  }
+
+  @override
+  void didUpdateWidget(_CLOverflowMigrationSurface<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (!widget.animate ||
+        !_sameVisualConfiguration(oldWidget, widget) ||
+        oldWidget.allocation.useHorizontalScroll ||
+        widget.allocation.useHorizontalScroll) {
+      _commitImmediately(widget.allocation);
+      return;
+    }
+
+    if (_sameVisualDistribution(oldWidget.allocation, widget.allocation)) {
+      if (_settledAllocation != null) {
+        _settledAllocation = widget.allocation;
+      }
+      return;
+    }
+
+    _retarget(oldWidget.allocation, widget.allocation);
+  }
+
+  void _commitImmediately(_CLOverflowToolbarAllocation<T> allocation) {
+    _migration.stop();
+    final visuals = _targetVisuals(allocation);
+    _from = visuals;
+    _to = visuals;
+    _settledAllocation = allocation;
+    _outgoingMoreHiddenIds = const {};
+    _migration.value = 1;
+  }
+
+  Map<LocalKey, _CLOverflowVisualState> _targetVisuals(
+    _CLOverflowToolbarAllocation<T> allocation,
+  ) {
+    final starts = _logicalStarts(allocation);
+    return <LocalKey, _CLOverflowVisualState>{
+      for (final entry in starts.entries)
+        entry.key: _CLOverflowVisualState(
+          start: entry.value,
+          opacity: 1,
+          scaleX: 1,
+        ),
+    };
+  }
+
+  Map<LocalKey, _CLOverflowVisualState> _currentVisuals() {
+    return <LocalKey, _CLOverflowVisualState>{
+      for (final key in {..._from.keys, ..._to.keys})
+        key: _CLOverflowVisualState.lerp(
+          _from[key]!,
+          _to[key]!,
+          _migration.value,
+        ),
+    };
+  }
+
+  void _retarget(
+    _CLOverflowToolbarAllocation<T> currentAllocation,
+    _CLOverflowToolbarAllocation<T> targetAllocation,
+  ) {
+    final allowedKeys = <LocalKey>{
+      ..._allocationKeys(currentAllocation),
+      ..._allocationKeys(targetAllocation),
+    };
+    final current = _currentVisuals()
+      ..removeWhere((key, _) => !allowedKeys.contains(key));
+    final currentStarts = _logicalStarts(currentAllocation);
+    final targetStarts = _logicalStarts(targetAllocation);
+    final nextFrom = <LocalKey, _CLOverflowVisualState>{};
+    final nextTo = <LocalKey, _CLOverflowVisualState>{};
+    final oldMoreStart = currentStarts[const _CLOverflowToolbarTriggerKey()];
+    final newMoreStart = targetStarts[const _CLOverflowToolbarTriggerKey()];
+
+    for (final entry in targetStarts.entries) {
+      final key = entry.key;
+      final currentVisual = current[key];
+      nextFrom[key] =
+          currentVisual ??
+          _CLOverflowVisualState(
+            start: key is _CLOverflowToolbarTriggerKey
+                ? entry.value
+                : oldMoreStart ?? entry.value,
+            opacity: 0,
+            scaleX: _collapsedScaleX,
+          );
+      nextTo[key] = _CLOverflowVisualState(
+        start: entry.value,
+        opacity: 1,
+        scaleX: 1,
+      );
+    }
+
+    for (final entry in current.entries) {
+      if (targetStarts.containsKey(entry.key)) continue;
+      nextFrom[entry.key] = entry.value;
+      nextTo[entry.key] = _CLOverflowVisualState(
+        start: entry.key is _CLOverflowToolbarTriggerKey
+            ? entry.value.start
+            : newMoreStart ?? entry.value.start,
+        opacity: 0,
+        scaleX: _collapsedScaleX,
+      );
+    }
+
+    _migration.stop();
+    _from = Map<LocalKey, _CLOverflowVisualState>.unmodifiable(nextFrom);
+    _to = Map<LocalKey, _CLOverflowVisualState>.unmodifiable(nextTo);
+    _settledAllocation = null;
+    _outgoingMoreHiddenIds = currentAllocation.hasOverflow
+        ? currentAllocation.hiddenIds
+        : const {};
+    _migration.value = 0;
+    _migration.animateTo(
+      1,
+      duration: _migrationDuration,
+      curve: _migrationCurve,
+    );
+  }
+
+  Set<LocalKey> _allocationKeys(_CLOverflowToolbarAllocation<T> allocation) {
+    return <LocalKey>{
+      for (final index in allocation.visibleIndices)
+        ValueKey<T>(widget.items[index].id),
+      if (allocation.hasOverflow) const _CLOverflowToolbarTriggerKey(),
+    };
+  }
+
+  Map<LocalKey, double> _logicalStarts(
+    _CLOverflowToolbarAllocation<T> allocation,
+  ) {
+    final starts = <LocalKey, double>{};
+    var start = widget.horizontalPadding;
+    for (final index in allocation.visibleIndices) {
+      starts[ValueKey<T>(widget.items[index].id)] = start;
+      start += widget.items[index].extent + widget.spacing;
+    }
+    if (allocation.hasOverflow) {
+      starts[const _CLOverflowToolbarTriggerKey()] = start;
+    }
+    return starts;
+  }
+
+  void _handleMigrationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && _settledAllocation == null) {
+      _commitImmediately(widget.allocation);
+    }
+  }
+
+  @override
+  void dispose() {
+    _migration
+      ..removeStatusListener(_handleMigrationStatus)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _migration,
+      builder: (context, _) {
+        final visuals = <LocalKey, _CLOverflowVisualState>{
+          for (final key in {..._from.keys, ..._to.keys})
+            key: _CLOverflowVisualState.lerp(
+              _from[key]!,
+              _to[key]!,
+              _migration.value,
+            ),
+        };
+        return _buildMigrationStack(context, visuals);
+      },
+    );
+  }
+
+  Widget _buildMigrationStack(
+    BuildContext context,
+    Map<LocalKey, _CLOverflowVisualState> visuals,
+  ) {
+    final targetStarts = _logicalStarts(widget.allocation);
+    final toolbarChildren = <Widget>[];
+    for (final index in widget.allocation.visibleIndices) {
+      final item = widget.items[index];
+      final key = ValueKey<T>(item.id);
+      toolbarChildren.add(
+        KeyedSubtree(
+          key: key,
+          child: SizedBox(
+            width: item.extent,
+            child: _buildActiveVisual(
+              visual: visuals[key]!,
+              targetStart: targetStarts[key]!,
+              child: item.toolbarBuilder(context),
+            ),
+          ),
+        ),
+      );
+    }
+    if (widget.allocation.hasOverflow) {
+      const key = _CLOverflowToolbarTriggerKey();
+      toolbarChildren.add(
+        KeyedSubtree(
+          key: key,
+          child: _buildActiveVisual(
+            visual: visuals[key]!,
+            targetStart: targetStarts[key]!,
+            child: widget.activeTriggerBuilder(context, widget.allocation),
+          ),
+        ),
+      );
+    }
+
+    final activeToolbar = widget.shellBuilder(
+      context,
+      toolbarChildren,
+      widget.allocation,
+    );
+    final outgoing = <Widget>[];
+    for (final entry in visuals.entries) {
+      if (targetStarts.containsKey(entry.key) || _migration.value >= 1) {
+        continue;
+      }
+      outgoing.add(_buildOutgoingVisual(context, entry.key, entry.value));
+    }
+    return ClipRect(child: Stack(children: [activeToolbar, ...outgoing]));
+  }
+
+  Widget _buildActiveVisual({
+    required _CLOverflowVisualState visual,
+    required double targetStart,
+    required Widget child,
+  }) {
+    final physicalStartDelta =
+        (visual.start - targetStart) *
+        (widget.textDirection == TextDirection.rtl ? -1 : 1);
+    final inert = visual.opacity <= 0.001;
+    return IgnorePointer(
+      ignoring: inert,
+      child: ExcludeFocus(
+        excluding: inert,
+        child: ExcludeSemantics(
+          excluding: inert,
+          child: Opacity(
+            opacity: visual.opacity.clamp(0.0, 1.0),
+            child: Transform.translate(
+              offset: Offset(physicalStartDelta, 0),
+              transformHitTests: true,
+              child: Transform(
+                alignment: AlignmentDirectional.center,
+                transform: Matrix4.diagonal3Values(visual.scaleX, 1, 1),
+                transformHitTests: true,
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOutgoingVisual(
+    BuildContext context,
+    LocalKey key,
+    _CLOverflowVisualState visual,
+  ) {
+    final itemIndex = _itemIndexForKey(key);
+    final extent = itemIndex == null
+        ? widget.overflowExtent
+        : widget.items[itemIndex].extent;
+    final representation = itemIndex == null
+        ? SizedBox(
+            width: widget.overflowExtent,
+            child: Align(
+              alignment: Alignment.center,
+              child: widget.visualTriggerBuilder(
+                context,
+                _outgoingMoreHiddenIds,
+                widget.overflowEnabled ? _noop : null,
+              ),
+            ),
+          )
+        : widget.items[itemIndex].toolbarBuilder(context);
+
+    return PositionedDirectional(
+      key: key,
+      start: visual.start,
+      width: extent,
+      top: 0,
+      bottom: 0,
+      child: ExcludeFocus(
+        child: IgnorePointer(
+          child: ExcludeSemantics(
+            child: Opacity(
+              opacity: visual.opacity.clamp(0.0, 1.0),
+              child: Transform(
+                alignment: AlignmentDirectional.center,
+                transform: Matrix4.diagonal3Values(visual.scaleX, 1, 1),
+                transformHitTests: true,
+                child: representation,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  int? _itemIndexForKey(LocalKey key) {
+    for (var index = 0; index < widget.items.length; index++) {
+      if (key == ValueKey<T>(widget.items[index].id)) return index;
+    }
+    return null;
+  }
+}
+
+class _CLOverflowVisualState {
+  const _CLOverflowVisualState({
+    required this.start,
+    required this.opacity,
+    required this.scaleX,
+  });
+
+  final double start;
+  final double opacity;
+  final double scaleX;
+
+  static _CLOverflowVisualState lerp(
+    _CLOverflowVisualState from,
+    _CLOverflowVisualState to,
+    double t,
+  ) {
+    return _CLOverflowVisualState(
+      start: from.start + (to.start - from.start) * t,
+      opacity: from.opacity + (to.opacity - from.opacity) * t,
+      scaleX: from.scaleX + (to.scaleX - from.scaleX) * t,
+    );
+  }
+}
+
+bool _sameVisualConfiguration<T>(
+  _CLOverflowMigrationSurface<T> first,
+  _CLOverflowMigrationSurface<T> second,
+) {
+  if (first.textDirection != second.textDirection ||
+      first.spacing != second.spacing ||
+      first.horizontalPadding != second.horizontalPadding ||
+      first.overflowExtent != second.overflowExtent ||
+      first.overflowEnabled != second.overflowEnabled ||
+      first.menuWidth != second.menuWidth ||
+      first.menuPadding != second.menuPadding ||
+      first.usesCustomShell != second.usesCustomShell ||
+      first.items.length != second.items.length) {
+    return false;
+  }
+  for (var index = 0; index < first.items.length; index++) {
+    final firstItem = first.items[index];
+    final secondItem = second.items[index];
+    if (firstItem.id != secondItem.id ||
+        firstItem.extent != secondItem.extent ||
+        firstItem.overflowPriority != secondItem.overflowPriority ||
+        firstItem.retention != secondItem.retention) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _sameVisualDistribution<T>(
+  _CLOverflowToolbarAllocation<T> first,
+  _CLOverflowToolbarAllocation<T> second,
+) {
+  return _sameList(first.visibleIndices, second.visibleIndices) &&
+      _sameList(first.hiddenIndices, second.hiddenIndices) &&
+      _sameList(first.itemIds, second.itemIds) &&
+      first.hasOverflow == second.hasOverflow &&
+      first.useHorizontalScroll == second.useHorizontalScroll;
+}
+
+void _noop() {}
 
 class _CLOverflowToolbarAllocation<T> {
   const _CLOverflowToolbarAllocation({
