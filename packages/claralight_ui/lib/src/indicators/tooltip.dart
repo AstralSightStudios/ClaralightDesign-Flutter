@@ -8,6 +8,33 @@ import '../theme/theme.dart';
 
 export '../overlays/anchored_overlay.dart' show CLPopoverPosition;
 
+class _TooltipGracePeriod {
+  static const duration = Duration(milliseconds: 500);
+
+  Timer? _cooldown;
+  bool _active = false;
+
+  bool get isActive => _active;
+
+  void start() {
+    _cooldown?.cancel();
+    _active = true;
+    _cooldown = Timer(duration, () {
+      _active = false;
+      _cooldown = null;
+    });
+  }
+}
+
+final _tooltipGracePeriods = Expando<_TooltipGracePeriod>(
+  'CLTooltip grace periods',
+);
+
+_TooltipGracePeriod _gracePeriodFor(BuildContext context) {
+  final overlay = Overlay.of(context);
+  return _tooltipGracePeriods[overlay] ??= _TooltipGracePeriod();
+}
+
 /// A ClaraLight tooltip.
 ///
 /// Wrap any widget; hovering (desktop) or long-pressing (touch) reveals a
@@ -50,6 +77,7 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
   late final AnimationController _reveal;
   late final AnimationController _spring;
   Timer? _dwell;
+  bool _shownFromHover = false;
 
   @override
   void initState() {
@@ -77,7 +105,15 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
 
   void _scheduleShow() {
     _dwell?.cancel();
-    _dwell = Timer(widget.delay, _show);
+    final grace = _gracePeriodFor(context);
+    final delay = grace.isActive ? Duration.zero : widget.delay;
+    _dwell = Timer(delay, _showFromHover);
+  }
+
+  void _showFromHover() {
+    if (!mounted) return;
+    _shownFromHover = true;
+    _show();
   }
 
   void _show() {
@@ -116,6 +152,29 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
     );
   }
 
+  void _handleHoverExit() {
+    final shouldStartGrace =
+        _shownFromHover &&
+        (_portal.isShowing || _reveal.isAnimating || _reveal.value > 0);
+    _shownFromHover = false;
+    _hide();
+    if (shouldStartGrace) _gracePeriodFor(context).start();
+  }
+
+  void _handleLongPress() {
+    _dwell?.cancel();
+    _dwell = null;
+    _shownFromHover = false;
+    _show();
+  }
+
+  void _handleLongPressEnd(LongPressEndDetails details) {
+    _dwell?.cancel();
+    _dwell = null;
+    _shownFromHover = false;
+    _hide();
+  }
+
   @override
   Widget build(BuildContext context) {
     return OverlayPortal(
@@ -125,10 +184,10 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
         key: _anchorKey,
         child: MouseRegion(
           onEnter: (_) => _scheduleShow(),
-          onExit: (_) => _hide(),
+          onExit: (_) => _handleHoverExit(),
           child: GestureDetector(
-            onLongPress: widget.enableLongPress ? _show : null,
-            onLongPressEnd: widget.enableLongPress ? (_) => _hide() : null,
+            onLongPress: widget.enableLongPress ? _handleLongPress : null,
+            onLongPressEnd: widget.enableLongPress ? _handleLongPressEnd : null,
             child: widget.child,
           ),
         ),
