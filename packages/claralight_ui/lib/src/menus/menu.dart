@@ -114,26 +114,18 @@ class CLMenu extends StatefulWidget {
 }
 
 class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
-  static const _openSpringW = SpringDescription(
+  static const _openTravelSpring = SpringDescription(
     mass: 1,
     stiffness: 700,
-    damping: 34,
+    damping: 30,
   );
-  static const _openSpringH = SpringDescription(
+  static const _openMorphDuration = Duration(milliseconds: 240);
+  static const _closeTravelSpring = SpringDescription(
     mass: 1,
-    stiffness: 380,
-    damping: 26,
+    stiffness: 520,
+    damping: 28,
   );
-  static const _closeSpringW = SpringDescription(
-    mass: 1,
-    stiffness: 380,
-    damping: 36,
-  );
-  static const _closeSpringH = SpringDescription(
-    mass: 1,
-    stiffness: 440,
-    damping: 38,
-  );
+  static const _closeMorphDuration = Duration(milliseconds: 160);
   final _link = LayerLink();
   final _anchorKey = GlobalKey();
   final _listKey = GlobalKey();
@@ -145,8 +137,8 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   );
 
   late final CLMenuController _internalController;
-  late final AnimationController _morphW;
-  late final AnimationController _morphH;
+  late final AnimationController _travel;
+  late final AnimationController _morph;
   late final AnimationController _content;
   late final AnimationController _resize;
   late final AnimationController _pressGlow;
@@ -177,14 +169,35 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     Curves.easeOutQuart.transform(_resize.value),
   )!;
 
+  double get _travelUnit => _travel.value.clamp(0.0, 1.0).toDouble();
+
+  double get _morphProgress => _morph.value.clamp(0.0, 1.0).toDouble();
+
+  double _springVelocity(AnimationController controller) =>
+      controller.velocity.clamp(-3.0, 3.0).toDouble();
+
+  Offset _travelCenter(Offset start, Offset end) =>
+      Offset.lerp(start, end, _travel.value)!;
+
+  Offset get _panelTravelDelta => Offset(
+    -_anchor.x * (widget.menuWidth - _collapsedWidth) / 2,
+    -_anchor.y * (_displayHeight - _collapsedHeight) / 2,
+  );
+
+  Offset get _triggerRecoilOffset => _travel.value < 0
+      ? _travelCenter(Offset.zero, _panelTravelDelta)
+      : Offset.zero;
+
   @override
   void initState() {
     super.initState();
     _internalController = CLMenuController();
-    _morphW = AnimationController.unbounded(vsync: this)
-      ..addListener(_handleMorphTick);
-    _morphH = AnimationController.unbounded(vsync: this)
-      ..addListener(_handleMorphTick);
+    _travel = AnimationController.unbounded(vsync: this)
+      ..addListener(_handleMotionTick);
+    _morph = AnimationController(
+      vsync: this,
+      animationBehavior: AnimationBehavior.preserve,
+    )..addListener(_handleMotionTick);
     _content = AnimationController(
       vsync: this,
       animationBehavior: AnimationBehavior.preserve,
@@ -221,12 +234,12 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   }
 
   void _snapReducedMotionGeometry() {
-    _morphW.stop();
-    _morphH.stop();
+    _travel.stop();
+    _morph.stop();
     _resize.stop();
     if (_open) {
-      _morphW.value = 1;
-      _morphH.value = 1;
+      _travel.value = 1;
+      _morph.value = 1;
       _resize.value = 1;
       _animateReducedContent(1);
     } else if (_closing) {
@@ -241,39 +254,35 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   );
 
   void _startReducedCloseAnimation(int closeGeneration) {
-    _morphW.stop();
-    _morphH.stop();
+    _travel.stop();
+    _morph.stop();
     _resize.stop();
-    _morphW.value = 1;
-    _morphH.value = 1;
+    _travel.value = 1;
+    _morph.value = 1;
     _resize.value = 1;
     _animateReducedContent(0).whenCompleteOrCancel(() {
       if (!mounted || !_closing || closeGeneration != _closeGeneration) return;
       _finishClose();
-      _morphW.value = 0;
-      _morphH.value = 0;
+      _travel.value = 0;
+      _morph.value = 0;
       _resize.value = 1;
     });
   }
 
   void _startNormalCloseAnimation() {
-    _morphW.animateWith(
+    _travel.animateWith(
       SpringSimulation(
-        _closeSpringW,
-        _morphW.value,
+        _closeTravelSpring,
+        _travel.value,
         0,
-        0,
+        _springVelocity(_travel),
         tolerance: Tolerance.defaultTolerance,
       ),
     );
-    _morphH.animateWith(
-      SpringSimulation(
-        _closeSpringH,
-        _morphH.value,
-        0,
-        0,
-        tolerance: Tolerance.defaultTolerance,
-      ),
+    _animateMorphTo(
+      0,
+      baseDuration: _closeMorphDuration,
+      curve: Curves.easeOutCubic,
     );
     _content.animateTo(
       0,
@@ -302,11 +311,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   void dispose() {
     _controller._detach(_handleControllerState);
     _restorePreviousFocus();
-    _morphW
-      ..removeListener(_handleMorphTick)
+    _travel
+      ..removeListener(_handleMotionTick)
       ..dispose();
-    _morphH
-      ..removeListener(_handleMorphTick)
+    _morph
+      ..removeListener(_handleMotionTick)
       ..dispose();
     _content.dispose();
     _resize.dispose();
@@ -404,35 +413,30 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
   void _startOpenAnimation() {
     if (_disableAnimations) {
-      _morphW.stop();
-      _morphH.stop();
+      _travel.stop();
+      _morph.stop();
       _resize.stop();
-      _morphW.value = 1;
-      _morphH.value = 1;
+      _travel.value = 1;
+      _morph.value = 1;
       _resize.value = 1;
       _animateReducedContent(1);
     } else {
-      _morphW.animateWith(
-        SpringSimulation(
-          _openSpringW,
-          _morphW.value,
-          1,
-          2.2,
-          tolerance: Tolerance.defaultTolerance,
-        ),
+      _travel
+          .animateWith(
+            SpringSimulation(
+              _openTravelSpring,
+              _travel.value,
+              1,
+              _springVelocity(_travel),
+              tolerance: Tolerance.defaultTolerance,
+            ),
+          )
+          .whenCompleteOrCancel(() => _settleOpenGeometry(_travel));
+      _animateMorphTo(
+        1,
+        baseDuration: _openMorphDuration,
+        curve: Curves.easeInOutCubic,
       );
-      Future.delayed(const Duration(milliseconds: 30), () {
-        if (!mounted || !_open || _disableAnimations) return;
-        _morphH.animateWith(
-          SpringSimulation(
-            _openSpringH,
-            _morphH.value,
-            1,
-            1.6,
-            tolerance: Tolerance.defaultTolerance,
-          ),
-        );
-      });
       _content.animateTo(
         1,
         duration: const Duration(milliseconds: 220),
@@ -440,6 +444,35 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestMenuFocus());
+  }
+
+  void _animateMorphTo(
+    double target, {
+    required Duration baseDuration,
+    required Curve curve,
+  }) {
+    final distance = (target - _morph.value).abs().clamp(0.0, 1.0);
+    if (distance <= 0.001) {
+      _morph.value = target;
+      return;
+    }
+    _morph.animateTo(
+      target,
+      duration: Duration(
+        microseconds: math.max(
+          1,
+          (baseDuration.inMicroseconds * distance).round(),
+        ),
+      ),
+      curve: curve,
+    );
+  }
+
+  void _settleOpenGeometry(AnimationController controller) {
+    if (!mounted || !_open || _disableAnimations || controller.isAnimating) {
+      return;
+    }
+    controller.value = 1;
   }
 
   void _requestMenuFocus({bool retry = true}) {
@@ -477,22 +510,22 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       return;
     }
 
-    if (_morphW.value <= 0.001 &&
-        _morphH.value <= 0.001 &&
-        !_morphW.isAnimating &&
-        !_morphH.isAnimating) {
+    if (_travel.value <= 0.001 &&
+        _morph.value <= 0.001 &&
+        !_travel.isAnimating &&
+        !_morph.isAnimating) {
       _finishClose();
       return;
     }
     _startNormalCloseAnimation();
   }
 
-  void _handleMorphTick() {
+  void _handleMotionTick() {
     if (_closing &&
-        _morphW.value <= 0.001 &&
-        _morphH.value <= 0.001 &&
-        !_morphW.isAnimating &&
-        !_morphH.isAnimating) {
+        _travel.value <= 0.001 &&
+        _morph.value <= 0.001 &&
+        !_travel.isAnimating &&
+        !_morph.isAnimating) {
       _finishClose();
     }
   }
@@ -500,6 +533,8 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   void _finishClose() {
     if (!_closing) return;
     _closing = false;
+    _travel.value = 0;
+    _morph.value = 0;
     if (_portal.isShowing) _portal.hide();
     _restorePreviousFocus();
     if (mounted) setState(() {});
@@ -545,11 +580,14 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
         child: KeyedSubtree(
           key: _anchorKey,
           child: AnimatedBuilder(
-            animation: Listenable.merge([_morphW, _morphH]),
+            animation: Listenable.merge([_travel, _morph]),
             builder: (context, child) {
-              final presence = (math.max(_morphW.value, _morphH.value) * 5)
+              final presence = (math.max(_travel.value, _morph.value) * 5)
                   .clamp(0.0, 1.0);
-              return Opacity(opacity: 1 - presence, child: child);
+              return Transform.translate(
+                offset: _triggerRecoilOffset,
+                child: Opacity(opacity: 1 - presence, child: child),
+              );
             },
             child: widget.buttonBuilder != null
                 ? Semantics(
@@ -622,41 +660,52 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                     onPointerDown: (_) => _controller.close(),
                   ),
                 ),
-                CompositedTransformFollower(
-                  link: _link,
-                  showWhenUnlinked: false,
-                  targetAnchor: _anchor,
-                  followerAnchor: _anchor,
-                  child: Align(
-                    alignment: _anchor,
-                    child: _measuring
-                        ? ExcludeFocus(
-                            child: ExcludeSemantics(
-                              child: IgnorePointer(
-                                child: Opacity(
-                                  opacity: 0,
-                                  child: _buildMeasuredList(
-                                    maxHeight: _measurementLimit,
-                                  ),
-                                ),
+                if (_measuring)
+                  CompositedTransformFollower(
+                    link: _link,
+                    showWhenUnlinked: false,
+                    targetAnchor: _anchor,
+                    followerAnchor: _anchor,
+                    child: Align(
+                      alignment: _anchor,
+                      child: ExcludeFocus(
+                        child: ExcludeSemantics(
+                          child: IgnorePointer(
+                            child: Opacity(
+                              opacity: 0,
+                              child: _buildMeasuredList(
+                                maxHeight: _measurementLimit,
                               ),
                             ),
-                          )
-                        : AnimatedBuilder(
-                            animation: Listenable.merge([
-                              _morphW,
-                              _morphH,
-                              _content,
-                              _resize,
-                              _pressGlow,
-                            ]),
-                            child: _buildMeasuredList(
-                              maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                            ),
-                            builder: (context, child) => _buildPanel(child!),
                           ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  AnimatedBuilder(
+                    animation: Listenable.merge([
+                      _travel,
+                      _morph,
+                      _content,
+                      _resize,
+                      _pressGlow,
+                    ]),
+                    child: _buildMeasuredList(
+                      maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                    ),
+                    builder: (context, child) => CompositedTransformFollower(
+                      link: _link,
+                      showWhenUnlinked: false,
+                      targetAnchor: _anchor,
+                      followerAnchor: _anchor,
+                      offset: _panelTranslation,
+                      child: Align(
+                        alignment: _anchor,
+                        child: _buildPanel(child!),
+                      ),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -665,30 +714,47 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     );
   }
 
+  Offset get _panelTranslation {
+    final tMorph = _morphProgress;
+    final targetHeight = _displayHeight;
+    final width = ui.lerpDouble(_collapsedWidth, widget.menuWidth, tMorph)!;
+    final height = ui.lerpDouble(_collapsedHeight, targetHeight, tMorph)!;
+    final startCenter = Offset(
+      -_anchor.x * _collapsedWidth / 2,
+      -_anchor.y * _collapsedHeight / 2,
+    );
+    final endCenter = startCenter + _panelTravelDelta;
+    final currentCenter = Offset(
+      -_anchor.x * width / 2,
+      -_anchor.y * height / 2,
+    );
+    return _travelCenter(startCenter, endCenter) - currentCenter;
+  }
+
   Widget _buildPanel(Widget measuredList) {
     final theme = CLTheme.of(context);
-    final tW = _morphW.value.clamp(0.0, 1.3);
-    final tH = _morphH.value.clamp(0.0, 1.3);
-    if (tW <= 0.001 && tH <= 0.001 && !_open) {
+    final tTravel = _travelUnit;
+    final tMorph = _morphProgress;
+    if (tTravel <= 0.001 && tMorph <= 0.001 && !_open) {
       return const SizedBox.shrink();
     }
 
     final targetHeight = _displayHeight;
-    final width = ui.lerpDouble(_collapsedWidth, widget.menuWidth, tW)!;
-    final height = ui.lerpDouble(_collapsedHeight, targetHeight, tH)!;
+    final width = ui.lerpDouble(_collapsedWidth, widget.menuWidth, tMorph)!;
+    final height = ui.lerpDouble(_collapsedHeight, targetHeight, tMorph)!;
     final radius = ui.lerpDouble(
       math.min(_collapsedWidth, _collapsedHeight) / 2,
       widget.cornerRadius ?? theme.radii.panel,
-      tH.clamp(0.0, 1.0),
+      tMorph.clamp(0.0, 1.0),
     )!;
     final borderRadius = BorderRadius.circular(radius);
     final reveal = _content.value;
     final opacity = _disableAnimations ? 1.0 : math.pow(reveal, 0.6).toDouble();
-    final shadowStrength = math.max(tW, tH).clamp(0.0, 1.0);
+    final shadowStrength = tMorph.clamp(0.0, 1.0);
     final presence =
         (_disableAnimations
                 ? reveal.clamp(0.0, 1.0)
-                : (math.max(tW, tH) * 5).clamp(0.0, 1.0))
+                : (math.max(tTravel, tMorph) * 5).clamp(0.0, 1.0))
             .toDouble();
 
     return IgnorePointer(
@@ -752,11 +818,10 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                       Opacity(
                         opacity: opacity.clamp(0.0, 1.0).toDouble(),
                         child: Flow(
-                          delegate: _CLMenuMorphFlowDelegate(
+                          delegate: _CLMenuContentFlowDelegate(
                             targetWidth: widget.menuWidth,
                             maxHeight: _growDown ? _spaceBelow : _spaceAbove,
                             alignment: _anchor,
-                            scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
                           ),
                           children: [measuredList],
                         ),
@@ -792,18 +857,16 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   }
 }
 
-class _CLMenuMorphFlowDelegate extends FlowDelegate {
-  const _CLMenuMorphFlowDelegate({
+class _CLMenuContentFlowDelegate extends FlowDelegate {
+  const _CLMenuContentFlowDelegate({
     required this.targetWidth,
     required this.maxHeight,
     required this.alignment,
-    required this.scale,
   });
 
   final double targetWidth;
   final double maxHeight;
   final Alignment alignment;
-  final double scale;
 
   @override
   Size getSize(BoxConstraints constraints) => constraints.biggest;
@@ -827,27 +890,20 @@ class _CLMenuMorphFlowDelegate extends FlowDelegate {
       (context.size.width - childSize.width) * (alignment.x + 1) / 2,
       (context.size.height - childSize.height) * (alignment.y + 1) / 2,
     );
-    final anchorPoint = Offset(
-      childSize.width * (alignment.x + 1) / 2,
-      childSize.height * (alignment.y + 1) / 2,
-    );
     final transform = Matrix4.identity()
-      ..translateByDouble(alignedOffset.dx, alignedOffset.dy, 0, 1)
-      ..translateByDouble(anchorPoint.dx, anchorPoint.dy, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1)
-      ..translateByDouble(-anchorPoint.dx, -anchorPoint.dy, 0, 1);
+      ..translateByDouble(alignedOffset.dx, alignedOffset.dy, 0, 1);
 
     context.paintChild(0, transform: transform);
   }
 
   @override
-  bool shouldRelayout(_CLMenuMorphFlowDelegate oldDelegate) =>
+  bool shouldRelayout(_CLMenuContentFlowDelegate oldDelegate) =>
       targetWidth != oldDelegate.targetWidth ||
       maxHeight != oldDelegate.maxHeight;
 
   @override
-  bool shouldRepaint(_CLMenuMorphFlowDelegate oldDelegate) =>
-      alignment != oldDelegate.alignment || scale != oldDelegate.scale;
+  bool shouldRepaint(_CLMenuContentFlowDelegate oldDelegate) =>
+      alignment != oldDelegate.alignment;
 }
 
 class _CLMenuPressGlowPainter extends CustomPainter {

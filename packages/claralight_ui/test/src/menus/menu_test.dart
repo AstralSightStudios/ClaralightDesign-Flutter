@@ -214,7 +214,7 @@ void main() {
     'right and up': Alignment.bottomLeft,
     'left and up': Alignment.bottomRight,
   }.entries) {
-    testWidgets('keeps ${entry.key} content anchored throughout morph', (
+    testWidgets('moves ${entry.key} center first and rebounds on close', (
       tester,
     ) async {
       final controller = CLMenuController();
@@ -226,6 +226,12 @@ void main() {
           children: const [CLListTile(key: _rowKey, label: 'Anchored row')],
         ),
       );
+      final anchorRect = tester.getRect(
+        find.ancestor(
+          of: find.byKey(_anchorKey),
+          matching: find.byType(CLPressable),
+        ),
+      );
 
       controller.open();
       await tester.pump();
@@ -233,14 +239,45 @@ void main() {
       expect(tester.getSize(find.byType(CLList)).width, 260);
 
       await tester.pump();
-      expect(find.byType(CLList), findsOneWidget);
-      expect(tester.getSize(find.byType(CLList)).width, 260);
-      expectAnchoredCorner(tester, entry.value);
+      final initialPanelRect = tester.getRect(menuPanel());
+      expect(initialPanelRect.center.dx, closeTo(anchorRect.center.dx, 0.01));
+      expect(initialPanelRect.center.dy, closeTo(anchorRect.center.dy, 0.01));
+      expect(initialPanelRect.size, anchorRect.size);
 
       await tester.pump(const Duration(milliseconds: 80));
-      expect(tester.getSize(menuPanel()).width, isNot(closeTo(260, 0.01)));
+      final partialPanelRect = tester.getRect(menuPanel());
+      final settledCenter = Offset(
+        entry.value.x < 0
+            ? anchorRect.left + 260 / 2
+            : anchorRect.right - 260 / 2,
+        entry.value.y < 0
+            ? anchorRect.top + 55 / 2
+            : anchorRect.bottom - 55 / 2,
+      );
+      final centerProgress =
+          (partialPanelRect.center.dx - anchorRect.center.dx) /
+          (settledCenter.dx - anchorRect.center.dx);
+      final morphProgress =
+          (partialPanelRect.width - anchorRect.width) /
+          (260 - anchorRect.width);
+      expect(centerProgress, greaterThan(0.65));
+      expect(centerProgress, lessThan(1));
+      expect(morphProgress, greaterThan(0.1));
+      expect(morphProgress, lessThan(0.25));
+      expect(centerProgress, greaterThan(morphProgress + 0.45));
       expect(tester.getSize(find.byType(CLList)).width, 260);
-      expectAnchoredCorner(tester, entry.value);
+
+      await tester.pump(const Duration(milliseconds: 40));
+      final latePanelRect = tester.getRect(menuPanel());
+      final lateCenterProgress =
+          (latePanelRect.center.dx - anchorRect.center.dx) /
+          (settledCenter.dx - anchorRect.center.dx);
+      final lateMorphProgress =
+          (latePanelRect.width - anchorRect.width) / (260 - anchorRect.width);
+      expect(lateCenterProgress, greaterThan(1.08));
+      expect(lateCenterProgress, lessThan(1.1));
+      expect(lateMorphProgress, greaterThan(0.45));
+      expect(lateMorphProgress, lessThan(0.8));
 
       await tester.pumpAndSettle();
       expect(tester.getSize(menuPanel()).width, closeTo(260, 0.01));
@@ -251,6 +288,59 @@ void main() {
       expect(rowRect.left, closeTo(listRect.left + 10, 0.01));
       expect(rowRect.right, closeTo(listRect.right - 10, 0.01));
       expect(find.byType(CLList), findsOneWidget);
+
+      controller.close();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 140));
+      final handoffAnchorRect = tester.getRect(
+        find.ancestor(
+          of: find.byKey(_anchorKey),
+          matching: find.byType(CLPressable),
+        ),
+      );
+      final handoffPanelRect = tester.getRect(menuPanel());
+      final totalTravel = settledCenter - anchorRect.center;
+      final handoffTravel = handoffAnchorRect.center - anchorRect.center;
+      final handoffProgress =
+          (handoffTravel.dx * totalTravel.dx +
+              handoffTravel.dy * totalTravel.dy) /
+          totalTravel.distanceSquared;
+      expect(handoffProgress, lessThan(0));
+      expect(
+        handoffPanelRect.center.dx,
+        closeTo(handoffAnchorRect.center.dx, 0.01),
+      );
+      expect(
+        handoffPanelRect.center.dy,
+        closeTo(handoffAnchorRect.center.dy, 0.01),
+      );
+
+      await tester.pump(const Duration(milliseconds: 40));
+      final reboundAnchorRect = tester.getRect(
+        find.ancestor(
+          of: find.byKey(_anchorKey),
+          matching: find.byType(CLPressable),
+        ),
+      );
+      final reboundTravel = reboundAnchorRect.center - anchorRect.center;
+      final closeProgress =
+          (reboundTravel.dx * totalTravel.dx +
+              reboundTravel.dy * totalTravel.dy) /
+          totalTravel.distanceSquared;
+      expect(closeProgress, greaterThan(-0.1));
+      expect(closeProgress, lessThan(-0.07));
+
+      await tester.pumpAndSettle();
+      expect(find.byType(CLList), findsNothing);
+      expect(
+        tester.getRect(
+          find.ancestor(
+            of: find.byKey(_anchorKey),
+            matching: find.byType(CLPressable),
+          ),
+        ),
+        anchorRect,
+      );
     });
   }
 
@@ -287,16 +377,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
 
     final paintedRect = tester.getRect(find.byKey(_rowKey));
+    final visibleRect = paintedRect.intersect(
+      tester.getRect(menuPanel()).deflate(1),
+    );
     final semanticsRect = globalSemanticsRect(
       tester,
       tester.getSemantics(find.byKey(_rowKey)),
     );
-    expect(semanticsRect.left, closeTo(paintedRect.left, 0.01));
-    expect(semanticsRect.top, closeTo(paintedRect.top, 0.01));
-    expect(semanticsRect.right, closeTo(paintedRect.right, 0.01));
-    expect(semanticsRect.bottom, closeTo(paintedRect.bottom, 0.01));
+    expect(semanticsRect.left, closeTo(visibleRect.left, 0.01));
+    expect(semanticsRect.top, closeTo(visibleRect.top, 0.01));
+    expect(semanticsRect.right, closeTo(visibleRect.right, 0.01));
+    expect(semanticsRect.bottom, closeTo(visibleRect.bottom, 0.01));
 
-    final visibleRect = paintedRect.intersect(tester.getRect(menuPanel()));
     expect(visibleRect.isEmpty, isFalse);
     await tester.tapAt(visibleRect.center);
     await tester.pump();
@@ -483,6 +575,7 @@ void main() {
     expect(layoutCount, settledLayoutCount + 1);
     final resizeLayoutCount = layoutCount;
 
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
     final intermediateHeight = tester.getSize(menuPanel()).height;
     expect(intermediateHeight, greaterThan(55));

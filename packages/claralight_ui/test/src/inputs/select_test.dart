@@ -9,6 +9,9 @@ List<CLSelectOption<int>> _options(int count) => [
     CLSelectOption(index, 'Option $index'),
 ];
 
+Finder _panel() =>
+    find.byWidgetPredicate((widget) => widget is CLSurface && widget.frosted);
+
 Widget _testApp({
   required List<CLSelectOption<int>> options,
   required int value,
@@ -16,10 +19,15 @@ Widget _testApp({
   EdgeInsets safePadding = EdgeInsets.zero,
   CLControlSize size = CLControlSize.large,
   bool alignSelectedOption = true,
+  bool disableAnimations = false,
 }) {
   return MaterialApp(
     home: MediaQuery(
-      data: MediaQueryData(size: _viewportSize, padding: safePadding),
+      data: MediaQueryData(
+        size: _viewportSize,
+        padding: safePadding,
+        disableAnimations: disableAnimations,
+      ),
       child: Scaffold(
         body: Align(
           alignment: alignment,
@@ -62,6 +70,130 @@ void main() {
     );
 
     expect(select.alignSelectedOption, isTrue);
+  });
+
+  for (final alignSelectedOption in [true, false]) {
+    testWidgets(
+      '${alignSelectedOption ? 'aligned' : 'detached'} panel moves center first and rebounds on close',
+      (tester) async {
+        await setViewport(tester);
+        await tester.pumpWidget(
+          _testApp(
+            options: _options(5),
+            value: 0,
+            alignSelectedOption: alignSelectedOption,
+          ),
+        );
+        final triggerFinder = find.descendant(
+          of: find.byType(CLSelect<int>),
+          matching: find.byType(CLPressable),
+        );
+        final triggerRect = tester.getRect(triggerFinder);
+
+        await tester.tap(find.byType(CLSelect<int>));
+        await tester.pump();
+        final initialPanelRect = tester.getRect(_panel());
+        expect(
+          initialPanelRect.center.dx,
+          closeTo(triggerRect.center.dx, 0.01),
+        );
+        expect(
+          initialPanelRect.center.dy,
+          closeTo(triggerRect.center.dy, 0.01),
+        );
+        expect(initialPanelRect.size, triggerRect.size);
+
+        await tester.pump(const Duration(milliseconds: 80));
+        final partialPanelRect = tester.getRect(_panel());
+        await tester.pump(const Duration(milliseconds: 40));
+        final latePanelRect = tester.getRect(_panel());
+        await tester.pumpAndSettle();
+        final settledPanelRect = tester.getRect(_panel());
+        final totalTravel = settledPanelRect.center - triggerRect.center;
+        final partialTravel = partialPanelRect.center - triggerRect.center;
+        final lateTravel = latePanelRect.center - triggerRect.center;
+        final centerProgress =
+            (partialTravel.dx * totalTravel.dx +
+                partialTravel.dy * totalTravel.dy) /
+            totalTravel.distanceSquared;
+        final lateCenterProgress =
+            (lateTravel.dx * totalTravel.dx + lateTravel.dy * totalTravel.dy) /
+            totalTravel.distanceSquared;
+        final morphProgress =
+            (partialPanelRect.height - triggerRect.height) /
+            (settledPanelRect.height - triggerRect.height);
+        final lateMorphProgress =
+            (latePanelRect.height - triggerRect.height) /
+            (settledPanelRect.height - triggerRect.height);
+
+        expect(centerProgress, greaterThan(0.65));
+        expect(centerProgress, lessThan(1));
+        expect(morphProgress, greaterThan(0.1));
+        expect(morphProgress, lessThan(0.25));
+        expect(centerProgress, greaterThan(morphProgress + 0.45));
+        expect(lateCenterProgress, greaterThan(1.08));
+        expect(lateCenterProgress, lessThan(1.1));
+        expect(lateMorphProgress, greaterThan(0.45));
+        expect(lateMorphProgress, lessThan(0.8));
+
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 140));
+        final handoffTriggerRect = tester.getRect(triggerFinder);
+        final handoffPanelRect = tester.getRect(_panel());
+        final handoffTravel = handoffTriggerRect.center - triggerRect.center;
+        final handoffProgress =
+            (handoffTravel.dx * totalTravel.dx +
+                handoffTravel.dy * totalTravel.dy) /
+            totalTravel.distanceSquared;
+        expect(handoffProgress, lessThan(0));
+        expect(handoffPanelRect.center, handoffTriggerRect.center);
+
+        await tester.pump(const Duration(milliseconds: 40));
+        final reboundTriggerRect = tester.getRect(triggerFinder);
+        final reboundTravel = reboundTriggerRect.center - triggerRect.center;
+        final closeProgress =
+            (reboundTravel.dx * totalTravel.dx +
+                reboundTravel.dy * totalTravel.dy) /
+            totalTravel.distanceSquared;
+        expect(closeProgress, greaterThan(-0.1));
+        expect(closeProgress, lessThan(-0.07));
+
+        await tester.pumpAndSettle();
+        expect(_panel(), findsNothing);
+        expect(tester.getRect(triggerFinder), triggerRect);
+      },
+    );
+  }
+
+  testWidgets('reduced motion snaps geometry and keeps only the fade', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    await tester.pumpWidget(
+      _testApp(options: _options(5), value: 0, disableAnimations: true),
+    );
+    final triggerRect = tester.getRect(find.byType(CLSelect<int>));
+
+    await tester.tap(find.byType(CLSelect<int>));
+    await tester.pump();
+    final initialPanelRect = tester.getRect(_panel());
+    expect(initialPanelRect.height, greaterThan(triggerRect.height));
+    expect(
+      initialPanelRect.center.dy,
+      isNot(closeTo(triggerRect.center.dy, 0.01)),
+    );
+
+    await tester.pump(const Duration(milliseconds: 62));
+    expect(tester.getRect(_panel()), initialPanelRect);
+    final panelOpacity = tester.widget<Opacity>(
+      find.ancestor(of: _panel(), matching: find.byType(Opacity)),
+    );
+    expect(panelOpacity.opacity, greaterThan(0));
+    expect(panelOpacity.opacity, lessThan(1));
+
+    await tester.pump(const Duration(milliseconds: 63));
+    expect(tester.getRect(_panel()), initialPanelRect);
   });
 
   for (final (size, expectedHeight) in [

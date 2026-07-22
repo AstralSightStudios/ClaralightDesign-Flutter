@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/control_size.dart';
@@ -58,47 +60,230 @@ class CLSelect<T> extends StatefulWidget {
 }
 
 class _CLSelectState<T> extends State<CLSelect<T>>
-    with SingleTickerProviderStateMixin {
-  final _link = LayerLink();
-  final _portal = OverlayPortalController();
-  late final AnimationController _reveal;
-
-  bool _open = false;
-  bool _hovered = false;
-  ScrollController? _scrollController;
-  Offset _panelOffset = Offset.zero;
-  double _panelWidth = 0;
-  double _panelHeight = 0;
-  AlignmentGeometry _revealAlignment = Alignment.topCenter;
-
+    with TickerProviderStateMixin {
+  static const _openTravelSpring = SpringDescription(
+    mass: 1,
+    stiffness: 700,
+    damping: 30,
+  );
+  static const _openMorphDuration = Duration(milliseconds: 240);
+  static const _closeTravelSpring = SpringDescription(
+    mass: 1,
+    stiffness: 520,
+    damping: 28,
+  );
+  static const _closeMorphDuration = Duration(milliseconds: 160);
   static const double _panelPadding = 6;
   static const double _panelHorizontalPadding = 6;
   static const double _panelOutlineWidth = 1;
   static const double _screenMargin = 8;
   static const double _fieldGap = 4;
 
+  final _link = LayerLink();
+  final _portal = OverlayPortalController();
+  late final AnimationController _travel;
+  late final AnimationController _morph;
+  late final AnimationController _content;
+
+  bool _open = false;
+  bool _closing = false;
+  bool _hovered = false;
+  bool _disableAnimations = false;
+  int _closeGeneration = 0;
+  ScrollController? _scrollController;
+  Size _triggerSize = Size.zero;
+  Offset _panelOffset = Offset.zero;
+  double _panelWidth = 0;
+  double _panelHeight = 0;
+
+  double get _travelUnit => _travel.value.clamp(0.0, 1.0).toDouble();
+
+  double get _morphProgress => _morph.value.clamp(0.0, 1.0).toDouble();
+
+  double _springVelocity(AnimationController controller) =>
+      controller.velocity.clamp(-3.0, 3.0).toDouble();
+
+  Offset _travelCenter(Offset start, Offset end) =>
+      Offset.lerp(start, end, _travel.value)!;
+
+  Offset get _panelTravelDelta =>
+      _panelOffset +
+      Offset(_panelWidth / 2, _panelHeight / 2) -
+      Offset(_triggerSize.width / 2, _triggerSize.height / 2);
+
+  Offset get _triggerRecoilOffset => _travel.value < 0
+      ? _travelCenter(Offset.zero, _panelTravelDelta)
+      : Offset.zero;
+
   @override
   void initState() {
     super.initState();
-    _reveal =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 240),
-          reverseDuration: CLMotion.fast,
-        )..addStatusListener((status) {
-          if (status == AnimationStatus.dismissed) {
-            _portal.hide();
-            _scrollController?.dispose();
-            _scrollController = null;
-            if (mounted) setState(() {});
-          }
-        });
+    _travel = AnimationController.unbounded(vsync: this)
+      ..addListener(_handleMotionTick);
+    _morph = AnimationController(
+      vsync: this,
+      animationBehavior: AnimationBehavior.preserve,
+    )..addListener(_handleMotionTick);
+    _content = AnimationController(
+      vsync: this,
+      animationBehavior: AnimationBehavior.preserve,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _snapReducedMotionGeometry();
+    } else if (_closing) {
+      _closeGeneration++;
+      _startNormalCloseAnimation();
+    }
+  }
+
+  void _snapReducedMotionGeometry() {
+    _travel.stop();
+    _morph.stop();
+    if (_open) {
+      _travel.value = 1;
+      _morph.value = 1;
+      _animateReducedContent(1);
+    } else if (_closing) {
+      _startReducedCloseAnimation(_closeGeneration);
+    }
+  }
+
+  TickerFuture _animateReducedContent(double target) => _content.animateTo(
+    target,
+    duration: CLMotion.reducedFade,
+    curve: CLMotion.easeOut,
+  );
+
+  void _startReducedCloseAnimation(int closeGeneration) {
+    _travel.stop();
+    _morph.stop();
+    _travel.value = 1;
+    _morph.value = 1;
+    _animateReducedContent(0).whenCompleteOrCancel(() {
+      if (!mounted || !_closing || closeGeneration != _closeGeneration) return;
+      _finishClose();
+    });
+  }
+
+  void _startNormalCloseAnimation() {
+    _travel.animateWith(
+      SpringSimulation(
+        _closeTravelSpring,
+        _travel.value,
+        0,
+        _springVelocity(_travel),
+        tolerance: Tolerance.defaultTolerance,
+      ),
+    );
+    _animateMorphTo(
+      0,
+      baseDuration: _closeMorphDuration,
+      curve: Curves.easeOutCubic,
+    );
+    _content.animateTo(0, duration: CLMotion.fast, curve: Curves.easeOut);
+  }
+
+  void _startOpenAnimation() {
+    if (_disableAnimations) {
+      _travel.stop();
+      _morph.stop();
+      _travel.value = 1;
+      _morph.value = 1;
+      _animateReducedContent(1);
+      return;
+    }
+
+    _travel
+        .animateWith(
+          SpringSimulation(
+            _openTravelSpring,
+            _travel.value,
+            1,
+            _springVelocity(_travel),
+            tolerance: Tolerance.defaultTolerance,
+          ),
+        )
+        .whenCompleteOrCancel(() => _settleOpenGeometry(_travel));
+    _animateMorphTo(
+      1,
+      baseDuration: _openMorphDuration,
+      curve: Curves.easeInOutCubic,
+    );
+    _content.animateTo(
+      1,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _animateMorphTo(
+    double target, {
+    required Duration baseDuration,
+    required Curve curve,
+  }) {
+    final distance = (target - _morph.value).abs().clamp(0.0, 1.0);
+    if (distance <= 0.001) {
+      _morph.value = target;
+      return;
+    }
+    _morph.animateTo(
+      target,
+      duration: Duration(
+        microseconds: math.max(
+          1,
+          (baseDuration.inMicroseconds * distance).round(),
+        ),
+      ),
+      curve: curve,
+    );
+  }
+
+  void _settleOpenGeometry(AnimationController controller) {
+    if (!mounted || !_open || _disableAnimations || controller.isAnimating) {
+      return;
+    }
+    controller.value = 1;
+  }
+
+  void _handleMotionTick() {
+    if (_closing &&
+        _travel.value <= 0.001 &&
+        _morph.value <= 0.001 &&
+        !_travel.isAnimating &&
+        !_morph.isAnimating) {
+      _finishClose();
+    }
+  }
+
+  void _finishClose() {
+    if (!_closing) return;
+    _closing = false;
+    _travel.value = 0;
+    _morph.value = 0;
+    if (_portal.isShowing) _portal.hide();
+    _scrollController?.dispose();
+    _scrollController = null;
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _scrollController?.dispose();
-    _reveal.dispose();
+    _travel
+      ..removeListener(_handleMotionTick)
+      ..dispose();
+    _morph
+      ..removeListener(_handleMotionTick)
+      ..dispose();
+    _content.dispose();
     super.dispose();
   }
 
@@ -121,6 +306,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         Overlay.of(context).context.findRenderObject()! as RenderBox;
     final fieldBox = context.findRenderObject()! as RenderBox;
     final origin = fieldBox.localToGlobal(Offset.zero, ancestor: overlayBox);
+    _triggerSize = fieldBox.size;
     final mediaPadding = MediaQuery.maybePaddingOf(context) ?? EdgeInsets.zero;
     final safeLeft = mediaPadding.left + _screenMargin;
     final safeTop = mediaPadding.top + _screenMargin;
@@ -175,11 +361,6 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       );
       initialScrollOffset = (panelTop + selectedPanelCenter - fieldCenterY)
           .clamp(0.0, maxScrollOffset);
-      final selectedViewportCenter = selectedPanelCenter - initialScrollOffset;
-      final revealY = _panelHeight == 0
-          ? 0.5
-          : (selectedViewportCenter / _panelHeight).clamp(0.0, 1.0);
-      _revealAlignment = FractionalOffset(0.5, revealY);
     } else {
       final spaceBelow = math.max(
         0.0,
@@ -198,7 +379,6 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         safeTop,
         math.max(safeTop, safeBottom - _panelHeight),
       );
-      _revealAlignment = dropUp ? Alignment.bottomCenter : Alignment.topCenter;
     }
 
     _panelOffset = Offset(panelLeft - origin.dx, panelTop - origin.dy);
@@ -207,16 +387,32 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       initialScrollOffset: initialScrollOffset,
     );
     _open = true;
+    _closing = false;
+    _closeGeneration++;
     _portal.show();
-    _reveal.forward(from: _reveal.value);
+    _startOpenAnimation();
     setState(() {});
   }
 
   void _close() {
     if (!_open) return;
     _open = false;
-    _reveal.reverse();
+    _closing = true;
+    final closeGeneration = ++_closeGeneration;
     setState(() {});
+
+    if (_disableAnimations) {
+      _startReducedCloseAnimation(closeGeneration);
+      return;
+    }
+    if (_travel.value <= 0.001 &&
+        _morph.value <= 0.001 &&
+        !_travel.isAnimating &&
+        !_morph.isAnimating) {
+      _finishClose();
+      return;
+    }
+    _startNormalCloseAnimation();
   }
 
   void _select(CLSelectOption<T> option) {
@@ -247,43 +443,48 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       overlayChildBuilder: _buildOverlay,
       child: CompositedTransformTarget(
         link: _link,
-        child: Semantics(
-          button: true,
-          enabled: _enabled,
-          label: label,
-          child: MouseRegion(
-            cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
-            child: CLPressable(
-              onTap: _enabled ? _toggle : null,
-              borderRadius: radius,
-              deformOnDrag: false,
-              pressedScale: 1.02,
-              child: SizedBox(
-                width: widget.width,
-                height: _height,
-                child: CLSurface(
-                  fill: _hovered && _enabled
-                      ? colors.controlHighlight
-                      : colors.control,
-                  borderRadius: radius,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: widget.size == CLControlSize.small ? 10 : 12,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textStyle,
+        child: AnimatedBuilder(
+          animation: _travel,
+          builder: (context, child) =>
+              Transform.translate(offset: _triggerRecoilOffset, child: child),
+          child: Semantics(
+            button: true,
+            enabled: _enabled,
+            label: label,
+            child: MouseRegion(
+              cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
+              onEnter: (_) => setState(() => _hovered = true),
+              onExit: (_) => setState(() => _hovered = false),
+              child: CLPressable(
+                onTap: _enabled ? _toggle : null,
+                borderRadius: radius,
+                deformOnDrag: false,
+                pressedScale: 1.02,
+                child: SizedBox(
+                  width: widget.width,
+                  height: _height,
+                  child: CLSurface(
+                    fill: _hovered && _enabled
+                        ? colors.controlHighlight
+                        : colors.control,
+                    borderRadius: radius,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: widget.size == CLControlSize.small ? 10 : 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textStyle,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      _Chevrons(color: colors.textTertiary),
-                    ],
+                        const SizedBox(width: 6),
+                        _Chevrons(color: colors.textTertiary),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -292,6 +493,16 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         ),
       ),
     );
+  }
+
+  Offset get _currentPanelOffset {
+    final tMorph = _morphProgress;
+    final width = ui.lerpDouble(_triggerSize.width, _panelWidth, tMorph)!;
+    final height = ui.lerpDouble(_triggerSize.height, _panelHeight, tMorph)!;
+    final startCenter = Offset(_triggerSize.width / 2, _triggerSize.height / 2);
+    final endCenter = startCenter + _panelTravelDelta;
+    final center = _travelCenter(startCenter, endCenter);
+    return center - Offset(width / 2, height / 2);
   }
 
   Widget _buildOverlay(BuildContext context) {
@@ -307,69 +518,148 @@ class _CLSelectState<T> extends State<CLSelect<T>>
             onPointerDown: (_) => _close(),
           ),
         ),
-        CompositedTransformFollower(
-          link: _link,
-          showWhenUnlinked: false,
-          targetAnchor: Alignment.topLeft,
-          followerAnchor: Alignment.topLeft,
-          offset: _panelOffset,
-          child: AnimatedBuilder(
-            animation: _reveal,
-            builder: (context, child) {
-              final t = Curves.easeOutCubic.transform(_reveal.value);
-              return Opacity(
-                opacity: _reveal.value.clamp(0.0, 1.0),
-                child: Transform.scale(
-                  scale: 0.94 + 0.06 * t,
-                  alignment: _revealAlignment,
-                  child: child,
-                ),
+        AnimatedBuilder(
+          animation: Listenable.merge([_travel, _morph, _content]),
+          child: CLList.builder(
+            controller: _scrollController,
+            itemCount: widget.options.length,
+            itemExtent: _rowHeight,
+            padding: const EdgeInsets.symmetric(
+              horizontal: _panelHorizontalPadding,
+              vertical: _panelPadding,
+            ),
+            blurExtent: const EdgeInsets.symmetric(vertical: 16),
+            borderRadius: BorderRadius.circular(theme.radii.medium),
+            itemBuilder: (context, index) {
+              final option = widget.options[index];
+              return _OptionRow<T>(
+                option: option,
+                checked: option.value == widget.value,
+                height: _rowHeight,
+                onTap: () => _select(option),
               );
             },
-            child: IgnorePointer(
-              ignoring: !_open,
-              child: SizedBox(
-                width: _panelWidth,
-                height: _panelHeight,
-                child: CLSurface(
-                  frosted: true,
-                  borderRadius: BorderRadius.circular(theme.radii.medium),
-                  outlined: true,
-                  shadow: const [
-                    BoxShadow(
-                      color: Color(0x59000000),
-                      blurRadius: 24,
-                      offset: Offset(0, 10),
-                    ),
-                  ],
-                  child: CLList.builder(
-                    controller: _scrollController,
-                    itemCount: widget.options.length,
-                    itemExtent: _rowHeight,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _panelHorizontalPadding,
-                      vertical: _panelPadding,
-                    ),
-                    blurExtent: const EdgeInsets.symmetric(vertical: 16),
-                    borderRadius: BorderRadius.circular(theme.radii.medium),
-                    itemBuilder: (context, index) {
-                      final option = widget.options[index];
-                      return _OptionRow<T>(
-                        option: option,
-                        checked: option.value == widget.value,
-                        height: _rowHeight,
-                        onTap: () => _select(option),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
+          ),
+          builder: (context, child) => CompositedTransformFollower(
+            link: _link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.topLeft,
+            followerAnchor: Alignment.topLeft,
+            offset: _currentPanelOffset,
+            child: _buildPanel(child!),
           ),
         ),
       ],
     );
   }
+
+  Widget _buildPanel(Widget list) {
+    final theme = CLTheme.of(context);
+    final tTravel = _travelUnit;
+    final tMorph = _morphProgress;
+    if (tTravel <= 0.001 && tMorph <= 0.001 && !_open) {
+      return const SizedBox.shrink();
+    }
+
+    final width = ui.lerpDouble(_triggerSize.width, _panelWidth, tMorph)!;
+    final height = ui.lerpDouble(_triggerSize.height, _panelHeight, tMorph)!;
+    final triggerRadius =
+        widget.borderRadius ?? BorderRadius.circular(theme.radii.control);
+    final panelRadius = BorderRadius.circular(theme.radii.medium);
+    final borderRadius = BorderRadius.lerp(
+      triggerRadius,
+      panelRadius,
+      tMorph.clamp(0.0, 1.0),
+    )!;
+    final reveal = _content.value;
+    final contentOpacity = _disableAnimations
+        ? 1.0
+        : math.pow(reveal, 0.6).toDouble();
+    final shadowStrength = tMorph.clamp(0.0, 1.0);
+    final presence =
+        (_disableAnimations
+                ? reveal.clamp(0.0, 1.0)
+                : (math.max(tTravel, tMorph) * 5).clamp(0.0, 1.0))
+            .toDouble();
+    final targetContentSize = Size(
+      math.max(0, _panelWidth - _panelOutlineWidth * 2),
+      math.max(0, _panelHeight - _panelOutlineWidth * 2),
+    );
+
+    return IgnorePointer(
+      ignoring: !_open,
+      child: ExcludeSemantics(
+        excluding: !_open,
+        child: Opacity(
+          opacity: presence,
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: CLSurface(
+              frosted: true,
+              borderRadius: borderRadius,
+              outlined: true,
+              shadow: [
+                BoxShadow(
+                  color: Color.fromARGB(
+                    (0x59 * shadowStrength).round(),
+                    0,
+                    0,
+                    0,
+                  ),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+              child: Opacity(
+                opacity: contentOpacity.clamp(0.0, 1.0).toDouble(),
+                child: Flow(
+                  delegate: _CLSelectContentFlowDelegate(
+                    targetSize: targetContentSize,
+                  ),
+                  children: [list],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CLSelectContentFlowDelegate extends FlowDelegate {
+  const _CLSelectContentFlowDelegate({required this.targetSize});
+
+  final Size targetSize;
+
+  @override
+  Size getSize(BoxConstraints constraints) => constraints.biggest;
+
+  @override
+  BoxConstraints getConstraintsForChild(int i, BoxConstraints constraints) =>
+      BoxConstraints.tight(targetSize);
+
+  @override
+  void paintChildren(FlowPaintingContext context) {
+    final childSize = context.getChildSize(0);
+    if (childSize == null) return;
+
+    final offset = Offset(
+      (context.size.width - childSize.width) / 2,
+      (context.size.height - childSize.height) / 2,
+    );
+    final transform = Matrix4.identity()
+      ..translateByDouble(offset.dx, offset.dy, 0, 1);
+    context.paintChild(0, transform: transform);
+  }
+
+  @override
+  bool shouldRelayout(_CLSelectContentFlowDelegate oldDelegate) =>
+      targetSize != oldDelegate.targetSize;
+
+  @override
+  bool shouldRepaint(_CLSelectContentFlowDelegate oldDelegate) => false;
 }
 
 class _OptionRow<T> extends StatefulWidget {
