@@ -5,6 +5,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../theme/motion.dart';
+
 /// The preferred physical side of an anchored overlay.
 enum CLPopoverPosition { top, bottom, left, right }
 
@@ -66,7 +68,7 @@ class _CLAnchoredOverlayState extends State<CLAnchoredOverlay>
     WidgetsBinding.instance.addObserver(this);
     _placementTransition = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 160),
+      duration: CLMotion.standard,
       value: 1,
     );
     _scheduleTracking();

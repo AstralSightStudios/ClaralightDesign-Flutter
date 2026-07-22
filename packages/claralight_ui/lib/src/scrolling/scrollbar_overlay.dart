@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/shape.dart';
+import '../theme/motion.dart';
 import 'types.dart';
 
 /// Overlay scrollbars for one or two axes, driven by scroll controllers.
@@ -37,10 +38,10 @@ class CLScrollbarOverlay extends StatefulWidget {
 
 class _CLScrollbarOverlayState extends State<CLScrollbarOverlay>
     with SingleTickerProviderStateMixin {
-  static const _fadeInDuration = Duration(milliseconds: 160);
+  static const _fadeInDuration = CLMotion.standard;
   static const _fadeOutDelay = Duration(milliseconds: 300);
   static const _fadeOutDuration = Duration(milliseconds: 180);
-  static const _fadeOutCurve = Cubic(0.32, 0, 0.67, 0);
+  static const _fadeOutCurve = CLMotion.easeIn;
 
   late final AnimationController _opacity;
   Timer? _hideTimer;

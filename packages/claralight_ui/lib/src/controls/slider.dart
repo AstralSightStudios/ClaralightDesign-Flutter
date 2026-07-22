@@ -139,11 +139,7 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
       return;
     }
     if (pressed) {
-      _press.animateTo(
-        1,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
-      );
+      _press.animateTo(1, duration: CLMotion.fast, curve: Curves.easeOutCubic);
     } else {
       _press.animateWith(
         SpringSimulation(

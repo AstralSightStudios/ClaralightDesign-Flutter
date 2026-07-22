@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/widgets.dart';
 
 import '../surfaces/surface.dart';
@@ -158,7 +156,7 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
   Duration get transitionDuration => const Duration(milliseconds: 380);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 160);
+  Duration get reverseTransitionDuration => CLMotion.standard;
 
   @override
   Widget buildPage(
@@ -168,7 +166,7 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
   ) {
     final scale = CurvedAnimation(
       parent: animation,
-      curve: const _SpringOutCurve(),
+      curve: CLMotion.springOut,
       // Accelerating shrink on the way out; the fade below spans the whole
       // reverse so the dialog melts instead of hanging and blinking off.
       reverseCurve: Curves.easeIn,
@@ -192,22 +190,5 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
         ),
       ),
     );
-  }
-}
-
-/// Critically-damped-ish spring approximation with a small overshoot.
-class _SpringOutCurve extends Curve {
-  const _SpringOutCurve();
-
-  @override
-  double transformInternal(double t) {
-    // Damped oscillation tuned for a single ~4% overshoot.
-    const omega = 9.2;
-    const zeta = 0.82;
-    final decay = math.exp(-zeta * omega * t);
-    final freq = omega * math.sqrt(1 - zeta * zeta);
-    return 1 -
-        decay *
-            (math.cos(freq * t) + (zeta * omega / freq) * math.sin(freq * t));
   }
 }

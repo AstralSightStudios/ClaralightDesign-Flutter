@@ -36,7 +36,7 @@ class _CLProgressBarState extends State<CLProgressBar>
   static const _indicatorFraction = 0.32;
   static const _reducedMotionPosition = 0.5;
   static const _determinateDuration = Duration(milliseconds: 200);
-  static const _determinateCurve = Cubic(0.23, 1, 0.32, 1);
+  static const _determinateCurve = CLMotion.easeOut;
 
   late final AnimationController _sweep;
   final Key _visibilityKey = UniqueKey();

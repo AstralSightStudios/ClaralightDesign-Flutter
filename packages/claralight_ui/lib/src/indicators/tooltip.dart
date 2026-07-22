@@ -86,7 +86,7 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
     super.initState();
     _reveal = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 140),
+      duration: CLMotion.fast,
       reverseDuration: const Duration(milliseconds: 110),
       animationBehavior: AnimationBehavior.preserve,
     )..addStatusListener(_handleRevealStatus);
@@ -127,8 +127,8 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
       return show ? _reveal.forward() : _reveal.reverse();
     }
     return show
-        ? _reveal.animateTo(1, duration: const Duration(milliseconds: 125))
-        : _reveal.animateBack(0, duration: const Duration(milliseconds: 125));
+        ? _reveal.animateTo(1, duration: CLMotion.reducedFade)
+        : _reveal.animateBack(0, duration: CLMotion.reducedFade);
   }
 
   void _handleRevealStatus(AnimationStatus status) {
@@ -289,9 +289,7 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
             shadowBlur: 18,
             shadowOffset: const Offset(0, 6),
             opacity:
-                (_disableAnimations
-                        ? const Cubic(0.23, 1, 0.32, 1)
-                        : Curves.easeOutCubic)
+                (_disableAnimations ? CLMotion.easeOut : Curves.easeOutCubic)
                     .transform(_reveal.value),
             scale: 0.92 + 0.08 * _spring.value,
             child: child!,

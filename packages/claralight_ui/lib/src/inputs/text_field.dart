@@ -303,7 +303,7 @@ class _CLTextFieldState extends State<CLTextField> {
           width: widget.width,
           height: _height,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+            duration: CLMotion.fast,
             curve: Curves.easeOutCubic,
             decoration: clSmoothDecoration(
               color: widget.enabled

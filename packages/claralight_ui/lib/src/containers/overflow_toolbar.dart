@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../menus/menu.dart';
+import '../theme/motion.dart';
 import 'toolbar.dart';
 
 /// Controls whether a toolbar item may move into the overflow menu.
@@ -553,8 +554,8 @@ class _CLOverflowMigrationSurface<T> extends StatefulWidget {
 class _CLOverflowMigrationSurfaceState<T>
     extends State<_CLOverflowMigrationSurface<T>>
     with SingleTickerProviderStateMixin {
-  static const _migrationDuration = Duration(milliseconds: 160);
-  static const _migrationCurve = Cubic(0.23, 1, 0.32, 1);
+  static const _migrationDuration = CLMotion.standard;
+  static const _migrationCurve = CLMotion.easeOut;
   static const _collapsedScaleX = 0.8;
 
   late final AnimationController _migration;

@@ -118,7 +118,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
     _internalController = CLPopoverController();
     _reveal = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 140),
+      duration: CLMotion.fast,
       reverseDuration: const Duration(milliseconds: 110),
       animationBehavior: AnimationBehavior.preserve,
     )..addStatusListener(_handleAnimationStatus);
@@ -173,11 +173,11 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   }
 
   TickerFuture _animateRevealForward() => _disableAnimations
-      ? _reveal.animateTo(1, duration: const Duration(milliseconds: 125))
+      ? _reveal.animateTo(1, duration: CLMotion.reducedFade)
       : _reveal.forward();
 
   TickerFuture _animateRevealReverse() => _disableAnimations
-      ? _reveal.animateBack(0, duration: const Duration(milliseconds: 125))
+      ? _reveal.animateBack(0, duration: CLMotion.reducedFade)
       : _reveal.reverse();
 
   @override
@@ -358,7 +358,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
                     shadowOffset: const Offset(0, 10),
                     opacity:
                         (_disableAnimations
-                                ? const Cubic(0.23, 1, 0.32, 1)
+                                ? CLMotion.easeOut
                                 : Curves.easeOutCubic)
                             .transform(_reveal.value),
                     scale: 0.96 + 0.04 * _spring.value,

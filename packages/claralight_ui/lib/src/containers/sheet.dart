@@ -131,7 +131,7 @@ class _CLSheetRoute<T> extends PopupRoute<T> {
     final curved = CurvedAnimation(
       parent: animation,
       // A touch of overshoot so the sheet lands with the Claralight spring.
-      curve: const _SpringOutCurve(),
+      curve: CLMotion.springOut,
       reverseCurve: Curves.easeInCubic,
     );
 
@@ -154,22 +154,5 @@ class _CLSheetRoute<T> extends PopupRoute<T> {
         ),
       ),
     );
-  }
-}
-
-/// Critically-damped-ish spring approximation with a small overshoot.
-class _SpringOutCurve extends Curve {
-  const _SpringOutCurve();
-
-  @override
-  double transformInternal(double t) {
-    // Damped oscillation tuned for a single ~4% overshoot.
-    const omega = 9.2;
-    const zeta = 0.82;
-    final decay = math.exp(-zeta * omega * t);
-    final freq = omega * math.sqrt(1 - zeta * zeta);
-    return 1 -
-        decay *
-            (math.cos(freq * t) + (zeta * omega / freq) * math.sin(freq * t));
   }
 }

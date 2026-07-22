@@ -2,6 +2,8 @@ import 'package:claralight_ui/claralight_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+const _dialogContentKey = Key('dialog-content');
+
 void main() {
   Widget hostWithActions(int actionCount) {
     return MaterialApp(
@@ -50,6 +52,42 @@ void main() {
 
     expect(tester.widget<CLDialog>(find.byType(CLDialog)).maxWidth, 320);
     expect(tester.getSize(find.byType(CLDialog)).width, 320);
+  });
+
+  testWidgets('route keeps its duration and spring scale sample', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                child: const SizedBox(key: _dialogContentKey),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+
+    final route = ModalRoute.of(tester.element(find.byKey(_dialogContentKey)))!;
+    expect(route.transitionDuration, const Duration(milliseconds: 380));
+    expect(route.reverseTransitionDuration, CLMotion.standard);
+
+    await tester.pump(const Duration(milliseconds: 38));
+    final transition = tester.widget<ScaleTransition>(
+      find.ancestor(
+        of: find.byKey(_dialogContentKey),
+        matching: find.byType(ScaleTransition),
+      ),
+    );
+    expect(transition.scale.value, closeTo(0.8956716447988132, 1e-9));
   });
 
   testWidgets('lays out two actions horizontally with equal widths', (

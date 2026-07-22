@@ -4,6 +4,7 @@ import 'colors.dart';
 import 'typography.dart';
 
 export 'colors.dart';
+export 'motion.dart';
 export 'typography.dart';
 
 /// Corner radii of the Claralight shape language.
@@ -57,7 +58,7 @@ class CLSpacing {
   });
 }
 
-/// Immutable bundle of every Claralight design token.
+/// Immutable bundle of Claralight theme-varying visual tokens.
 @immutable
 class CLThemeData {
   final CLColorScheme colors;

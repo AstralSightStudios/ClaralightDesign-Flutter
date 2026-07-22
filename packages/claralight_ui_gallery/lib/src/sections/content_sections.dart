@@ -18,8 +18,8 @@ class _AnimatedTreeBranch extends StatefulWidget {
 
 class _AnimatedTreeBranchState extends State<_AnimatedTreeBranch>
     with SingleTickerProviderStateMixin {
-  static const _duration = Duration(milliseconds: 160);
-  static const _curve = Cubic(0.23, 1, 0.32, 1);
+  static const _duration = CLMotion.standard;
+  static const _curve = CLMotion.easeOut;
 
   late final AnimationController _controller;
   late final Animation<double> _reveal;

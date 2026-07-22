@@ -71,8 +71,8 @@ class _Chip extends StatelessWidget {
     final color = !enabled
         ? colors.textDisabled
         : selected
-            ? colors.textSecondary
-            : colors.textHint;
+        ? colors.textSecondary
+        : colors.textHint;
 
     return Semantics(
       button: true,
@@ -85,7 +85,7 @@ class _Chip extends StatelessWidget {
         deformOnDrag: false,
         showHighlight: false,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
+          duration: CLMotion.fast,
           constraints: const BoxConstraints(minWidth: 54),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: clSmoothDecoration(
@@ -95,7 +95,7 @@ class _Chip extends StatelessWidget {
           child: Center(
             widthFactor: 1,
             child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 140),
+              duration: CLMotion.fast,
               style: theme.typography.callout.copyWith(color: color),
               child: Text(label, maxLines: 1),
             ),

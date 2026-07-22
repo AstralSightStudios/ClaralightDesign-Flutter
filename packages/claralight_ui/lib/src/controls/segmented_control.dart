@@ -203,7 +203,7 @@ class _Segment extends StatelessWidget {
         onTap: onTap,
         child: Center(
           child: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 160),
+            duration: CLMotion.standard,
             style: textStyle.copyWith(color: color),
             child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),

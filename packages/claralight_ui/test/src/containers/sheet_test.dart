@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _openSheetKey = Key('open-sheet');
+const _sheetContentKey = Key('sheet-content');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +31,7 @@ void main() {
             onPressed: () => CLSheet.show<void>(
               context,
               showGrabber: false,
-              child: SizedBox(height: contentHeight),
+              child: SizedBox(key: _sheetContentKey, height: contentHeight),
             ),
             child: const Text('Open sheet'),
           ),
@@ -43,6 +44,34 @@ void main() {
     await tester.tap(find.byKey(_openSheetKey));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('route keeps its duration and spring position sample', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildSheetHost());
+
+    await tester.tap(find.byKey(_openSheetKey));
+    await tester.pump();
+
+    final route = ModalRoute.of(tester.element(find.byKey(_sheetContentKey)))!;
+    expect(route.transitionDuration, const Duration(milliseconds: 420));
+    expect(route.reverseTransitionDuration, const Duration(milliseconds: 240));
+
+    await tester.pump(const Duration(milliseconds: 42));
+    final transition = tester.widget<SlideTransition>(
+      find.ancestor(
+        of: find.byKey(_sheetContentKey),
+        matching: find.byType(SlideTransition),
+      ),
+    );
+    expect(
+      transition.position.value,
+      offsetMoreOrLessEquals(
+        const Offset(0, 0.7452025371513342),
+        epsilon: 1e-9,
+      ),
+    );
+  });
 
   testWidgets('uses the Figma radius, edge inset, and desktop max width', (
     tester,

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:progressive_blur/progressive_blur.dart';
 
 import '../foundation/shape.dart';
+import '../theme/motion.dart';
 
 @immutable
 class _EdgeAtlasKey {
@@ -64,7 +65,7 @@ class CLEdgeEffects extends StatefulWidget {
 
 class CLEdgeEffectsState extends State<CLEdgeEffects>
     with TickerProviderStateMixin {
-  static const _transitionDuration = Duration(milliseconds: 160);
+  static const _transitionDuration = CLMotion.standard;
 
   static const _left = 0;
   static const _top = 1;

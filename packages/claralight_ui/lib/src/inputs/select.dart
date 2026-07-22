@@ -84,7 +84,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         AnimationController(
           vsync: this,
           duration: const Duration(milliseconds: 240),
-          reverseDuration: const Duration(milliseconds: 140),
+          reverseDuration: CLMotion.fast,
         )..addStatusListener((status) {
           if (status == AnimationStatus.dismissed) {
             _portal.hide();

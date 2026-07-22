@@ -134,9 +134,6 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     stiffness: 440,
     damping: 38,
   );
-  static const _reducedFadeDuration = Duration(milliseconds: 125);
-  static const _reducedFadeCurve = Cubic(0.23, 1, 0.32, 1);
-
   final _link = LayerLink();
   final _anchorKey = GlobalKey();
   final _listKey = GlobalKey();
@@ -239,8 +236,8 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
   TickerFuture _animateReducedContent(double target) => _content.animateTo(
     target,
-    duration: _reducedFadeDuration,
-    curve: _reducedFadeCurve,
+    duration: CLMotion.reducedFade,
+    curve: CLMotion.easeOut,
   );
 
   void _startReducedCloseAnimation(int closeGeneration) {

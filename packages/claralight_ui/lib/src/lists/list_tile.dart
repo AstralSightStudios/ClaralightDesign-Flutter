@@ -60,7 +60,7 @@ class CLListTile extends StatefulWidget {
     this.outlined = false,
     this.expanded,
     this.onExpandedChanged,
-    this.disclosureAnimationDuration = const Duration(milliseconds: 160),
+    this.disclosureAnimationDuration = CLMotion.standard,
   }) : assert(depth >= 0);
 
   @override
