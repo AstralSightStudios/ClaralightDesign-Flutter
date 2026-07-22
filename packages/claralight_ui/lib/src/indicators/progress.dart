@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../foundation/shape.dart';
 import '../theme/theme.dart';
@@ -30,16 +31,48 @@ class CLProgressBar extends StatefulWidget {
 }
 
 class _CLProgressBarState extends State<CLProgressBar>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const _sweepPeriod = Duration(milliseconds: 1300);
+  static const _indicatorFraction = 0.32;
+  static const _reducedMotionPosition = 0.5;
+
   late final AnimationController _sweep;
+  final Key _visibilityKey = UniqueKey();
+
+  bool _visible = false;
+  bool _tickerEnabled = true;
+  bool _animationsDisabled = false;
+  bool _appActive = true;
+
+  bool get _canSweep =>
+      widget.value == null &&
+      _visible &&
+      _tickerEnabled &&
+      !_animationsDisabled &&
+      _appActive;
 
   @override
   void initState() {
     super.initState();
-    _sweep = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1300),
-    );
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _appActive =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+    _sweep = AnimationController(vsync: this, duration: _sweepPeriod);
+    _syncSweep();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tickerEnabled = TickerMode.valuesOf(context).enabled;
+    final animationsDisabled = MediaQuery.disableAnimationsOf(context);
+    if (_tickerEnabled == tickerEnabled &&
+        _animationsDisabled == animationsDisabled) {
+      return;
+    }
+    _tickerEnabled = tickerEnabled;
+    _animationsDisabled = animationsDisabled;
     _syncSweep();
   }
 
@@ -49,16 +82,35 @@ class _CLProgressBarState extends State<CLProgressBar>
     _syncSweep();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final appActive = state == AppLifecycleState.resumed;
+    if (_appActive == appActive) return;
+    _appActive = appActive;
+    _syncSweep();
+  }
+
+  void _handleVisibilityChanged(VisibilityInfo info) {
+    if (!mounted) return;
+    final visible = info.visibleFraction > 0;
+    if (_visible == visible) return;
+    _visible = visible;
+    _syncSweep();
+  }
+
   void _syncSweep() {
-    if (widget.value == null) {
-      if (!_sweep.isAnimating) _sweep.repeat();
-    } else if (_sweep.isAnimating) {
-      _sweep.stop();
+    if (!_canSweep) {
+      if (_sweep.isAnimating) _sweep.stop(canceled: false);
+      return;
+    }
+    if (!_sweep.isAnimating) {
+      _sweep.repeat(period: _sweepPeriod);
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sweep.dispose();
     super.dispose();
   }
@@ -69,48 +121,61 @@ class _CLProgressBarState extends State<CLProgressBar>
     final fillColor = widget.color ?? theme.colors.accent;
     final radius = BorderRadius.circular(widget.height / 2);
 
-    return Semantics(
-      value: widget.value == null
-          ? null
-          : '${(widget.value! * 100).round()}%',
-      child: SizedBox(
-        height: widget.height,
-        child: DecoratedBox(
-          decoration: clSmoothDecoration(
-            color: theme.colors.track,
-            borderRadius: radius,
-          ),
-          child: CLSmoothClip(
-            borderRadius: radius,
-            child: widget.value != null
-                ? Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: AnimatedFractionallySizedBox(
-                      duration: const Duration(milliseconds: 380),
-                      curve: Curves.easeOutCubic,
-                      widthFactor: widget.value!.clamp(0.0, 1.0),
-                      heightFactor: 1,
-                      child: DecoratedBox(
-                        decoration: clSmoothDecoration(
-                          color: fillColor,
-                          borderRadius: radius,
+    return VisibilityDetector(
+      key: _visibilityKey,
+      onVisibilityChanged: _handleVisibilityChanged,
+      child: Semantics(
+        value: widget.value == null
+            ? null
+            : '${(widget.value! * 100).round()}%',
+        child: SizedBox(
+          height: widget.height,
+          child: DecoratedBox(
+            decoration: clSmoothDecoration(
+              color: theme.colors.track,
+              borderRadius: radius,
+            ),
+            child: CLSmoothClip(
+              borderRadius: radius,
+              child: widget.value != null
+                  ? Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: AnimatedFractionallySizedBox(
+                        duration: const Duration(milliseconds: 380),
+                        curve: Curves.easeOutCubic,
+                        widthFactor: widget.value!.clamp(0.0, 1.0),
+                        heightFactor: 1,
+                        child: DecoratedBox(
+                          decoration: clSmoothDecoration(
+                            color: fillColor,
+                            borderRadius: radius,
+                          ),
                         ),
                       ),
+                    )
+                  : _animationsDisabled
+                  ? CustomPaint(
+                      painter: _SweepPainter(
+                        t: _reducedMotionPosition,
+                        color: fillColor,
+                        radius: widget.height / 2,
+                      ),
+                      size: Size.infinite,
+                    )
+                  : AnimatedBuilder(
+                      animation: _sweep,
+                      builder: (context, _) {
+                        return CustomPaint(
+                          painter: _SweepPainter(
+                            t: _sweep.value,
+                            color: fillColor,
+                            radius: widget.height / 2,
+                          ),
+                          size: Size.infinite,
+                        );
+                      },
                     ),
-                  )
-                : AnimatedBuilder(
-                    animation: _sweep,
-                    builder: (context, _) {
-                      return CustomPaint(
-                        painter: _SweepPainter(
-                          t: _sweep.value,
-                          color: fillColor,
-                          radius: widget.height / 2,
-                        ),
-                        size: Size.infinite,
-                      );
-                    },
-                  ),
+            ),
           ),
         ),
       ),
@@ -131,10 +196,9 @@ class _SweepPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final eased = Curves.easeInOutCubic.transform(t);
-    final barWidth = size.width * 0.32;
+    final barWidth = size.width * _CLProgressBarState._indicatorFraction;
     final travel = size.width + barWidth;
-    final left = eased * travel - barWidth;
+    final left = t * travel - barWidth;
 
     // Soft leading/trailing fade so the sweep reads as light, not a block.
     final rect = Rect.fromLTWH(left, 0, barWidth, size.height);
