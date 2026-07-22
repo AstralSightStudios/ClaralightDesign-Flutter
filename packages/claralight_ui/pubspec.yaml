@@ -1,16 +1,20 @@
 name: claralight_ui
 description: "A new Flutter package project."
 version: 0.0.1
+publish_to: none
 homepage:
 
 environment:
   sdk: ^3.11.5
-  flutter: ">=3.30.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  progressive_blur: ^0.0.2
+  progressive_blur:
+    git:
+      url: https://github.com/leset0ng/progressive_blur.git
+      ref: 2db04b7a16d1c7960bb260855b8b61f0703c0520
   visibility_detector: ^0.4.0+2
 
 dev_dependencies:

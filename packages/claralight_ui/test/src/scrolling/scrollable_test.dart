@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:claralight_ui/claralight_ui.dart';
+import 'package:claralight_ui/src/scrolling/edge_effects.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -1167,6 +1168,68 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('edge atlas cache reuses geometry across activation and resize', (
+    tester,
+  ) async {
+    final horizontal = ScrollController();
+    addTearDown(horizontal.dispose);
+
+    Widget build(double width) {
+      return MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: width,
+            height: 80,
+            child: CLScrollable(
+              direction: CLScrollDirection.horizontal,
+              horizontalController: horizontal,
+              blurExtent: const EdgeInsets.symmetric(horizontal: 20),
+              blurSigma: const EdgeInsets.symmetric(horizontal: 5),
+              horizontalScrollbar: CLScrollbarVisibility.hidden,
+              verticalScrollbar: CLScrollbarVisibility.hidden,
+              child: const SizedBox(width: 300, height: 80),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build(100));
+    await tester.pumpAndSettle();
+    final state = tester.state<CLEdgeEffectsState>(find.byType(CLEdgeEffects));
+    final initialBuilds = state.atlasBuildCount;
+    expect(initialBuilds, greaterThanOrEqualTo(1));
+
+    horizontal.jumpTo(horizontal.position.maxScrollExtent);
+    await tester.pump(const Duration(milliseconds: 80));
+    horizontal.jumpTo(0);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(state.atlasBuildCount, initialBuilds);
+
+    await tester.pumpWidget(build(120));
+    await tester.pumpAndSettle();
+    expect(state.atlasBuildCount, initialBuilds + 1);
+
+    await tester.pumpWidget(build(100));
+    await tester.pumpAndSettle();
+    expect(state.atlasBuildCount, initialBuilds + 1);
+    expect(state.atlasHitCount, greaterThan(0));
+
+    await tester.pumpWidget(build(120));
+    await tester.pumpAndSettle();
+    expect(state.atlasBuildCount, initialBuilds + 1);
+
+    await tester.pumpWidget(build(140));
+    await tester.pumpAndSettle();
+    expect(state.atlasBuildCount, initialBuilds + 2);
+
+    // The third geometry evicts exactly the least-recently-used entry.
+    await tester.pumpWidget(build(100));
+    await tester.pumpAndSettle();
+    expect(state.atlasBuildCount, initialBuilds + 3);
   });
 
   testWidgets('always paints themed scrollbars on the right and bottom', (

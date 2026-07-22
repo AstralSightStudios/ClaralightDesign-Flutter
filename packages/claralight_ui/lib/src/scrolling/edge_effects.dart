@@ -7,6 +7,29 @@ import 'package:progressive_blur/progressive_blur.dart';
 
 import '../foundation/shape.dart';
 
+@immutable
+class _EdgeAtlasKey {
+  const _EdgeAtlasKey(this.size, this.extent);
+
+  final Size size;
+  final EdgeInsets extent;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _EdgeAtlasKey && size == other.size && extent == other.extent;
+
+  @override
+  int get hashCode => Object.hash(size, extent);
+}
+
+class _EdgeAtlasEntry {
+  const _EdgeAtlasEntry(this.key, this.image);
+
+  final _EdgeAtlasKey key;
+  final ui.Image image;
+}
+
 /// Progressive edge blur and alpha mask driven by one or two scroll
 /// controllers.
 ///
@@ -36,10 +59,10 @@ class CLEdgeEffects extends StatefulWidget {
   final Widget child;
 
   @override
-  State<CLEdgeEffects> createState() => _CLEdgeEffectsState();
+  State<CLEdgeEffects> createState() => CLEdgeEffectsState();
 }
 
-class _CLEdgeEffectsState extends State<CLEdgeEffects>
+class CLEdgeEffectsState extends State<CLEdgeEffects>
     with TickerProviderStateMixin {
   static const _transitionDuration = Duration(milliseconds: 160);
 
@@ -65,11 +88,15 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
   /// is momentarily unattached or unmeasured, the previous value is kept.
   bool _effectsMounted = false;
   bool _effectsMountUpdateScheduled = false;
-  ui.Image? _blurTexture;
-  Size? _blurTextureSize;
-  EdgeInsets? _blurTextureExtent;
-  EdgeInsets? _blurTextureSigma;
-  EdgeInsets? _blurTextureActivation;
+  final List<_EdgeAtlasEntry> _atlasCache = <_EdgeAtlasEntry>[];
+
+  /// Number of geometry atlases built by this state.
+  @visibleForTesting
+  int atlasBuildCount = 0;
+
+  /// Number of geometry atlas lookups served by this state.
+  @visibleForTesting
+  int atlasHitCount = 0;
 
   ScrollPosition? _horizontalPosition;
   ScrollPosition? _verticalPosition;
@@ -291,36 +318,33 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
             Widget result = child!;
             if (_effectsMounted) {
               final viewportSize = Size(
-                _horizontalPosition?.viewportDimension ?? constraints.maxWidth,
-                _verticalPosition?.viewportDimension ?? constraints.maxHeight,
+                constraints.hasBoundedWidth
+                    ? constraints.maxWidth
+                    : _horizontalPosition?.viewportDimension ?? 0,
+                constraints.hasBoundedHeight
+                    ? constraints.maxHeight
+                    : _verticalPosition?.viewportDimension ?? 0,
               );
-              final globalSigma = _globalSigma(
-                widget.blurExtent,
-                widget.blurSigma,
-              );
-              final blurTexture = _getBlurTexture(
-                viewportSize,
-                extent: widget.blurExtent,
-                sigma: widget.blurSigma,
-                activation: activation,
-                globalSigma: globalSigma,
-              );
-              result = ProgressiveBlurWidget.custom(
-                sigma: globalSigma,
-                blurTexture: blurTexture,
-                child: result,
-              );
-              result = ShaderMask(
-                blendMode: BlendMode.dstIn,
-                shaderCallback: (bounds) => _createMaskShader(
-                  bounds,
-                  extent: widget.blurExtent,
-                  activation: activation,
+              final atlas = _getAtlas(viewportSize, widget.blurExtent);
+              result = ProgressiveBlurWidget.multiLayer(
+                blurAtlas: atlas,
+                layerSigmas: ProgressiveBlurLayerValues(
+                  layer0: widget.blurSigma.left,
+                  layer1: widget.blurSigma.top,
+                  layer2: widget.blurSigma.right,
+                  layer3: widget.blurSigma.bottom,
                 ),
+                layerActivations: ProgressiveBlurLayerValues(
+                  layer0: activation.left,
+                  layer1: activation.top,
+                  layer2: activation.right,
+                  layer3: activation.bottom,
+                ),
+                maskAlpha: true,
                 child: result,
               );
             } else {
-              _replaceBlurTexture(null);
+              _clearAtlasCache();
             }
             if (widget.borderRadius != BorderRadius.zero) {
               result = CLSmoothClip(
@@ -335,48 +359,40 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
     );
   }
 
-  ui.Image _getBlurTexture(
-    Size size, {
-    required EdgeInsets extent,
-    required EdgeInsets sigma,
-    required EdgeInsets activation,
-    required double globalSigma,
-  }) {
-    if (_blurTexture != null &&
-        _blurTextureSize == size &&
-        _blurTextureExtent == extent &&
-        _blurTextureSigma == sigma &&
-        _blurTextureActivation == activation) {
-      return _blurTexture!;
+  ui.Image _getAtlas(Size size, EdgeInsets extent) {
+    final key = _EdgeAtlasKey(size, extent);
+    for (var index = 0; index < _atlasCache.length; index += 1) {
+      final entry = _atlasCache[index];
+      if (entry.key != key) continue;
+      atlasHitCount += 1;
+      if (index != 0) {
+        _atlasCache
+          ..removeAt(index)
+          ..insert(0, entry);
+      }
+      return entry.image;
     }
 
-    _blurTextureSize = size;
-    _blurTextureExtent = extent;
-    _blurTextureSigma = sigma;
-    _blurTextureActivation = activation;
-    final texture = _createBlurTexture(
-      size,
-      extent: extent,
-      sigma: sigma,
-      activation: activation,
-      globalSigma: globalSigma,
-    );
-    _replaceBlurTexture(texture);
-    return texture;
+    atlasBuildCount += 1;
+    final entry = _EdgeAtlasEntry(key, _createEdgeAtlas(size, extent));
+    _atlasCache.insert(0, entry);
+    if (_atlasCache.length > 2) {
+      final evicted = _atlasCache.removeLast();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        evicted.image.dispose();
+      });
+    }
+    return entry.image;
   }
 
-  void _replaceBlurTexture(ui.Image? texture) {
-    if (identical(_blurTexture, texture)) return;
-    final oldTexture = _blurTexture;
-    _blurTexture = texture;
-    if (texture == null) {
-      _blurTextureSize = null;
-      _blurTextureExtent = null;
-      _blurTextureSigma = null;
-      _blurTextureActivation = null;
-    }
-    if (oldTexture != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => oldTexture.dispose());
+  void _clearAtlasCache() {
+    if (_atlasCache.isEmpty) return;
+    final entries = List<_EdgeAtlasEntry>.of(_atlasCache);
+    _atlasCache.clear();
+    for (final entry in entries) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        entry.image.dispose();
+      });
     }
   }
 
@@ -388,229 +404,77 @@ class _CLEdgeEffectsState extends State<CLEdgeEffects>
     for (final controller in _controllers) {
       controller.dispose();
     }
-    _blurTexture?.dispose();
-    _blurTexture = null;
+    for (final entry in _atlasCache) {
+      entry.image.dispose();
+    }
+    _atlasCache.clear();
     super.dispose();
   }
 }
 
-double _globalSigma(EdgeInsets extent, EdgeInsets sigma) {
-  var result = 0.0;
-  if (extent.left > 0) result = math.max(result, sigma.left);
-  if (extent.top > 0) result = math.max(result, sigma.top);
-  if (extent.right > 0) result = math.max(result, sigma.right);
-  if (extent.bottom > 0) result = math.max(result, sigma.bottom);
-  return result;
-}
-
-ui.Image _createBlurTexture(
-  Size logicalSize, {
-  required EdgeInsets extent,
-  required EdgeInsets sigma,
-  required EdgeInsets activation,
-  required double globalSigma,
-}) {
+ui.Image _createEdgeAtlas(Size logicalSize, EdgeInsets extent) {
   final width = math.min(512, math.max(1, logicalSize.width.ceil()));
   final height = math.min(512, math.max(1, logicalSize.height.ceil()));
-  final scaleX = width / logicalSize.width;
-  final scaleY = height / logicalSize.height;
-  final bounds = Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble());
+  final scaleX = logicalSize.width == 0 ? 0 : width / logicalSize.width;
+  final scaleY = logicalSize.height == 0 ? 0 : height / logicalSize.height;
+  final cellWidth = width.toDouble();
+  final cellHeight = height.toDouble();
+  final atlasWidth = width * 2;
+  final atlasHeight = height * 2;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder)
     ..drawColor(const Color(0xff000000), BlendMode.src);
 
-  _drawBlurGradient(
+  // The atlas is row-major: left, top, right, bottom. Every cell is an
+  // opaque red square-root strength map; activation and sigma are uniforms.
+  _drawAtlasGradient(
     canvas,
-    bounds,
+    Rect.fromLTWH(0, 0, cellWidth, cellHeight),
     start: Offset.zero,
     end: Offset(extent.left * scaleX, 0),
-    activation: activation.left,
-    sigma: sigma.left,
-    globalSigma: globalSigma,
   );
-  _drawBlurGradient(
+  _drawAtlasGradient(
     canvas,
-    bounds,
-    start: Offset(width.toDouble(), 0),
-    end: Offset(width - extent.right * scaleX, 0),
-    activation: activation.right,
-    sigma: sigma.right,
-    globalSigma: globalSigma,
+    Rect.fromLTWH(cellWidth, 0, cellWidth, cellHeight),
+    start: Offset(cellWidth, 0),
+    end: Offset(cellWidth, extent.top * scaleY),
   );
-  _drawBlurGradient(
+  _drawAtlasGradient(
     canvas,
-    bounds,
-    start: Offset.zero,
-    end: Offset(0, extent.top * scaleY),
-    activation: activation.top,
-    sigma: sigma.top,
-    globalSigma: globalSigma,
+    Rect.fromLTWH(0, cellHeight, cellWidth, cellHeight),
+    start: Offset(cellWidth, cellHeight),
+    end: Offset(cellWidth - extent.right * scaleX, cellHeight),
   );
-  _drawBlurGradient(
+  _drawAtlasGradient(
     canvas,
-    bounds,
-    start: Offset(0, height.toDouble()),
-    end: Offset(0, height - extent.bottom * scaleY),
-    activation: activation.bottom,
-    sigma: sigma.bottom,
-    globalSigma: globalSigma,
+    Rect.fromLTWH(cellWidth, cellHeight, cellWidth, cellHeight),
+    start: Offset(cellWidth * 2, cellHeight * 2),
+    end: Offset(cellWidth * 2, cellHeight * 2 - extent.bottom * scaleY),
   );
 
   final picture = recorder.endRecording();
-  final image = picture.toImageSync(width, height);
+  final image = picture.toImageSync(atlasWidth, atlasHeight);
   picture.dispose();
   return image;
 }
 
-void _drawBlurGradient(
+void _drawAtlasGradient(
   Canvas canvas,
   Rect bounds, {
   required Offset start,
   required Offset end,
-  required double activation,
-  required double sigma,
-  required double globalSigma,
 }) {
-  if (activation <= 0 || sigma <= 0 || start == end) return;
+  if (start == end) return;
   const sampleCount = 16;
   final colors = <Color>[];
   final stops = <double>[];
   for (var sample = 0; sample <= sampleCount; sample += 1) {
     final position = sample / sampleCount;
-    final easedPosition = Curves.easeOut.transform(position);
-    final effectiveSigma = sigma * activation * (1 - easedPosition);
-    final value = (255 * math.sqrt(effectiveSigma / globalSigma)).round();
-    colors.add(Color.fromARGB(255, value, value, value));
+    final strength = math.sqrt(1 - Curves.easeOut.transform(position));
+    colors.add(Color.fromARGB(255, (strength * 255).round(), 0, 0));
     stops.add(position);
   }
   final paint = Paint()
-    ..shader = ui.Gradient.linear(start, end, colors, stops, TileMode.clamp)
-    ..blendMode = BlendMode.lighten;
-  canvas.drawRect(bounds, paint);
-}
-
-ui.Shader _createMaskShader(
-  Rect bounds, {
-  required EdgeInsets extent,
-  required EdgeInsets activation,
-}) {
-  final image = _createMaskTexture(bounds.size, extent, activation);
-  final transform = Matrix4.diagonal3Values(
-    bounds.width / image.width,
-    bounds.height / image.height,
-    1,
-  )..setTranslationRaw(bounds.left, bounds.top, 0);
-  final shader = ui.ImageShader(
-    image,
-    ui.TileMode.clamp,
-    ui.TileMode.clamp,
-    transform.storage,
-    filterQuality: FilterQuality.low,
-  );
-  image.dispose();
-  return shader;
-}
-
-ui.Image _createMaskTexture(
-  Size logicalSize,
-  EdgeInsets extent,
-  EdgeInsets activation,
-) {
-  final width = math.min(512, math.max(1, logicalSize.width.ceil()));
-  final height = math.min(512, math.max(1, logicalSize.height.ceil()));
-  final scaleX = width / logicalSize.width;
-  final scaleY = height / logicalSize.height;
-  final bounds = Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble());
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder)
-    ..drawColor(const Color(0xffffffff), BlendMode.src);
-
-  _drawMaskGradient(
-    canvas,
-    bounds,
-    start: Offset.zero,
-    end: Offset(extent.left * scaleX, 0),
-    activation: activation.left,
-  );
-  _drawMaskGradient(
-    canvas,
-    bounds,
-    start: Offset(width.toDouble(), 0),
-    end: Offset(width - extent.right * scaleX, 0),
-    activation: activation.right,
-  );
-  _drawMaskGradient(
-    canvas,
-    bounds,
-    start: Offset.zero,
-    end: Offset(0, extent.top * scaleY),
-    activation: activation.top,
-  );
-  _drawMaskGradient(
-    canvas,
-    bounds,
-    start: Offset(0, height.toDouble()),
-    end: Offset(0, height - extent.bottom * scaleY),
-    activation: activation.bottom,
-  );
-
-  final picture = recorder.endRecording();
-  final grayscale = picture.toImageSync(width, height);
-  picture.dispose();
-
-  final alphaRecorder = ui.PictureRecorder();
-  final alphaCanvas = Canvas(alphaRecorder);
-  final alphaPaint = Paint()
-    ..colorFilter = const ColorFilter.matrix([
-      0,
-      0,
-      0,
-      0,
-      255,
-      0,
-      0,
-      0,
-      0,
-      255,
-      0,
-      0,
-      0,
-      0,
-      255,
-      1,
-      0,
-      0,
-      0,
-      0,
-    ]);
-  alphaCanvas.drawImage(grayscale, Offset.zero, alphaPaint);
-  final alphaPicture = alphaRecorder.endRecording();
-  final image = alphaPicture.toImageSync(width, height);
-  alphaPicture.dispose();
-  grayscale.dispose();
-  return image;
-}
-
-void _drawMaskGradient(
-  Canvas canvas,
-  Rect bounds, {
-  required Offset start,
-  required Offset end,
-  required double activation,
-}) {
-  if (activation <= 0 || start == end) return;
-  const sampleCount = 16;
-  final colors = <Color>[];
-  final stops = <double>[];
-  for (var sample = 0; sample <= sampleCount; sample += 1) {
-    final position = sample / sampleCount;
-    final easedPosition = Curves.easeOut.transform(position);
-    final value = (255 * (1 - activation * (1 - easedPosition))).round();
-    colors.add(Color.fromARGB(255, value, value, value));
-    stops.add(position);
-  }
-  final paint = Paint()
-    ..shader = ui.Gradient.linear(start, end, colors, stops, TileMode.clamp)
-    ..blendMode = BlendMode.darken;
+    ..shader = ui.Gradient.linear(start, end, colors, stops, TileMode.clamp);
   canvas.drawRect(bounds, paint);
 }
