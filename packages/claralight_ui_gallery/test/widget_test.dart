@@ -3,10 +3,101 @@ import 'package:claralight_ui_gallery/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+const _groupBranchKey = Key('tree-group-2-branch');
+const _containerBranchKey = Key('tree-container-1-branch');
+const _subtreeBranchKey = Key('tree-group-1-branch');
+
+Finder _tile(String label) => find.byWidgetPredicate(
+  (widget) => widget is CLListTile && widget.label == label,
+  skipOffstage: false,
+);
+
+Finder _text(String label) => find.text(label, skipOffstage: false);
+
+Finder _branch(Key key) => find.byKey(key, skipOffstage: false);
+
+Widget _galleryHost({bool disableAnimations = false}) {
+  return CLTheme(
+    data: CLThemeData(),
+    child: MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(
+          size: const Size(1600, 2400),
+          disableAnimations: disableAnimations,
+        ),
+        child: GalleryHome(
+          brightness: Brightness.dark,
+          onBrightnessChanged: (_) {},
+        ),
+      ),
+    ),
+  );
+}
+
+void _useLargeView(WidgetTester tester) {
+  tester.platformDispatcher.accessibilityFeaturesTestValue =
+      const FakeAccessibilityFeatures();
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(1600, 2400);
+  addTearDown(tester.platformDispatcher.clearAllTestValues);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  addTearDown(tester.view.resetPhysicalSize);
+}
+
+void _toggleTile(WidgetTester tester, String label) {
+  tester.widget<CLListTile>(_tile(label)).onTap!();
+}
+
+Future<void> _tapTile(WidgetTester tester, String label) async {
+  await tester.ensureVisible(_tile(label));
+  await tester.pump();
+  await tester.tap(_tile(label));
+}
+
+Future<void> _flushVisibilityUpdates(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+void _galleryTestWidgets(String description, WidgetTesterCallback callback) {
+  testWidgets(description, (tester) async {
+    try {
+      await callback(tester);
+    } finally {
+      await _flushVisibilityUpdates(tester);
+    }
+  });
+}
+
+T _branchDescendant<T extends Widget>(WidgetTester tester, Key key) {
+  T? result;
+
+  void visit(Element element) {
+    if (result != null) return;
+    if (element.widget case final T widget) {
+      result = widget;
+      return;
+    }
+    element.visitChildren(visit);
+  }
+
+  tester.element(_branch(key)).visitChildren(visit);
+  return result!;
+}
+
+double _branchOpacity(WidgetTester tester, Key key) =>
+    _branchDescendant<Opacity>(tester, key).opacity;
+
+bool _hasSemanticsLabel(WidgetTester tester, String label) {
+  return tester.semantics.simulatedAccessibilityTraversal().any((node) {
+    return node.getSemanticsData().label.split('\n').contains(label);
+  });
+}
+
 void main() {
   setUpAll(CLScrollable.precache);
 
-  testWidgets('Gallery shows the Claralight component sections', (
+  _galleryTestWidgets('Gallery shows the Claralight component sections', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const GalleryApp());
@@ -64,15 +155,356 @@ void main() {
       tester.getSize(find.byType(SafeArea)).width,
     );
 
-    final tree = tester.widget<CLTreeView>(find.byType(CLTreeView));
-    final subtreeLeaf = tree.children.singleWhere(
-      (tile) => tile.label == '矩形 1',
-    );
+    final subtreeLeaf = tester.widget<CLListTile>(_tile('矩形 1'));
     expect(subtreeLeaf.depth, 2);
     expect(find.byKey(const Key('three-action-dialog-demo')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
-  testWidgets('Gallery opens the three-action dialog demo', (tester) async {
+  _galleryTestWidgets('tree branch animates height and opacity for 160ms', (
+    WidgetTester tester,
+  ) async {
+    _useLargeView(tester);
+    await tester.pumpWidget(_galleryHost());
+    await tester.pump();
+
+    final branch = _branch(_groupBranchKey);
+    final container = _branch(_containerBranchKey);
+    final header = _tile('组 2');
+    final expandedHeight = tester.getSize(branch).height;
+    final initialBranchState = tester.state(branch);
+    final initialContainerTop = tester.getTopLeft(container).dy;
+
+    expect(expandedHeight, 113);
+    expect(MediaQuery.disableAnimationsOf(tester.element(branch)), isFalse);
+    expect(_branchOpacity(tester, _groupBranchKey), 1);
+
+    _toggleTile(tester, '组 2');
+    await tester.pump();
+    expect(tester.state(branch), same(initialBranchState));
+    await tester.pump(const Duration(milliseconds: 40));
+    final heightAt40ms = tester.getSize(branch).height;
+    final opacityAt40ms = _branchOpacity(tester, _groupBranchKey);
+    final containerTopAt40ms = tester.getTopLeft(container).dy;
+
+    await tester.pump(const Duration(milliseconds: 40));
+    final heightAt80ms = tester.getSize(branch).height;
+    final opacityAt80ms = _branchOpacity(tester, _groupBranchKey);
+    final containerTopAt80ms = tester.getTopLeft(container).dy;
+
+    expect(heightAt40ms, inExclusiveRange(35, expandedHeight));
+    expect(heightAt80ms, inExclusiveRange(35, heightAt40ms));
+    expect(opacityAt40ms, inExclusiveRange(0, 1));
+    expect(opacityAt80ms, inExclusiveRange(0, opacityAt40ms));
+    expect(containerTopAt40ms, lessThan(initialContainerTop));
+    expect(containerTopAt80ms, lessThan(containerTopAt40ms));
+    expect(_text('进度条 1'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(microseconds: 1));
+
+    expect(_text('进度条 1'), findsNothing);
+    expect(_text('序列帧 1'), findsNothing);
+    expect(tester.getSize(branch).height, 35);
+    expect(
+      tester.getTopLeft(container).dy - tester.getBottomLeft(header).dy,
+      4,
+    );
+  });
+
+  _galleryTestWidgets(
+    'collapsing branch gates hits and semantics immediately',
+    (WidgetTester tester) async {
+      _useLargeView(tester);
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(_galleryHost());
+      await tester.pump();
+      await tester.ensureVisible(_tile('进度条 1'));
+      await tester.pump();
+
+      expect(_hasSemanticsLabel(tester, '进度条 1'), isTrue);
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+
+      expect(
+        _branchDescendant<IgnorePointer>(tester, _groupBranchKey).ignoring,
+        isTrue,
+      );
+      expect(find.text('进度条 1'), findsOneWidget);
+      expect(_hasSemanticsLabel(tester, '进度条 1'), isFalse);
+      expect(_hasSemanticsLabel(tester, '组 2'), isTrue);
+      expect(_text('进度条 1').hitTestable(), findsNothing);
+
+      await tester.tap(_text('进度条 1'), warnIfMissed: false);
+      await tester.pump();
+      expect(tester.widget<CLListTile>(_tile('组 2')).expanded, isFalse);
+      expect(tester.widget<CLListTile>(_tile('容器 1')).expanded, isTrue);
+
+      await _tapTile(tester, '组 2');
+      await tester.pump();
+      expect(tester.widget<CLListTile>(_tile('组 2')).expanded, isTrue);
+      expect(_hasSemanticsLabel(tester, '进度条 1'), isTrue);
+      await tester.pump(const Duration(milliseconds: 160));
+      semantics.dispose();
+    },
+  );
+
+  _galleryTestWidgets(
+    'tree branch reverses continuously and honors the last target',
+    (WidgetTester tester) async {
+      _useLargeView(tester);
+      await tester.pumpWidget(_galleryHost());
+      await tester.pump();
+
+      final branch = _branch(_groupBranchKey);
+      void expectSingleChildren() {
+        expect(_text('进度条 1'), findsOneWidget);
+        expect(_text('序列帧 1'), findsOneWidget);
+      }
+
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      final collapseHeight = tester.getSize(branch).height;
+      final collapseOpacity = _branchOpacity(tester, _groupBranchKey);
+      expectSingleChildren();
+
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+      expect(tester.getSize(branch).height, closeTo(collapseHeight, 0.001));
+      expect(
+        _branchOpacity(tester, _groupBranchKey),
+        closeTo(collapseOpacity, 0.001),
+      );
+      await tester.pump(const Duration(milliseconds: 40));
+      final expandHeight = tester.getSize(branch).height;
+      final expandOpacity = _branchOpacity(tester, _groupBranchKey);
+      expect(expandHeight, greaterThan(collapseHeight));
+      expect(expandOpacity, greaterThan(collapseOpacity));
+      expectSingleChildren();
+
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+      expect(tester.getSize(branch).height, closeTo(expandHeight, 0.001));
+      expect(
+        _branchOpacity(tester, _groupBranchKey),
+        closeTo(expandOpacity, 0.001),
+      );
+      await tester.pump(const Duration(milliseconds: 40));
+      final secondCollapseHeight = tester.getSize(branch).height;
+      final secondCollapseOpacity = _branchOpacity(tester, _groupBranchKey);
+      expect(secondCollapseHeight, lessThan(expandHeight));
+      expect(secondCollapseOpacity, lessThan(expandOpacity));
+      expectSingleChildren();
+
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+      expect(
+        tester.getSize(branch).height,
+        closeTo(secondCollapseHeight, 0.001),
+      );
+      expect(
+        _branchOpacity(tester, _groupBranchKey),
+        closeTo(secondCollapseOpacity, 0.001),
+      );
+      await tester.pump(const Duration(milliseconds: 160));
+      expect(tester.getSize(branch).height, 113);
+      expect(_branchOpacity(tester, _groupBranchKey), 1);
+      expectSingleChildren();
+
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 160));
+      await tester.pump(const Duration(microseconds: 1));
+      expect(tester.getSize(branch).height, 35);
+      expect(_text('进度条 1'), findsNothing);
+      expect(_text('序列帧 1'), findsNothing);
+    },
+  );
+
+  _galleryTestWidgets(
+    'nested tree preserves expanded geometry and independent state',
+    (WidgetTester tester) async {
+      _useLargeView(tester);
+      await tester.pumpWidget(_galleryHost());
+      await tester.pump();
+
+      const labels = [
+        'Frame 114',
+        '图组 1',
+        '文字 1',
+        '组 2',
+        '进度条 1',
+        '序列帧 1',
+        '容器 1',
+        '组 1',
+        '矩形 1',
+        '文字 2',
+      ];
+      for (final label in labels) {
+        expect(tester.getSize(_tile(label)).height, 35);
+      }
+      for (var i = 1; i < labels.length; i++) {
+        expect(
+          tester.getTopLeft(_tile(labels[i])).dy -
+              tester.getBottomLeft(_tile(labels[i - 1])).dy,
+          4,
+        );
+      }
+
+      expect(tester.widget<CLListTile>(_tile('组 1')).depth, 1);
+      expect(tester.widget<CLListTile>(_tile('矩形 1')).depth, 2);
+      final groupIcon = find.descendant(
+        of: _tile('组 1'),
+        matching: find.byIcon(Icons.crop_free_rounded),
+      );
+      final leafIcon = find.descendant(
+        of: _tile('矩形 1'),
+        matching: find.byIcon(Icons.rectangle_outlined),
+      );
+      expect(
+        tester.getTopLeft(groupIcon).dx - tester.getTopLeft(_tile('组 1')).dx,
+        32,
+      );
+      expect(
+        tester.getTopLeft(leafIcon).dx - tester.getTopLeft(_tile('矩形 1')).dx,
+        56,
+      );
+
+      final treeScrollable = find.descendant(
+        of: find.byType(CLTreeView),
+        matching: find.byType(Scrollable),
+      );
+      expect(
+        tester.state<ScrollableState>(treeScrollable).position.maxScrollExtent,
+        78,
+      );
+
+      _toggleTile(tester, '组 1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 160));
+      await tester.pump(const Duration(microseconds: 1));
+      expect(_text('矩形 1'), findsNothing);
+      expect(tester.getSize(_branch(_subtreeBranchKey)).height, 35);
+      expect(tester.getSize(_branch(_containerBranchKey)).height, 74);
+      expect(tester.widget<CLListTile>(_tile('容器 1')).expanded, isTrue);
+
+      _toggleTile(tester, '容器 1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 160));
+      await tester.pump(const Duration(microseconds: 1));
+      expect(_branch(_subtreeBranchKey), findsNothing);
+
+      _toggleTile(tester, '容器 1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 160));
+      expect(_branch(_subtreeBranchKey), findsOneWidget);
+      expect(_text('矩形 1'), findsNothing);
+
+      _toggleTile(tester, '组 1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 160));
+      expect(_text('矩形 1'), findsOneWidget);
+      expect(_text('文字 2'), findsOneWidget);
+    },
+  );
+
+  _galleryTestWidgets('reduced motion snaps every tree branch', (
+    WidgetTester tester,
+  ) async {
+    _useLargeView(tester);
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(_galleryHost(disableAnimations: true));
+    await tester.pump();
+
+    expect(tester.getSize(_branch(_groupBranchKey)).height, 113);
+    _toggleTile(tester, '组 2');
+    await tester.pump();
+    expect(tester.getSize(_branch(_groupBranchKey)).height, 35);
+    expect(_text('进度条 1'), findsNothing);
+    expect(_hasSemanticsLabel(tester, '进度条 1'), isFalse);
+
+    await _tapTile(tester, '组 2');
+    await tester.pump();
+    expect(tester.getSize(_branch(_groupBranchKey)).height, 113);
+    expect(_text('进度条 1'), findsOneWidget);
+    expect(_hasSemanticsLabel(tester, '进度条 1'), isTrue);
+
+    await _tapTile(tester, '容器 1');
+    await tester.pump();
+    expect(tester.getSize(_branch(_containerBranchKey)).height, 35);
+    expect(_branch(_subtreeBranchKey), findsNothing);
+    expect(_hasSemanticsLabel(tester, '组 1'), isFalse);
+
+    await _tapTile(tester, '容器 1');
+    await tester.pump();
+    expect(tester.getSize(_branch(_containerBranchKey)).height, 152);
+    expect(_branch(_subtreeBranchKey), findsOneWidget);
+    expect(_text('矩形 1'), findsOneWidget);
+
+    await _tapTile(tester, '组 1');
+    await tester.pump();
+    expect(tester.getSize(_branch(_subtreeBranchKey)).height, 35);
+    expect(_text('矩形 1'), findsNothing);
+    expect(_hasSemanticsLabel(tester, '矩形 1'), isFalse);
+
+    await _tapTile(tester, '组 1');
+    await tester.pump();
+    expect(tester.getSize(_branch(_subtreeBranchKey)).height, 113);
+    expect(_text('矩形 1'), findsOneWidget);
+    expect(_hasSemanticsLabel(tester, '矩形 1'), isTrue);
+    semantics.dispose();
+  });
+
+  _galleryTestWidgets(
+    'enabling reduced motion snaps an in-flight tree branch',
+    (WidgetTester tester) async {
+      _useLargeView(tester);
+      var disableAnimations = false;
+      late StateSetter updateHost;
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            updateHost = setState;
+            return _galleryHost(disableAnimations: disableAnimations);
+          },
+        ),
+      );
+      await tester.pump();
+
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.getSize(_branch(_groupBranchKey)).height,
+        inExclusiveRange(35, 113),
+      );
+
+      updateHost(() => disableAnimations = true);
+      await tester.pump();
+      expect(tester.getSize(_branch(_groupBranchKey)).height, 35);
+      expect(_text('进度条 1'), findsNothing);
+
+      updateHost(() => disableAnimations = false);
+      await tester.pump();
+      _toggleTile(tester, '组 2');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.getSize(_branch(_groupBranchKey)).height,
+        inExclusiveRange(35, 113),
+      );
+
+      updateHost(() => disableAnimations = true);
+      await tester.pump();
+      expect(tester.getSize(_branch(_groupBranchKey)).height, 113);
+      expect(_text('进度条 1'), findsOneWidget);
+    },
+  );
+
+  _galleryTestWidgets('Gallery opens the three-action dialog demo', (
+    tester,
+  ) async {
     await tester.pumpWidget(const GalleryApp());
     await tester.pump();
 
@@ -91,7 +523,7 @@ void main() {
     expect(find.text('取消'), findsOneWidget);
   });
 
-  testWidgets('Gallery switches between dark and light themes', (
+  _galleryTestWidgets('Gallery switches between dark and light themes', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const GalleryApp());
@@ -121,7 +553,7 @@ void main() {
     expect(theme().data.colors.brightness, Brightness.dark);
   });
 
-  testWidgets('Gallery exposes a 500-option aligned select demo', (
+  _galleryTestWidgets('Gallery exposes a 500-option aligned select demo', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const GalleryApp());
@@ -136,27 +568,28 @@ void main() {
     expect(select.options.last.label, '项目 500 / 500');
   });
 
-  testWidgets('Gallery toolbar demo previews and switches its active tool', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const GalleryApp());
-    await tester.pump();
+  _galleryTestWidgets(
+    'Gallery toolbar demo previews and switches its active tool',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const GalleryApp());
+      await tester.pump();
 
-    final first = find.byKey(const Key('toolbar-tool-0'));
-    final initial = find.byKey(const Key('toolbar-tool-3'));
-    expect(tester.widget<CLIconButton>(initial).selected, isTrue);
-    expect(tester.widget<CLIconButton>(first).selected, isFalse);
+      final first = find.byKey(const Key('toolbar-tool-0'));
+      final initial = find.byKey(const Key('toolbar-tool-3'));
+      expect(tester.widget<CLIconButton>(initial).selected, isTrue);
+      expect(tester.widget<CLIconButton>(first).selected, isFalse);
 
-    await tester.ensureVisible(first);
-    await tester.pump();
-    await tester.tap(first);
-    await tester.pump();
+      await tester.ensureVisible(first);
+      await tester.pump();
+      await tester.tap(first);
+      await tester.pump();
 
-    expect(tester.widget<CLIconButton>(first).selected, isTrue);
-    expect(tester.widget<CLIconButton>(initial).selected, isFalse);
-  });
+      expect(tester.widget<CLIconButton>(first).selected, isTrue);
+      expect(tester.widget<CLIconButton>(initial).selected, isFalse);
+    },
+  );
 
-  testWidgets('Gallery exposes the interactive CLScrollable demo', (
+  _galleryTestWidgets('Gallery exposes the interactive CLScrollable demo', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const GalleryApp());
@@ -205,7 +638,7 @@ void main() {
     expect(updatedDemo.verticalScrollbar, CLScrollbarVisibility.always);
   });
 
-  testWidgets('Gallery exposes the interactive CLList demo', (
+  _galleryTestWidgets('Gallery exposes the interactive CLList demo', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const GalleryApp());

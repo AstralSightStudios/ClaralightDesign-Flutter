@@ -265,7 +265,8 @@ class CLListSection extends StatelessWidget {
 /// The parent must provide a bounded height. Use [CLListTile.depth] to encode
 /// nesting and [CLListTile.expanded] for disclosure controls.
 class CLTreeView extends StatefulWidget {
-  final List<CLListTile> children;
+  /// Usually [CLListTile]s, or composed widgets that group related tree rows.
+  final List<Widget> children;
   final ScrollController? controller;
 
   const CLTreeView({super.key, required this.children, this.controller});

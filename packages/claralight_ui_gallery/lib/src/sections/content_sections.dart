@@ -1,5 +1,137 @@
 part of '../../main.dart';
 
+class _AnimatedTreeBranch extends StatefulWidget {
+  final CLListTile header;
+  final List<Widget> children;
+  final bool expanded;
+
+  const _AnimatedTreeBranch({
+    super.key,
+    required this.header,
+    required this.children,
+    required this.expanded,
+  });
+
+  @override
+  State<_AnimatedTreeBranch> createState() => _AnimatedTreeBranchState();
+}
+
+class _AnimatedTreeBranchState extends State<_AnimatedTreeBranch>
+    with SingleTickerProviderStateMixin {
+  static const _duration = Duration(milliseconds: 160);
+  static const _curve = Cubic(0.23, 1, 0.32, 1);
+
+  late final AnimationController _controller;
+  late final Animation<double> _reveal;
+  late bool _childrenMounted;
+  bool _disableAnimations = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _childrenMounted = widget.expanded;
+    _controller = AnimationController(
+      vsync: this,
+      duration: _duration,
+      reverseDuration: _duration,
+      value: widget.expanded ? 1 : 0,
+    )..addStatusListener(_handleStatus);
+    _reveal = CurvedAnimation(
+      parent: _controller,
+      curve: _curve,
+      reverseCurve: const FlippedCurve(_curve),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedTreeBranch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.expanded == widget.expanded) return;
+
+    if (_disableAnimations) {
+      _controller.stop();
+      _childrenMounted = widget.expanded;
+      _controller.value = widget.expanded ? 1 : 0;
+    } else if (widget.expanded) {
+      _childrenMounted = true;
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _controller.stop();
+      _childrenMounted = widget.expanded;
+      _controller.value = widget.expanded ? 1 : 0;
+    }
+  }
+
+  void _handleStatus(AnimationStatus status) {
+    if (status != AnimationStatus.dismissed ||
+        widget.expanded ||
+        !_childrenMounted) {
+      return;
+    }
+    setState(() => _childrenMounted = false);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        widget.header,
+        if (_childrenMounted)
+          AnimatedBuilder(
+            animation: _reveal,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 4),
+                for (var i = 0; i < widget.children.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 4),
+                  widget.children[i],
+                ],
+              ],
+            ),
+            builder: (context, child) {
+              final interactive = widget.expanded && _reveal.value > 0;
+              return IgnorePointer(
+                ignoring: !interactive,
+                child: ExcludeSemantics(
+                  excluding: !interactive,
+                  child: ClipRect(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      heightFactor: _reveal.value,
+                      child: Opacity(opacity: _reveal.value, child: child),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
 class _ListsSection extends StatefulWidget {
   const _ListsSection();
 
@@ -12,6 +144,8 @@ class _ListsSectionState extends State<_ListsSection> {
   bool _groupExpanded = true;
   bool _containerExpanded = true;
   bool _subtreeExpanded = true;
+  final _groupBranchSlotKey = GlobalKey();
+  final _containerBranchSlotKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -62,69 +196,88 @@ class _ListsSectionState extends State<_ListsSection> {
                     leading: const Icon(Icons.text_fields_rounded),
                     onTap: () {},
                   ),
-                  CLListTile(
-                    label: '组 2',
-                    leading: const Icon(Icons.crop_free_rounded),
-                    expanded: _groupExpanded,
-                    onExpandedChanged: (v) =>
-                        setState(() => _groupExpanded = v),
-                    onTap: () =>
-                        setState(() => _groupExpanded = !_groupExpanded),
-                  ),
-                  if (_groupExpanded) ...[
-                    CLListTile(
-                      label: '进度条 1',
-                      depth: 1,
-                      leading: const Icon(Icons.data_usage_rounded),
-                      onTap: () {},
-                    ),
-                    CLListTile(
-                      label: '序列帧 1',
-                      depth: 1,
-                      leading: const Icon(Icons.auto_awesome_rounded),
-                      onTap: () {},
-                    ),
-                  ],
-                  CLListTile(
-                    label: '容器 1',
-                    tint: const Color(0xFFBE93E4),
-                    leading: const Icon(Icons.grid_view_rounded),
-                    expanded: _containerExpanded,
-                    onExpandedChanged: (v) =>
-                        setState(() => _containerExpanded = v),
-                    onTap: () => setState(
-                      () => _containerExpanded = !_containerExpanded,
+                  KeyedSubtree(
+                    key: _groupBranchSlotKey,
+                    child: _AnimatedTreeBranch(
+                      key: const Key('tree-group-2-branch'),
+                      expanded: _groupExpanded,
+                      header: CLListTile(
+                        label: '组 2',
+                        leading: const Icon(Icons.crop_free_rounded),
+                        expanded: _groupExpanded,
+                        onExpandedChanged: (v) =>
+                            setState(() => _groupExpanded = v),
+                        onTap: () =>
+                            setState(() => _groupExpanded = !_groupExpanded),
+                      ),
+                      children: [
+                        CLListTile(
+                          label: '进度条 1',
+                          depth: 1,
+                          leading: const Icon(Icons.data_usage_rounded),
+                          onTap: () {},
+                        ),
+                        CLListTile(
+                          label: '序列帧 1',
+                          depth: 1,
+                          leading: const Icon(Icons.auto_awesome_rounded),
+                          onTap: () {},
+                        ),
+                      ],
                     ),
                   ),
-                  if (_containerExpanded) ...[
-                    CLListTile(
-                      label: '组 1',
-                      tint: const Color(0xFFBE93E4),
-                      depth: 1,
-                      leading: const Icon(Icons.crop_free_rounded),
-                      expanded: _subtreeExpanded,
-                      onExpandedChanged: (v) =>
-                          setState(() => _subtreeExpanded = v),
-                      onTap: () =>
-                          setState(() => _subtreeExpanded = !_subtreeExpanded),
+                  KeyedSubtree(
+                    key: _containerBranchSlotKey,
+                    child: _AnimatedTreeBranch(
+                      key: const Key('tree-container-1-branch'),
+                      expanded: _containerExpanded,
+                      header: CLListTile(
+                        label: '容器 1',
+                        tint: const Color(0xFFBE93E4),
+                        leading: const Icon(Icons.grid_view_rounded),
+                        expanded: _containerExpanded,
+                        onExpandedChanged: (v) =>
+                            setState(() => _containerExpanded = v),
+                        onTap: () => setState(
+                          () => _containerExpanded = !_containerExpanded,
+                        ),
+                      ),
+                      children: [
+                        _AnimatedTreeBranch(
+                          key: const Key('tree-group-1-branch'),
+                          expanded: _subtreeExpanded,
+                          header: CLListTile(
+                            label: '组 1',
+                            tint: const Color(0xFFBE93E4),
+                            depth: 1,
+                            leading: const Icon(Icons.crop_free_rounded),
+                            expanded: _subtreeExpanded,
+                            onExpandedChanged: (v) =>
+                                setState(() => _subtreeExpanded = v),
+                            onTap: () => setState(
+                              () => _subtreeExpanded = !_subtreeExpanded,
+                            ),
+                          ),
+                          children: [
+                            CLListTile(
+                              label: '矩形 1',
+                              tint: const Color(0xFFBE93E4),
+                              depth: 2,
+                              leading: const Icon(Icons.rectangle_outlined),
+                              onTap: () {},
+                            ),
+                            CLListTile(
+                              label: '文字 2',
+                              tint: const Color(0xFFBE93E4),
+                              depth: 2,
+                              leading: const Icon(Icons.text_fields_rounded),
+                              onTap: () {},
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    if (_subtreeExpanded) ...[
-                      CLListTile(
-                        label: '矩形 1',
-                        tint: const Color(0xFFBE93E4),
-                        depth: 2,
-                        leading: const Icon(Icons.rectangle_outlined),
-                        onTap: () {},
-                      ),
-                      CLListTile(
-                        label: '文字 2',
-                        tint: const Color(0xFFBE93E4),
-                        depth: 2,
-                        leading: const Icon(Icons.text_fields_rounded),
-                        onTap: () {},
-                      ),
-                    ],
-                  ],
+                  ),
                 ],
               ),
             ),

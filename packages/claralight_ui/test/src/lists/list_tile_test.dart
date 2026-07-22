@@ -240,6 +240,10 @@ void main() {
     const treeKey = Key('tree');
     const firstKey = Key('first');
     const secondKey = Key('second');
+    final List<CLListTile> typedChildren = const [
+      CLListTile(key: firstKey, label: 'Frame 114'),
+      CLListTile(key: secondKey, label: '图组 1'),
+    ];
 
     await tester.pumpWidget(
       MaterialApp(
@@ -251,10 +255,7 @@ void main() {
               height: 316,
               child: CLTreeView(
                 controller: controller,
-                children: const [
-                  CLListTile(key: firstKey, label: 'Frame 114'),
-                  CLListTile(key: secondKey, label: '图组 1'),
-                ],
+                children: typedChildren,
               ),
             ),
           ),
@@ -276,5 +277,37 @@ void main() {
     expect(list.scrollbarVisibility, CLScrollbarVisibility.auto);
     expect(list.blurExtent, const EdgeInsets.all(24));
     expect(list.blurSigma, const EdgeInsets.all(16));
+
+    const composedKey = Key('composed');
+    final List<Widget> composedChildren = const [
+      CLListTile(key: firstKey, label: 'Frame 114'),
+      Column(
+        key: composedKey,
+        children: [CLListTile(key: secondKey, label: '图组 1')],
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              key: treeKey,
+              width: 282,
+              height: 316,
+              child: CLTreeView(
+                controller: controller,
+                children: composedChildren,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(composedKey), findsOneWidget);
+    expect(tester.getRect(find.byKey(firstKey)), firstRect);
+    expect(tester.getRect(find.byKey(secondKey)).top - firstRect.bottom, 4);
+    expect(tester.widget<CLList>(find.byType(CLList)).controller, controller);
   });
 }
