@@ -79,6 +79,8 @@ class _CLPressableState extends State<CLPressable>
   Offset _dragReturnStart = Offset.zero;
   Offset _pointerPosition = Offset.zero;
 
+  bool _disableAnimations = false;
+
   bool get _enabled => widget.onTap != null;
 
   @override
@@ -100,6 +102,25 @@ class _CLPressableState extends State<CLPressable>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) _snapReducedMotionGeometry();
+  }
+
+  void _snapReducedMotionGeometry() {
+    _scale.stop();
+    _dragReturn.stop();
+    _scale.value = 0;
+    _dragReturn.value = 0;
+    _dragOffset = Offset.zero;
+    _dragReturnStart = Offset.zero;
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
     _scale.dispose();
     _dragReturn.dispose();
@@ -111,7 +132,12 @@ class _CLPressableState extends State<CLPressable>
     if (!_enabled || _activePointer != null) return;
     _scale.stop();
     _dragReturn.stop();
-    _scale.animateTo(1, duration: widget.duration, curve: widget.curve);
+    if (_disableAnimations) {
+      _scale.value = 0;
+      _dragReturn.value = 0;
+    } else {
+      _scale.animateTo(1, duration: widget.duration, curve: widget.curve);
+    }
     _highlight.forward();
     setState(() {
       _activePointer = event.pointer;
@@ -125,9 +151,8 @@ class _CLPressableState extends State<CLPressable>
   void _handlePointerMove(PointerMoveEvent event) {
     if (event.pointer != _activePointer) return;
     setState(() {
-      if (widget.deformOnDrag) {
-        _dragOffset =
-            (event.localPosition - _pressOrigin) / widget.dragTension;
+      if (widget.deformOnDrag && !_disableAnimations) {
+        _dragOffset = (event.localPosition - _pressOrigin) / widget.dragTension;
       }
       _pointerPosition = event.localPosition;
     });
@@ -137,17 +162,36 @@ class _CLPressableState extends State<CLPressable>
     if (event.pointer != _activePointer) return;
     _activePointer = null;
     _highlight.reverse();
-    _scale.animateWith(
-      SpringSimulation(widget.spring, _scale.value, 0, 0,
-          tolerance: Tolerance.defaultTolerance),
-    );
-    if (_dragOffset != Offset.zero) {
-      _dragReturnStart = _dragOffset;
-      _dragReturn.value = 1;
-      _dragReturn.animateWith(
-        SpringSimulation(widget.spring, 1, 0, 0,
-            tolerance: Tolerance.defaultTolerance),
+    if (_disableAnimations) {
+      _scale.stop();
+      _dragReturn.stop();
+      _scale.value = 0;
+      _dragReturn.value = 0;
+      _dragOffset = Offset.zero;
+      _dragReturnStart = Offset.zero;
+    } else {
+      _scale.animateWith(
+        SpringSimulation(
+          widget.spring,
+          _scale.value,
+          0,
+          0,
+          tolerance: Tolerance.defaultTolerance,
+        ),
       );
+      if (_dragOffset != Offset.zero) {
+        _dragReturnStart = _dragOffset;
+        _dragReturn.value = 1;
+        _dragReturn.animateWith(
+          SpringSimulation(
+            widget.spring,
+            1,
+            0,
+            0,
+            tolerance: Tolerance.defaultTolerance,
+          ),
+        );
+      }
     }
     setState(() {});
   }
@@ -157,8 +201,9 @@ class _CLPressableState extends State<CLPressable>
 
   Matrix4 _deformationMatrix(Size size) {
     final extent = math.max(size.width, size.height);
-    final normalized =
-        extent == 0 ? 0.0 : (_dragOffset.distance / extent).clamp(0.0, 1.0);
+    final normalized = extent == 0
+        ? 0.0
+        : (_dragOffset.distance / extent).clamp(0.0, 1.0);
     if (normalized == 0) return Matrix4.identity();
 
     final stretch = 1 + normalized * 0.18;
@@ -203,8 +248,7 @@ class _CLPressableState extends State<CLPressable>
                           painter: _HighlightPainter(
                             pointer: _pointerPosition,
                             tint: tint,
-                            press:
-                                Curves.easeOut.transform(_highlight.value),
+                            press: Curves.easeOut.transform(_highlight.value),
                           ),
                         ),
                       ),
@@ -237,7 +281,6 @@ class _CLPressableState extends State<CLPressable>
       ),
     );
   }
-
 }
 
 /// The pressed-state wash and the dim, wide light under the pointer.

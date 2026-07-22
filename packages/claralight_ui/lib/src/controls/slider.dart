@@ -62,6 +62,7 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
   /// Whether the pointer is actively tracking (drag) — jumps skip the
   /// spring so the thumb never lags behind the finger.
   bool _tracking = false;
+  bool _disableAnimations = false;
 
   @override
   void initState() {
@@ -73,10 +74,28 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) _snapReducedMotionGeometry();
+  }
+
+  void _snapReducedMotionGeometry() {
+    _press.stop();
+    _visual.stop();
+    _press.value = 0;
+    _visual.value = _fraction;
+    if (mounted) setState(() {});
+  }
+
+  @override
   void didUpdateWidget(CLSlider oldWidget) {
     super.didUpdateWidget(oldWidget);
     final target = _fraction;
-    if (_tracking) {
+    if (_disableAnimations || _tracking) {
+      _visual.stop();
       _visual.value = target;
     } else if ((target - _visual.value).abs() > 0.0005) {
       final distance = (target - _visual.value).abs();
@@ -114,6 +133,11 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
 
   void _setPressed(bool pressed, {bool tracking = false}) {
     _tracking = pressed && tracking;
+    if (_disableAnimations) {
+      _press.stop();
+      _press.value = 0;
+      return;
+    }
     if (pressed) {
       _press.animateTo(
         1,

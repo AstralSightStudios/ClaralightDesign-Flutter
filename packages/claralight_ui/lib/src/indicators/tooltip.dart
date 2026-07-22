@@ -78,21 +78,71 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
   late final AnimationController _spring;
   Timer? _dwell;
   bool _shownFromHover = false;
+  bool _open = false;
+  bool _disableAnimations = false;
 
   @override
   void initState() {
     super.initState();
-    _reveal =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 140),
-          reverseDuration: const Duration(milliseconds: 110),
-        )..addStatusListener((status) {
-          if (status == AnimationStatus.dismissed && _portal.isShowing) {
-            _portal.hide();
-          }
-        });
+    _reveal = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 140),
+      reverseDuration: const Duration(milliseconds: 110),
+      animationBehavior: AnimationBehavior.preserve,
+    )..addStatusListener(_handleRevealStatus);
     _spring = AnimationController.unbounded(vsync: this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _snapReducedMotionGeometry();
+    } else if (_portal.isShowing) {
+      _spring.animateWith(
+        SpringSimulation(
+          _open
+              ? const SpringDescription(mass: 1, stiffness: 560, damping: 27)
+              : const SpringDescription(mass: 1, stiffness: 620, damping: 40),
+          _spring.value,
+          _open ? 1 : 0,
+          0,
+        ),
+      );
+      _animateReveal(_open);
+    }
+  }
+
+  void _snapReducedMotionGeometry() {
+    _spring.stop();
+    _spring.value = (_portal.isShowing || _reveal.value > 0) ? 1 : 0;
+    if (_portal.isShowing) _animateReveal(_open);
+  }
+
+  TickerFuture _animateReveal(bool show) {
+    if (!_disableAnimations) {
+      return show ? _reveal.forward() : _reveal.reverse();
+    }
+    return show
+        ? _reveal.animateTo(1, duration: const Duration(milliseconds: 125))
+        : _reveal.animateBack(0, duration: const Duration(milliseconds: 125));
+  }
+
+  void _handleRevealStatus(AnimationStatus status) {
+    if (status != AnimationStatus.dismissed || !_portal.isShowing) return;
+    _portal.hide();
+    if (mounted) setState(() {});
+    if (_disableAnimations) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_portal.isShowing) {
+          _spring.stop();
+          _spring.value = 0;
+        }
+      });
+    }
   }
 
   @override
@@ -118,8 +168,14 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
 
   void _show() {
     if (!mounted) return;
+    _open = true;
+    if (_disableAnimations) {
+      _spring.stop();
+      _spring.value = 1;
+    }
     if (!_portal.isShowing) _portal.show();
-    _reveal.forward();
+    _animateReveal(true);
+    if (_disableAnimations) return;
     _spring.animateWith(
       SpringSimulation(
         const SpringDescription(mass: 1, stiffness: 560, damping: 27),
@@ -132,7 +188,24 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
 
   void _hide() {
     _dwell?.cancel();
+    _open = false;
     final revealActive = _reveal.isAnimating || _reveal.value > 0;
+    if (_disableAnimations) {
+      _spring.stop();
+      _spring.value = 1;
+      if (!revealActive) {
+        if (_portal.isShowing) _portal.hide();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_portal.isShowing) {
+            _spring.stop();
+            _spring.value = 0;
+          }
+        });
+        return;
+      }
+      _animateReveal(false);
+      return;
+    }
     if (!revealActive) {
       _spring
         ..stop()
@@ -141,7 +214,7 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
       return;
     }
 
-    _reveal.reverse();
+    _animateReveal(false);
     _spring.animateWith(
       SpringSimulation(
         const SpringDescription(mass: 1, stiffness: 620, damping: 40),
@@ -215,7 +288,11 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
             shadowColor: const Color(0x40000000),
             shadowBlur: 18,
             shadowOffset: const Offset(0, 6),
-            opacity: Curves.easeOutCubic.transform(_reveal.value),
+            opacity:
+                (_disableAnimations
+                        ? const Cubic(0.23, 1, 0.32, 1)
+                        : Curves.easeOutCubic)
+                    .transform(_reveal.value),
             scale: 0.92 + 0.08 * _spring.value,
             child: child!,
           );

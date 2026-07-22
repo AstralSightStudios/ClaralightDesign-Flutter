@@ -36,9 +36,14 @@ class CLSegmentedControl extends StatefulWidget {
 
 class _CLSegmentedControlState extends State<CLSegmentedControl>
     with SingleTickerProviderStateMixin {
-  static const _spring = SpringDescription(mass: 1, stiffness: 420, damping: 22);
+  static const _spring = SpringDescription(
+    mass: 1,
+    stiffness: 420,
+    damping: 22,
+  );
 
   late final AnimationController _position;
+  bool _disableAnimations = false;
 
   @override
   void initState() {
@@ -50,9 +55,28 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) _snapReducedMotionGeometry();
+  }
+
+  void _snapReducedMotionGeometry() {
+    _position.stop();
+    _position.value = widget.selectedIndex.toDouble();
+    if (mounted) setState(() {});
+  }
+
+  @override
   void didUpdateWidget(CLSegmentedControl oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.selectedIndex != oldWidget.selectedIndex) {
+      if (_disableAnimations) {
+        _snapReducedMotionGeometry();
+        return;
+      }
       _position.animateWith(
         SpringSimulation(
           _spring,
@@ -95,7 +119,9 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
             final segmentWidth =
                 (constraints.maxWidth - inset * 2) / widget.segments.length;
             final thumbLeft =
-                inset + segmentWidth * _position.value.clamp(0, widget.segments.length - 1);
+                inset +
+                segmentWidth *
+                    _position.value.clamp(0, widget.segments.length - 1);
 
             return DecoratedBox(
               decoration: clSmoothDecoration(
@@ -114,8 +140,9 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
                       // top of the track, per the design source.
                       decoration: clSmoothDecoration(
                         color: theme.colors.control,
-                        borderRadius:
-                            BorderRadius.circular((_height - inset * 2) / 2),
+                        borderRadius: BorderRadius.circular(
+                          (_height - inset * 2) / 2,
+                        ),
                       ),
                     ),
                   ),
@@ -128,9 +155,7 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
                             selected: i == widget.selectedIndex,
                             enabled: enabled,
                             textStyle: textStyle,
-                            onTap: enabled
-                                ? () => widget.onChanged!(i)
-                                : null,
+                            onTap: enabled ? () => widget.onChanged!(i) : null,
                           ),
                         ),
                     ],
@@ -166,8 +191,8 @@ class _Segment extends StatelessWidget {
     final color = !enabled
         ? colors.textDisabled
         : selected
-            ? colors.textPrimary
-            : colors.textHint;
+        ? colors.textPrimary
+        : colors.textHint;
 
     return Semantics(
       button: true,

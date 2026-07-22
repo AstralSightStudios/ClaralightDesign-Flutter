@@ -107,6 +107,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   late final AnimationController _spring;
   FocusNode? _previousFocus;
   bool _open = false;
+  bool _disableAnimations = false;
 
   CLPopoverController get _controller =>
       widget.controller ?? _internalController;
@@ -119,6 +120,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 140),
       reverseDuration: const Duration(milliseconds: 110),
+      animationBehavior: AnimationBehavior.preserve,
     )..addStatusListener(_handleAnimationStatus);
     _spring = AnimationController.unbounded(vsync: this);
     _controller._attach(_handleControllerState);
@@ -128,6 +130,55 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
       });
     }
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _snapReducedMotionGeometry();
+    } else if (_open) {
+      _spring.animateWith(
+        SpringSimulation(
+          const SpringDescription(mass: 1, stiffness: 520, damping: 28),
+          _spring.value,
+          1,
+          0,
+        ),
+      );
+      _animateRevealForward();
+    } else if (_portal.isShowing) {
+      _spring.animateWith(
+        SpringSimulation(
+          const SpringDescription(mass: 1, stiffness: 600, damping: 38),
+          _spring.value,
+          0,
+          0,
+        ),
+      );
+      _animateRevealReverse();
+    }
+  }
+
+  void _snapReducedMotionGeometry() {
+    _spring.stop();
+    _spring.value = (_portal.isShowing || _open || _reveal.value > 0) ? 1 : 0;
+    if (_open) {
+      _animateRevealForward();
+    } else if (_portal.isShowing) {
+      _animateRevealReverse();
+    }
+  }
+
+  TickerFuture _animateRevealForward() => _disableAnimations
+      ? _reveal.animateTo(1, duration: const Duration(milliseconds: 125))
+      : _reveal.forward();
+
+  TickerFuture _animateRevealReverse() => _disableAnimations
+      ? _reveal.animateBack(0, duration: const Duration(milliseconds: 125))
+      : _reveal.reverse();
 
   @override
   void didUpdateWidget(CLPopover oldWidget) {
@@ -168,19 +219,25 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   void _show() {
     _previousFocus = FocusManager.instance.primaryFocus;
     _open = true;
+    if (_disableAnimations) {
+      _spring.stop();
+      _spring.value = 1;
+    }
     _portal.show();
     widget.onOpenChanged?.call(true);
     if (!_open || !_controller.isOpen) return;
     setState(() {});
-    _reveal.forward();
-    _spring.animateWith(
-      SpringSimulation(
-        const SpringDescription(mass: 1, stiffness: 520, damping: 28),
-        _spring.value,
-        1,
-        0,
-      ),
-    );
+    _animateRevealForward();
+    if (!_disableAnimations) {
+      _spring.animateWith(
+        SpringSimulation(
+          const SpringDescription(mass: 1, stiffness: 520, damping: 28),
+          _spring.value,
+          1,
+          0,
+        ),
+      );
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestPopoverFocus());
   }
 
@@ -214,7 +271,13 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
       _handleAnimationStatus(AnimationStatus.dismissed);
       return;
     }
-    _reveal.reverse();
+    if (_disableAnimations) {
+      _spring.stop();
+      _spring.value = 1;
+      _animateRevealReverse();
+      return;
+    }
+    _animateRevealReverse();
     _spring.animateWith(
       SpringSimulation(
         const SpringDescription(mass: 1, stiffness: 600, damping: 38),
@@ -227,7 +290,18 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
 
   void _handleAnimationStatus(AnimationStatus status) {
     if (status != AnimationStatus.dismissed || _open) return;
-    if (_portal.isShowing) _portal.hide();
+    if (_portal.isShowing) {
+      _portal.hide();
+      if (mounted) setState(() {});
+    }
+    if (_disableAnimations) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_open && !_portal.isShowing) {
+          _spring.stop();
+          _spring.value = 0;
+        }
+      });
+    }
     final previousFocus = _previousFocus;
     _previousFocus = null;
     if (previousFocus?.canRequestFocus ?? false) previousFocus!.requestFocus();
@@ -282,7 +356,11 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
                     shadowColor: const Color(0x59000000),
                     shadowBlur: 24,
                     shadowOffset: const Offset(0, 10),
-                    opacity: Curves.easeOutCubic.transform(_reveal.value),
+                    opacity:
+                        (_disableAnimations
+                                ? const Cubic(0.23, 1, 0.32, 1)
+                                : Curves.easeOutCubic)
+                            .transform(_reveal.value),
                     scale: 0.96 + 0.04 * _spring.value,
                     child: child!,
                   );

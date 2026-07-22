@@ -134,6 +134,8 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     stiffness: 440,
     damping: 38,
   );
+  static const _reducedFadeDuration = Duration(milliseconds: 125);
+  static const _reducedFadeCurve = Cubic(0.23, 1, 0.32, 1);
 
   final _link = LayerLink();
   final _anchorKey = GlobalKey();
@@ -157,6 +159,8 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   int? _pressPointer;
   bool _open = false;
   bool _closing = false;
+  bool _disableAnimations = false;
+  int _closeGeneration = 0;
   bool _measuring = false;
   Alignment _anchor = Alignment.topRight;
   bool _growDown = true;
@@ -184,7 +188,10 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       ..addListener(_handleMorphTick);
     _morphH = AnimationController.unbounded(vsync: this)
       ..addListener(_handleMorphTick);
-    _content = AnimationController(vsync: this);
+    _content = AnimationController(
+      vsync: this,
+      animationBehavior: AnimationBehavior.preserve,
+    );
     _resize = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 180),
@@ -200,6 +207,82 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
         if (mounted) _handleControllerState(_controller.isOpen);
       });
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _snapReducedMotionGeometry();
+    } else if (_closing) {
+      _closeGeneration++;
+      _startNormalCloseAnimation();
+    }
+  }
+
+  void _snapReducedMotionGeometry() {
+    _morphW.stop();
+    _morphH.stop();
+    _resize.stop();
+    if (_open) {
+      _morphW.value = 1;
+      _morphH.value = 1;
+      _resize.value = 1;
+      _animateReducedContent(1);
+    } else if (_closing) {
+      _startReducedCloseAnimation(_closeGeneration);
+    }
+  }
+
+  TickerFuture _animateReducedContent(double target) => _content.animateTo(
+    target,
+    duration: _reducedFadeDuration,
+    curve: _reducedFadeCurve,
+  );
+
+  void _startReducedCloseAnimation(int closeGeneration) {
+    _morphW.stop();
+    _morphH.stop();
+    _resize.stop();
+    _morphW.value = 1;
+    _morphH.value = 1;
+    _resize.value = 1;
+    _animateReducedContent(0).whenCompleteOrCancel(() {
+      if (!mounted || !_closing || closeGeneration != _closeGeneration) return;
+      _finishClose();
+      _morphW.value = 0;
+      _morphH.value = 0;
+      _resize.value = 1;
+    });
+  }
+
+  void _startNormalCloseAnimation() {
+    _morphW.animateWith(
+      SpringSimulation(
+        _closeSpringW,
+        _morphW.value,
+        0,
+        0,
+        tolerance: Tolerance.defaultTolerance,
+      ),
+    );
+    _morphH.animateWith(
+      SpringSimulation(
+        _closeSpringH,
+        _morphH.value,
+        0,
+        0,
+        tolerance: Tolerance.defaultTolerance,
+      ),
+    );
+    _content.animateTo(
+      0,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
@@ -277,6 +360,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _previousFocus = FocusManager.instance.primaryFocus;
     _open = true;
     _closing = false;
+    _closeGeneration++;
     _measuring = true;
     _portal.show();
     widget.onOpenChanged?.call(true);
@@ -309,38 +393,55 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       math.min(size.height, available),
     );
     if ((nextHeight - _heightTo).abs() <= 0.5) return;
-    _heightFrom = _displayHeight;
-    _heightTo = nextHeight;
-    _resize.forward(from: 0);
+    if (_disableAnimations) {
+      _heightFrom = nextHeight;
+      _heightTo = nextHeight;
+      _resize.stop();
+      _resize.value = 1;
+    } else {
+      _heightFrom = _displayHeight;
+      _heightTo = nextHeight;
+      _resize.forward(from: 0);
+    }
   }
 
   void _startOpenAnimation() {
-    _morphW.animateWith(
-      SpringSimulation(
-        _openSpringW,
-        _morphW.value,
-        1,
-        2.2,
-        tolerance: Tolerance.defaultTolerance,
-      ),
-    );
-    Future.delayed(const Duration(milliseconds: 30), () {
-      if (!mounted || !_open) return;
-      _morphH.animateWith(
+    if (_disableAnimations) {
+      _morphW.stop();
+      _morphH.stop();
+      _resize.stop();
+      _morphW.value = 1;
+      _morphH.value = 1;
+      _resize.value = 1;
+      _animateReducedContent(1);
+    } else {
+      _morphW.animateWith(
         SpringSimulation(
-          _openSpringH,
-          _morphH.value,
+          _openSpringW,
+          _morphW.value,
           1,
-          1.6,
+          2.2,
           tolerance: Tolerance.defaultTolerance,
         ),
       );
-    });
-    _content.animateTo(
-      1,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
+      Future.delayed(const Duration(milliseconds: 30), () {
+        if (!mounted || !_open || _disableAnimations) return;
+        _morphH.animateWith(
+          SpringSimulation(
+            _openSpringH,
+            _morphH.value,
+            1,
+            1.6,
+            tolerance: Tolerance.defaultTolerance,
+          ),
+        );
+      });
+      _content.animateTo(
+        1,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestMenuFocus());
   }
 
@@ -369,9 +470,15 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _open = false;
     _closing = true;
     _measuring = false;
+    final closeGeneration = ++_closeGeneration;
     _clearPanelPress();
     widget.onOpenChanged?.call(false);
     setState(() {});
+
+    if (_disableAnimations) {
+      _startReducedCloseAnimation(closeGeneration);
+      return;
+    }
 
     if (_morphW.value <= 0.001 &&
         _morphH.value <= 0.001 &&
@@ -380,29 +487,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       _finishClose();
       return;
     }
-    _morphW.animateWith(
-      SpringSimulation(
-        _closeSpringW,
-        _morphW.value,
-        0,
-        0,
-        tolerance: Tolerance.defaultTolerance,
-      ),
-    );
-    _morphH.animateWith(
-      SpringSimulation(
-        _closeSpringH,
-        _morphH.value,
-        0,
-        0,
-        tolerance: Tolerance.defaultTolerance,
-      ),
-    );
-    _content.animateTo(
-      0,
-      duration: const Duration(milliseconds: 110),
-      curve: Curves.easeOut,
-    );
+    _startNormalCloseAnimation();
   }
 
   void _handleMorphTick() {
@@ -594,9 +679,13 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     )!;
     final borderRadius = BorderRadius.circular(radius);
     final reveal = _content.value;
-    final opacity = math.pow(reveal, 0.6).toDouble();
+    final opacity = _disableAnimations ? 1.0 : math.pow(reveal, 0.6).toDouble();
     final shadowStrength = math.max(tW, tH).clamp(0.0, 1.0);
-    final presence = (math.max(tW, tH) * 5).clamp(0.0, 1.0);
+    final presence =
+        (_disableAnimations
+                ? reveal.clamp(0.0, 1.0)
+                : (math.max(tW, tH) * 5).clamp(0.0, 1.0))
+            .toDouble();
 
     return IgnorePointer(
       ignoring: !_open,
@@ -659,7 +748,9 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                     minHeight: 0,
                     maxHeight: _growDown ? _spaceBelow : _spaceAbove,
                     child: Transform.scale(
-                      scale: 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
+                      scale: _disableAnimations
+                          ? 1.0
+                          : 0.8 + 0.2 * math.min(tW, tH).clamp(0.0, 1.0),
                       alignment: _anchor,
                       child: Opacity(
                         opacity: opacity.clamp(0.0, 1.0),
