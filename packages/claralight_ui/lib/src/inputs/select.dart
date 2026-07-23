@@ -93,16 +93,16 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     with TickerProviderStateMixin {
   static const _openTravelSpring = SpringDescription(
     mass: 1,
-    stiffness: 700,
-    damping: 30,
+    stiffness: 510,
+    damping: 27,
   );
-  static const _openMorphDuration = Duration(milliseconds: 240);
+  static const _openMorphDuration = Duration(milliseconds: 350);
   static const _closeTravelSpring = SpringDescription(
     mass: 1,
     stiffness: 520,
-    damping: 28,
+    damping: 29,
   );
-  static const _closeMorphDuration = Duration(milliseconds: 160);
+  static const _closeMorphDuration = Duration(milliseconds: 200);
   static const double _panelPadding = 6;
   static const double _panelHorizontalPadding = 6;
   static const double _panelOutlineWidth = 1;
@@ -224,7 +224,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       baseDuration: _closeMorphDuration,
       curve: Curves.easeOutCubic,
     );
-    _content.animateTo(0, duration: CLMotion.fast, curve: Curves.easeOut);
+    _content.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
   }
 
   void _startOpenAnimation() {
@@ -255,7 +255,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     );
     _content.animateTo(
       1,
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 320),
       curve: Curves.easeOutCubic,
     );
   }

@@ -116,16 +116,16 @@ class CLMenu extends StatefulWidget {
 class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   static const _openTravelSpring = SpringDescription(
     mass: 1,
-    stiffness: 700,
-    damping: 30,
+    stiffness: 510,
+    damping: 27,
   );
-  static const _openMorphDuration = Duration(milliseconds: 240);
+  static const _openMorphDuration = Duration(milliseconds: 350);
   static const _closeTravelSpring = SpringDescription(
     mass: 1,
     stiffness: 520,
-    damping: 28,
+    damping: 29,
   );
-  static const _closeMorphDuration = Duration(milliseconds: 160);
+  static const _closeMorphDuration = Duration(milliseconds: 200);
   final _link = LayerLink();
   final _anchorKey = GlobalKey();
   final _listKey = GlobalKey();
@@ -284,11 +284,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       baseDuration: _closeMorphDuration,
       curve: Curves.easeOutCubic,
     );
-    _content.animateTo(
-      0,
-      duration: const Duration(milliseconds: 110),
-      curve: Curves.easeOut,
-    );
+    _content.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
   }
 
   @override
@@ -439,7 +435,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       );
       _content.animateTo(
         1,
-        duration: const Duration(milliseconds: 220),
+        duration: const Duration(milliseconds: 320),
         curve: Curves.easeOutCubic,
       );
     }
