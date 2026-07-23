@@ -121,8 +121,11 @@ class _CLSelectState<T> extends State<CLSelect<T>>
   bool _disableAnimations = false;
   int _closeGeneration = 0;
   ScrollController? _scrollController;
-  Size _triggerSize = Size.zero;
-  Offset _panelOffset = Offset.zero;
+  Size _openTriggerSize = Size.zero;
+  Offset _openTriggerOrigin = Offset.zero;
+  Size _targetClosingTriggerSize = Size.zero;
+  Offset _targetClosingTriggerOrigin = Offset.zero;
+  Offset _globalPanelOrigin = Offset.zero;
   double _panelWidth = 0;
   double _panelHeight = 0;
 
@@ -136,10 +139,13 @@ class _CLSelectState<T> extends State<CLSelect<T>>
   Offset _travelCenter(Offset start, Offset end) =>
       Offset.lerp(start, end, _travel.value)!;
 
-  Offset get _panelTravelDelta =>
-      _panelOffset +
-      Offset(_panelWidth / 2, _panelHeight / 2) -
-      Offset(_triggerSize.width / 2, _triggerSize.height / 2);
+  Offset get _panelTravelDelta {
+    final targetSize = _closing ? _targetClosingTriggerSize : _openTriggerSize;
+    final targetOrigin =
+        _closing ? _targetClosingTriggerOrigin : _openTriggerOrigin;
+    return (_globalPanelOrigin + Offset(_panelWidth / 2, _panelHeight / 2)) -
+        (targetOrigin + Offset(targetSize.width / 2, targetSize.height / 2));
+  }
 
   Offset get _triggerRecoilOffset => _travel.value < 0
       ? _travelCenter(Offset.zero, _panelTravelDelta)
@@ -328,6 +334,24 @@ class _CLSelectState<T> extends State<CLSelect<T>>
 
   bool get _enabled => widget.onChanged != null;
 
+  double _calculateTriggerWidth(String label) {
+    if (widget.width != null) return widget.width!;
+    final theme = CLTheme.of(context);
+    final textStyle = (_size == CLControlSize.large
+        ? theme.typography.body
+        : theme.typography.callout);
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: textStyle),
+      maxLines: 1,
+      textDirection: textDirection,
+    )..layout();
+    final horizontalPadding = (_size == CLControlSize.small ? 10 : 12) * 2;
+    const chevronsWidth = 8.0;
+    const gap = 6.0;
+    return painter.width + chevronsWidth + gap + horizontalPadding;
+  }
+
   void _toggle() {
     if (_open) {
       _close();
@@ -341,7 +365,6 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         Overlay.of(context).context.findRenderObject()! as RenderBox;
     final fieldBox = context.findRenderObject()! as RenderBox;
     final origin = fieldBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-    _triggerSize = fieldBox.size;
     final mediaPadding = MediaQuery.maybePaddingOf(context) ?? EdgeInsets.zero;
     final safeLeft = mediaPadding.left + _screenMargin;
     final safeTop = mediaPadding.top + _screenMargin;
@@ -452,7 +475,11 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       );
     }
 
-    _panelOffset = Offset(panelLeft - origin.dx, panelTop - origin.dy);
+    _openTriggerSize = fieldBox.size;
+    _openTriggerOrigin = origin;
+    _targetClosingTriggerSize = fieldBox.size;
+    _targetClosingTriggerOrigin = origin;
+    _globalPanelOrigin = Offset(panelLeft.toDouble(), panelTop.toDouble());
     _scrollController?.dispose();
     _scrollController = ScrollController(
       initialScrollOffset: initialScrollOffset,
@@ -487,6 +514,27 @@ class _CLSelectState<T> extends State<CLSelect<T>>
   }
 
   void _select(CLSelectOption<T> option) {
+    final newWidth = _calculateTriggerWidth(option.label);
+    final inToolbar = CLToolbarScope.maybeOf(context) != null;
+    final effectiveVariant = widget._usesDefaultVariant && inToolbar
+        ? CLSelectVariant.ghost
+        : widget.variant;
+    final effectiveTextAlign = widget.textAlign ??
+        (effectiveVariant == CLSelectVariant.ghost
+            ? TextAlign.right
+            : TextAlign.left);
+
+    _targetClosingTriggerSize = Size(newWidth, _height);
+    if (effectiveTextAlign == TextAlign.right) {
+      final rightEdge = _openTriggerOrigin.dx + _openTriggerSize.width;
+      _targetClosingTriggerOrigin = Offset(
+        rightEdge - newWidth,
+        _openTriggerOrigin.dy,
+      );
+    } else {
+      _targetClosingTriggerOrigin = _openTriggerOrigin;
+    }
+
     widget.onChanged?.call(option.value);
     _close();
   }
@@ -613,10 +661,14 @@ class _CLSelectState<T> extends State<CLSelect<T>>
 
   Offset get _currentPanelOffset {
     final tMorph = _morphProgress;
-    final width = ui.lerpDouble(_triggerSize.width, _panelWidth, tMorph)!;
-    final height = ui.lerpDouble(_triggerSize.height, _panelHeight, tMorph)!;
-    final startCenter = Offset(_triggerSize.width / 2, _triggerSize.height / 2);
-    final endCenter = startCenter + _panelTravelDelta;
+    final targetSize = _closing ? _targetClosingTriggerSize : _openTriggerSize;
+    final targetOrigin =
+        _closing ? _targetClosingTriggerOrigin : _openTriggerOrigin;
+    final width = ui.lerpDouble(targetSize.width, _panelWidth, tMorph)!;
+    final height = ui.lerpDouble(targetSize.height, _panelHeight, tMorph)!;
+    final startCenter = Offset(targetSize.width / 2, targetSize.height / 2);
+    final endCenter = (_globalPanelOrigin - targetOrigin) +
+        Offset(_panelWidth / 2, _panelHeight / 2);
     final center = _travelCenter(startCenter, endCenter);
     return center - Offset(width / 2, height / 2);
   }
@@ -677,8 +729,9 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       return const SizedBox.shrink();
     }
 
-    final width = ui.lerpDouble(_triggerSize.width, _panelWidth, tMorph)!;
-    final height = ui.lerpDouble(_triggerSize.height, _panelHeight, tMorph)!;
+    final targetSize = _closing ? _targetClosingTriggerSize : _openTriggerSize;
+    final width = ui.lerpDouble(targetSize.width, _panelWidth, tMorph)!;
+    final height = ui.lerpDouble(targetSize.height, _panelHeight, tMorph)!;
     final triggerRadius =
         widget.borderRadius ?? BorderRadius.circular(theme.radii.control);
     final panelRadius = BorderRadius.circular(theme.radii.medium);

@@ -448,4 +448,58 @@ void main() {
     final panelRect = tester.getRect(_panel());
     expect(panelRect.width, greaterThan(triggerRect.width));
   });
+
+  testWidgets('trigger text updates immediately on tap and close animation settles cleanly', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    int selectedValue = 0;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          return MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.centerRight,
+                child: CLSelect<int>(
+                  variant: CLSelectVariant.ghost,
+                  options: const [
+                    CLSelectOption(0, '00:00'),
+                    CLSelectOption(1, '00:00:00 Extra Long Value'),
+                  ],
+                  value: selectedValue,
+                  onChanged: (v) => setState(() => selectedValue = v),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    final surfaceFinder = find.descendant(
+      of: find.byType(CLSelect<int>),
+      matching: find.byType(CLSurface),
+    ).first;
+    final initialTriggerRect = tester.getRect(surfaceFinder);
+    await openSelect(tester);
+
+    final longOption = find.descendant(
+      of: find.byType(CLList),
+      matching: find.text('00:00:00 Extra Long Value'),
+    );
+    await tester.tap(longOption);
+    await tester.pump(); // Start close animation frame 1
+
+    // Trigger text & width update immediately on selection
+    final midClosingTriggerRect = tester.getRect(surfaceFinder);
+    expect(midClosingTriggerRect.width, greaterThan(initialTriggerRect.width));
+    expect(find.text('00:00:00 Extra Long Value'), findsNWidgets(2)); // Trigger + Overlay
+
+    // Finish close animation
+    await tester.pumpAndSettle();
+    final finalTriggerRect = tester.getRect(surfaceFinder);
+    expect(finalTriggerRect.width, greaterThan(initialTriggerRect.width));
+    expect(find.text('00:00:00 Extra Long Value'), findsOneWidget); // Trigger only
+  });
 }
