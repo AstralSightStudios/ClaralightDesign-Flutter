@@ -502,4 +502,55 @@ void main() {
     expect(finalTriggerRect.width, greaterThan(initialTriggerRect.width));
     expect(find.text('00:00:00 Extra Long Value'), findsOneWidget); // Trigger only
   });
+
+  testWidgets('standard variant morphs back to full trigger width on close', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    int selectedValue = 0;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          return MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 250,
+                child: CLSelect<int>(
+                  variant: CLSelectVariant.standard,
+                  options: const [
+                    CLSelectOption(0, 'A'),
+                    CLSelectOption(1, 'B'),
+                  ],
+                  value: selectedValue,
+                  onChanged: (v) => setState(() => selectedValue = v),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    final triggerRect = tester.getRect(find.byType(CLSelect<int>));
+    expect(triggerRect.width, equals(250.0));
+
+    await openSelect(tester);
+
+    final optionB = find.descendant(
+      of: find.byType(CLList),
+      matching: find.text('B'),
+    );
+    await tester.tap(optionB);
+    await tester.pump(); // Start close animation
+
+    // Target closing width for fixed/standard select must remain full 250px
+    final surfaceFinder = find.descendant(
+      of: find.byType(CLSelect<int>),
+      matching: find.byType(CLSurface),
+    ).first;
+    final closingTriggerRect = tester.getRect(surfaceFinder);
+    expect(closingTriggerRect.width, equals(250.0));
+
+    await tester.pumpAndSettle();
+  });
 }

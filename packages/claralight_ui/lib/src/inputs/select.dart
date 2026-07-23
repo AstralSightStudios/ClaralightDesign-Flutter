@@ -514,24 +514,28 @@ class _CLSelectState<T> extends State<CLSelect<T>>
   }
 
   void _select(CLSelectOption<T> option) {
-    final newWidth = _calculateTriggerWidth(option.label);
     final inToolbar = CLToolbarScope.maybeOf(context) != null;
     final effectiveVariant = widget._usesDefaultVariant && inToolbar
         ? CLSelectVariant.ghost
         : widget.variant;
-    final effectiveTextAlign = widget.textAlign ??
-        (effectiveVariant == CLSelectVariant.ghost
-            ? TextAlign.right
-            : TextAlign.left);
+    final isGhostShrinkWrap =
+        effectiveVariant == CLSelectVariant.ghost && widget.width == null;
 
-    _targetClosingTriggerSize = Size(newWidth, _height);
-    if (effectiveTextAlign == TextAlign.right) {
-      final rightEdge = _openTriggerOrigin.dx + _openTriggerSize.width;
-      _targetClosingTriggerOrigin = Offset(
-        rightEdge - newWidth,
-        _openTriggerOrigin.dy,
-      );
+    if (isGhostShrinkWrap) {
+      final newWidth = _calculateTriggerWidth(option.label);
+      final effectiveTextAlign = widget.textAlign ?? TextAlign.right;
+      _targetClosingTriggerSize = Size(newWidth, _height);
+      if (effectiveTextAlign == TextAlign.right) {
+        final rightEdge = _openTriggerOrigin.dx + _openTriggerSize.width;
+        _targetClosingTriggerOrigin = Offset(
+          rightEdge - newWidth,
+          _openTriggerOrigin.dy,
+        );
+      } else {
+        _targetClosingTriggerOrigin = _openTriggerOrigin;
+      }
     } else {
+      _targetClosingTriggerSize = _openTriggerSize;
       _targetClosingTriggerOrigin = _openTriggerOrigin;
     }
 
