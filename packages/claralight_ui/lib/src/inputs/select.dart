@@ -832,6 +832,7 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
                   widget.option.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.start,
                   style: theme.typography.callout.copyWith(
                     color: textColor,
                     fontWeight:
