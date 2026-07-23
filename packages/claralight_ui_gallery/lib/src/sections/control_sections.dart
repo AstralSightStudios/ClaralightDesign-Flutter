@@ -309,6 +309,7 @@ class _SelectSectionState extends State<_SelectSection> {
   );
 
   String _fillMode = '数字填充';
+  String _ghostFormat = '00:00';
   int _selectedItem = 249;
   final _widthController = TextEditingController(text: '78');
   final _heightController = TextEditingController(text: '91');
@@ -325,16 +326,36 @@ class _SelectSectionState extends State<_SelectSection> {
     return _SectionCard(
       title: 'CLSelect / numeric CLTextField',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CLSelect<String>(
-            size: CLControlSize.medium,
-            value: _fillMode,
-            options: const [
-              CLSelectOption('数字填充', '数字填充'),
-              CLSelectOption('图片填充', '图片填充'),
-              CLSelectOption('序列帧', '序列帧'),
+          Row(
+            children: [
+              Expanded(
+                child: CLSelect<String>(
+                  variant: CLSelectVariant.standard,
+                  size: CLControlSize.medium,
+                  value: _fillMode,
+                  options: const [
+                    CLSelectOption('数字填充', '数字填充'),
+                    CLSelectOption('图片填充', '图片填充'),
+                    CLSelectOption('序列帧', '序列帧'),
+                  ],
+                  onChanged: (v) => setState(() => _fillMode = v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              CLSelect<String>(
+                variant: CLSelectVariant.ghost,
+                size: CLControlSize.medium,
+                value: _ghostFormat,
+                options: const [
+                  CLSelectOption('00:00', '00:00'),
+                  CLSelectOption('00:00:00', '00:00:00'),
+                  CLSelectOption('HH:mm:ss', 'HH:mm:ss'),
+                ],
+                onChanged: (v) => setState(() => _ghostFormat = v),
+              ),
             ],
-            onChanged: (v) => setState(() => _fillMode = v),
           ),
           const SizedBox(height: 10),
           CLSelect<int>(

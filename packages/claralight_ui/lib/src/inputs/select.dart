@@ -4,12 +4,22 @@ import 'dart:ui' as ui;
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import '../containers/toolbar_scope.dart';
 import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
 import '../scrolling/cl_list.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
+
+/// Claralight select dropdown variants.
+enum CLSelectVariant {
+  /// Standard neutral control-fill select field.
+  standard,
+
+  /// No fill until hovered; for toolbar rows and quiet selects.
+  ghost,
+}
 
 /// One option of a [CLSelect].
 class CLSelectOption<T> {
@@ -29,8 +39,23 @@ class CLSelect<T> extends StatefulWidget {
   final List<CLSelectOption<T>> options;
   final T value;
   final ValueChanged<T>? onChanged;
-  final CLControlSize size;
+
+  /// Configured variant. When omitted, the select defaults to [CLSelectVariant.standard]
+  /// outside a toolbar and [CLSelectVariant.ghost] inside one.
+  final CLSelectVariant variant;
+  final bool _usesDefaultVariant;
+
+  /// Configured size, defaulting to large outside a toolbar.
+  CLControlSize? get size => _sizeOverride;
+  final CLControlSize? _sizeOverride;
+
   final double? width;
+
+  /// Alignment of the trigger label text.
+  ///
+  /// Defaults to [TextAlign.right] for [CLSelectVariant.ghost] and
+  /// [TextAlign.left] for [CLSelectVariant.standard].
+  final TextAlign? textAlign;
 
   /// Whether the selected option is centered over the trigger when opened.
   ///
@@ -49,11 +74,16 @@ class CLSelect<T> extends StatefulWidget {
     required this.options,
     required this.value,
     required this.onChanged,
-    this.size = CLControlSize.large,
+    CLSelectVariant? variant,
+    CLControlSize? size,
     this.width,
+    this.textAlign,
     this.alignSelectedOption = true,
     this.borderRadius,
-  }) : assert(options.length > 0);
+  })  : variant = variant ?? CLSelectVariant.standard,
+        _usesDefaultVariant = variant == null,
+        _sizeOverride = size,
+        assert(options.length > 0);
 
   @override
   State<CLSelect<T>> createState() => _CLSelectState<T>();
@@ -287,7 +317,12 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     super.dispose();
   }
 
-  double get _height => widget.size.controlHeight;
+  CLControlSize get _size =>
+      widget._sizeOverride ??
+      CLToolbarScope.maybeOf(context)?.size ??
+      CLControlSize.large;
+
+  double get _height => _size.controlHeight;
 
   double get _rowHeight => _height;
 
@@ -323,15 +358,51 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       (option) => option.value == widget.value,
     );
     final fieldCenterY = origin.dy + fieldBox.size.height / 2;
+    final theme = CLTheme.of(context);
+
+    double maxOptionWidth = 0;
+    final calloutStyle =
+        theme.typography.callout.copyWith(fontWeight: FontWeight.w500);
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    for (final option in widget.options) {
+      final painter = TextPainter(
+        text: TextSpan(text: option.label, style: calloutStyle),
+        maxLines: 1,
+        textDirection: textDirection,
+      )..layout();
+      if (painter.width > maxOptionWidth) {
+        maxOptionWidth = painter.width;
+      }
+    }
+
+    final minPanelWidth =
+        fieldBox.size.width + _panelHorizontalPadding * 2 + _panelOutlineWidth * 2;
+    final naturalPanelWidth = maxOptionWidth +
+        40 +
+        _panelHorizontalPadding * 2 +
+        _panelOutlineWidth * 2;
 
     _panelWidth = math.min(
-      fieldBox.size.width +
-          _panelHorizontalPadding * 2 +
-          _panelOutlineWidth * 2,
+      math.max(minPanelWidth, naturalPanelWidth),
       availableWidth,
     );
-    final desiredPanelLeft =
-        origin.dx - _panelHorizontalPadding - _panelOutlineWidth;
+
+    final inToolbar = CLToolbarScope.maybeOf(context) != null;
+    final effectiveVariant = widget._usesDefaultVariant && inToolbar
+        ? CLSelectVariant.ghost
+        : widget.variant;
+    final effectiveTextAlign = widget.textAlign ??
+        (effectiveVariant == CLSelectVariant.ghost
+            ? TextAlign.right
+            : TextAlign.left);
+
+    final desiredPanelLeft = effectiveTextAlign == TextAlign.right
+        ? (origin.dx + fieldBox.size.width) -
+            _panelWidth +
+            _panelHorizontalPadding +
+            _panelOutlineWidth
+        : origin.dx - _panelHorizontalPadding - _panelOutlineWidth;
+
     final panelLeft = desiredPanelLeft.clamp(
       safeLeft,
       math.max(safeLeft, safeRight - _panelWidth),
@@ -424,12 +495,21 @@ class _CLSelectState<T> extends State<CLSelect<T>>
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final colors = theme.colors;
+    final inToolbar = CLToolbarScope.maybeOf(context) != null;
+    final effectiveVariant = widget._usesDefaultVariant && inToolbar
+        ? CLSelectVariant.ghost
+        : widget.variant;
+    final effectiveTextAlign = widget.textAlign ??
+        (effectiveVariant == CLSelectVariant.ghost
+            ? TextAlign.right
+            : TextAlign.left);
+
     final selected = widget.options
         .where((o) => o.value == widget.value)
         .toList();
     final label = selected.isEmpty ? '' : selected.first.label;
     final textStyle =
-        (widget.size == CLControlSize.large
+        (_size == CLControlSize.large
                 ? theme.typography.body
                 : theme.typography.callout)
             .copyWith(
@@ -437,6 +517,68 @@ class _CLSelectState<T> extends State<CLSelect<T>>
             );
     final radius =
         widget.borderRadius ?? BorderRadius.circular(theme.radii.control);
+
+    final fill = switch (effectiveVariant) {
+      CLSelectVariant.standard =>
+        _hovered && _enabled ? colors.controlHighlight : colors.control,
+      CLSelectVariant.ghost =>
+        _hovered && _enabled ? colors.controlHighlight : const Color(0x00000000),
+    };
+
+    final triggerContent = Row(
+      mainAxisSize:
+          widget.width != null || effectiveVariant == CLSelectVariant.standard
+              ? MainAxisSize.max
+              : MainAxisSize.min,
+      children: [
+        if (widget.width != null ||
+            effectiveVariant == CLSelectVariant.standard)
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: effectiveTextAlign,
+              style: textStyle,
+            ),
+          )
+        else
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: effectiveTextAlign,
+              style: textStyle,
+            ),
+          ),
+        const SizedBox(width: 6),
+        _Chevrons(color: colors.textTertiary),
+      ],
+    );
+
+    final surface = SizedBox(
+      height: _height,
+      child: CLSurface(
+        fill: fill,
+        borderRadius: radius,
+        padding: EdgeInsets.symmetric(
+          horizontal: _size == CLControlSize.small ? 10 : 12,
+        ),
+        child: triggerContent,
+      ),
+    );
+
+    final triggerBox = SizedBox(
+      width: widget.width,
+      height: _height,
+      child: effectiveVariant == CLSelectVariant.ghost && widget.width == null
+          ? Align(
+              alignment: Alignment.centerRight,
+              child: surface,
+            )
+          : surface,
+    );
 
     return OverlayPortal(
       controller: _portal,
@@ -460,33 +602,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
                 borderRadius: radius,
                 deformOnDrag: false,
                 pressedScale: 1.02,
-                child: SizedBox(
-                  width: widget.width,
-                  height: _height,
-                  child: CLSurface(
-                    fill: _hovered && _enabled
-                        ? colors.controlHighlight
-                        : colors.control,
-                    borderRadius: radius,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: widget.size == CLControlSize.small ? 10 : 12,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: textStyle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        _Chevrons(color: colors.textTertiary),
-                      ],
-                    ),
-                  ),
-                ),
+                child: triggerBox,
               ),
             ),
           ),
@@ -687,6 +803,14 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
     final theme = CLTheme.of(context);
     final colors = theme.colors;
 
+    final rowBg = widget.checked
+        ? (_hovered
+            ? Color.alphaBlend(colors.control, colors.accentBackground)
+            : colors.accentBackground)
+        : (_hovered ? colors.control : const Color(0x00000000));
+    final textColor = widget.checked ? colors.accent : colors.textPrimary;
+    final checkColor = widget.checked ? colors.accent : colors.textPrimary;
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -696,35 +820,32 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
         onTap: widget.onTap,
         child: Container(
           height: widget.height,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: clSmoothDecoration(
-            color: _hovered ? colors.control : const Color(0x00000000),
+            color: rowBg,
             borderRadius: BorderRadius.circular(theme.radii.control - 2),
           ),
           child: Row(
             children: [
-              SizedBox(
-                width: 20,
-                child: widget.checked
-                    ? Center(
-                        child: CustomPaint(
-                          size: const Size(12, 10),
-                          painter: _CheckPainter(color: colors.textPrimary),
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 2),
               Expanded(
                 child: Text(
                   widget.option.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.typography.callout.copyWith(
-                    color: colors.textPrimary,
+                    color: textColor,
+                    fontWeight:
+                        widget.checked ? FontWeight.w500 : FontWeight.normal,
                   ),
                 ),
               ),
+              if (widget.checked) ...[
+                const SizedBox(width: 8),
+                CustomPaint(
+                  size: const Size(12, 10),
+                  painter: _CheckPainter(color: checkColor),
+                ),
+              ],
             ],
           ),
         ),

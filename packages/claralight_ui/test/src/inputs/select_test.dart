@@ -380,4 +380,72 @@ void main() {
     // CLList sits one pixel inside the outlined panel.
     expect(listRect.top, closeTo(fieldRect.bottom + 5, 0.01));
   });
+
+  testWidgets('ghost variant uses transparent background and right alignment by default', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CLSelect<int>(
+            variant: CLSelectVariant.ghost,
+            options: const [CLSelectOption(0, 'Ghost Label')],
+            value: 0,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final textWidget = tester.widget<Text>(find.text('Ghost Label'));
+    expect(textWidget.textAlign, TextAlign.right);
+
+    final surfaceFinder = find.ancestor(
+      of: find.text('Ghost Label'),
+      matching: find.byType(CLSurface),
+    );
+    final surfaceRect = tester.getRect(surfaceFinder);
+    expect(surfaceRect.height, equals(CLControlSize.large.controlHeight));
+  });
+
+  testWidgets('selected option row highlights with accentBackground and accent text', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    await tester.pumpWidget(
+      _testApp(options: _options(3), value: 1),
+    );
+
+    await openSelect(tester);
+
+    final selectedLabel = find.descendant(
+      of: find.byType(CLList),
+      matching: find.text('Option 1'),
+    );
+    final selectedText = tester.widget<Text>(selectedLabel);
+    final theme = CLTheme.of(tester.element(selectedLabel));
+    expect(selectedText.style?.color, theme.colors.accent);
+  });
+
+  testWidgets('panel expands wider than trigger when options contain long text', (
+    tester,
+  ) async {
+    await setViewport(tester);
+    await tester.pumpWidget(
+      _testApp(
+        options: const [
+          CLSelectOption(0, 'Short'),
+          CLSelectOption(1, 'A Very Long Option Label That Exceeds Trigger Width'),
+        ],
+        value: 0,
+      ),
+    );
+
+    final triggerRect = tester.getRect(find.byType(CLSelect<int>));
+    await openSelect(tester);
+
+    final panelRect = tester.getRect(_panel());
+    expect(panelRect.width, greaterThan(triggerRect.width));
+  });
 }
