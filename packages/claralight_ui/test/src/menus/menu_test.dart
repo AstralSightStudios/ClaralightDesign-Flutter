@@ -262,12 +262,12 @@ void main() {
           (260 - anchorRect.width);
       expect(centerProgress, greaterThan(0.65));
       expect(centerProgress, lessThan(1));
-      expect(morphProgress, greaterThan(0.03));
+      expect(morphProgress, greaterThan(0.1));
       expect(morphProgress, lessThan(0.25));
       expect(centerProgress, greaterThan(morphProgress + 0.45));
       expect(tester.getSize(find.byType(CLList)).width, 260);
 
-      await tester.pump(const Duration(milliseconds: 90));
+      await tester.pump(const Duration(milliseconds: 40));
       final latePanelRect = tester.getRect(menuPanel());
       final lateCenterProgress =
           (latePanelRect.center.dx - anchorRect.center.dx) /
@@ -276,7 +276,7 @@ void main() {
           (latePanelRect.width - anchorRect.width) / (260 - anchorRect.width);
       expect(lateCenterProgress, greaterThan(1.08));
       expect(lateCenterProgress, lessThan(1.1));
-      expect(lateMorphProgress, greaterThan(0.1));
+      expect(lateMorphProgress, greaterThan(0.45));
       expect(lateMorphProgress, lessThan(0.8));
 
       await tester.pumpAndSettle();
@@ -315,7 +315,7 @@ void main() {
         closeTo(handoffAnchorRect.center.dy, 0.01),
       );
 
-      await tester.pump(const Duration(milliseconds: 30));
+      await tester.pump(const Duration(milliseconds: 40));
       final reboundAnchorRect = tester.getRect(
         find.ancestor(
           of: find.byKey(_anchorKey),

@@ -105,7 +105,7 @@ void main() {
 
         await tester.pump(const Duration(milliseconds: 80));
         final partialPanelRect = tester.getRect(_panel());
-        await tester.pump(const Duration(milliseconds: 90));
+        await tester.pump(const Duration(milliseconds: 40));
         final latePanelRect = tester.getRect(_panel());
         await tester.pumpAndSettle();
         final settledPanelRect = tester.getRect(_panel());
@@ -128,12 +128,12 @@ void main() {
 
         expect(centerProgress, greaterThan(0.65));
         expect(centerProgress, lessThan(1));
-        expect(morphProgress, greaterThan(0.03));
+        expect(morphProgress, greaterThan(0.1));
         expect(morphProgress, lessThan(0.25));
         expect(centerProgress, greaterThan(morphProgress + 0.45));
         expect(lateCenterProgress, greaterThan(1.08));
         expect(lateCenterProgress, lessThan(1.1));
-        expect(lateMorphProgress, greaterThan(0.1));
+        expect(lateMorphProgress, greaterThan(0.45));
         expect(lateMorphProgress, lessThan(0.8));
 
         await tester.tapAt(const Offset(10, 10));
@@ -149,7 +149,7 @@ void main() {
         expect(handoffProgress, lessThan(0));
         expect(handoffPanelRect.center, handoffTriggerRect.center);
 
-        await tester.pump(const Duration(milliseconds: 30));
+        await tester.pump(const Duration(milliseconds: 40));
         final reboundTriggerRect = tester.getRect(triggerFinder);
         final reboundTravel = reboundTriggerRect.center - triggerRect.center;
         final closeProgress =
