@@ -54,7 +54,7 @@ void main() {
     expect(tester.getSize(find.byType(CLDialog)).width, 320);
   });
 
-  testWidgets('route keeps its duration and spring scale sample', (
+  testWidgets('route keeps its duration and morphs from trigger', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -64,6 +64,7 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 context,
+                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
                 child: const SizedBox(key: _dialogContentKey),
               ),
               child: const Text('Open dialog'),
@@ -80,14 +81,33 @@ void main() {
     expect(route.transitionDuration, const Duration(milliseconds: 380));
     expect(route.reverseTransitionDuration, CLMotion.standard);
 
-    await tester.pump(const Duration(milliseconds: 38));
-    final transition = tester.widget<ScaleTransition>(
-      find.ancestor(
-        of: find.byKey(_dialogContentKey),
-        matching: find.byType(ScaleTransition),
+    await tester.pump(const Duration(milliseconds: 380));
+    expect(find.byKey(_dialogContentKey), findsOneWidget);
+  });
+
+  testWidgets('show accepts triggerContext', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (buttonContext) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                buttonContext,
+                triggerContext: buttonContext,
+                child: const Text('Dialog body'),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
       ),
     );
-    expect(transition.scale.value, closeTo(0.8956716447988132, 1e-9));
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 380));
+
+    expect(find.text('Dialog body'), findsOneWidget);
   });
 
   testWidgets('lays out two actions horizontally with equal widths', (

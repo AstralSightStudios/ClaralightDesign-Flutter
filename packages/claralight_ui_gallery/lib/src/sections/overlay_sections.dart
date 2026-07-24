@@ -245,58 +245,64 @@ class _DialogSection extends StatelessWidget {
         spacing: 10,
         runSpacing: 10,
         children: [
-          CLButton(
-            label: '导出表盘',
-            variant: CLButtonVariant.secondary,
-            size: CLControlSize.medium,
-            onPressed: () => CLDialog.show(
-              context,
-              title: '导出表盘',
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Text('请验证预览图，如有预览图错误或未上传请重新生成。'),
+          Builder(
+            builder: (btnContext) => CLButton(
+              label: '导出表盘',
+              variant: CLButtonVariant.secondary,
+              size: CLControlSize.medium,
+              onPressed: () => CLDialog.show(
+                context,
+                triggerContext: btnContext,
+                title: '导出表盘',
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: Text('请验证预览图，如有预览图错误或未上传请重新生成。'),
+                ),
+                actions: [
+                  CLButton(
+                    label: '继续',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  CLButton(
+                    label: '刷新全部',
+                    variant: CLButtonVariant.secondary,
+                    onPressed: () {},
+                  ),
+                ],
               ),
-              actions: [
-                CLButton(
-                  label: '继续',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                CLButton(
-                  label: '刷新全部',
-                  variant: CLButtonVariant.secondary,
-                  onPressed: () {},
-                ),
-              ],
             ),
           ),
-          CLButton(
-            key: const Key('three-action-dialog-demo'),
-            label: '三选项弹窗',
-            variant: CLButtonVariant.secondary,
-            size: CLControlSize.medium,
-            onPressed: () => CLDialog.show(
-              context,
-              title: '保存更改',
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Text('关闭前是否保存当前更改？'),
+          Builder(
+            builder: (btnContext) => CLButton(
+              key: const Key('three-action-dialog-demo'),
+              label: '三选项弹窗',
+              variant: CLButtonVariant.secondary,
+              size: CLControlSize.medium,
+              onPressed: () => CLDialog.show(
+                context,
+                triggerContext: btnContext,
+                title: '保存更改',
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: Text('关闭前是否保存当前更改？'),
+                ),
+                actions: [
+                  CLButton(
+                    label: '保存并关闭',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  CLButton(
+                    label: '不保存',
+                    variant: CLButtonVariant.danger,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  CLButton(
+                    label: '取消',
+                    variant: CLButtonVariant.secondary,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
               ),
-              actions: [
-                CLButton(
-                  label: '保存并关闭',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                CLButton(
-                  label: '不保存',
-                  variant: CLButtonVariant.danger,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                CLButton(
-                  label: '取消',
-                  variant: CLButtonVariant.secondary,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
             ),
           ),
         ],
