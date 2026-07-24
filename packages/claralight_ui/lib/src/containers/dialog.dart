@@ -181,32 +181,24 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        FadeTransition(
-          opacity: CurvedAnimation(
-            parent: animation,
-            curve: const Interval(0, 0.4, curve: Curves.easeOut),
-            reverseCurve: Curves.easeOut,
-          ),
-          child: ModalBarrier(
-            color: scrim,
-            dismissible: _barrierDismissible,
-          ),
-        ),
-        AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) {
-            final t = animation.value;
-            // Fast content fade-in (0.0 to 0.35) so content becomes visible immediately.
-            final contentOpacity = CurvedAnimation(
-              parent: animation,
-              curve: const Interval(0.0, 0.35, curve: Curves.easeOut),
-              reverseCurve: Curves.easeIn,
-            ).value;
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final t = animation.value;
+        // Evaluate curves purely from animation value so forward/reverse mid-flight
+        // reversals are 100% continuous with ZERO curve-switching jumps.
+        final scrimOpacity = Curves.easeOut.transform((t / 0.4).clamp(0.0, 1.0));
+        final contentOpacity = Curves.easeOut.transform((t / 0.35).clamp(0.0, 1.0));
 
-            return _CLDialogMorphWidget(
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ModalBarrier(
+              color: scrim.withValues(alpha: scrim.a * scrimOpacity),
+              dismissible: _barrierDismissible,
+              semanticsLabel: barrierLabel,
+            ),
+            _CLDialogMorphWidget(
               progress: t,
               triggerRect: triggerRect,
               child: SafeArea(
@@ -215,10 +207,10 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
                   child: builder(context),
                 ),
               ),
-            );
-          },
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 }

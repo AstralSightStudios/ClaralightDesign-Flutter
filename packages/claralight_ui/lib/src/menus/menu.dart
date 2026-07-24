@@ -119,7 +119,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     stiffness: 700,
     damping: 30,
   );
-  static const _openMorphDuration = Duration(milliseconds: 240);
+  static const _openMorphDuration = Duration(milliseconds: 380);
   static const _closeTravelSpring = SpringDescription(
     mass: 1,
     stiffness: 520,
@@ -757,6 +757,8 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                 : (math.max(tTravel, tMorph) * 5).clamp(0.0, 1.0))
             .toDouble();
 
+    final matrix = _computeMenuMorphMatrix(width, height);
+
     return IgnorePointer(
       ignoring: !_open,
       child: ExcludeFocus(
@@ -774,59 +776,62 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
               child: SizedBox(
                 width: width,
                 height: height,
-                child: CLSurface(
-                  frosted: true,
-                  borderRadius: borderRadius,
-                  outlined: true,
-                  outlineColor: theme.colors.outlineStrong,
-                  shadow: [
-                    BoxShadow(
-                      color: Color.fromARGB(
-                        (0x40 * shadowStrength).round(),
-                        0,
-                        0,
-                        0,
-                      ),
-                      blurRadius: 36,
-                      offset: const Offset(0, 14),
-                    ),
-                  ],
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      IgnorePointer(
-                        child: ColoredBox(
-                          color: Color.fromRGBO(
-                            255,
-                            255,
-                            255,
-                            0.06 * (1 - reveal) * math.sqrt(shadowStrength),
-                          ),
+                child: Transform(
+                  transform: matrix,
+                  child: CLSurface(
+                    frosted: true,
+                    borderRadius: borderRadius,
+                    outlined: true,
+                    outlineColor: theme.colors.outlineStrong,
+                    shadow: [
+                      BoxShadow(
+                        color: Color.fromARGB(
+                          (0x40 * shadowStrength).round(),
+                          0,
+                          0,
+                          0,
                         ),
+                        blurRadius: 36,
+                        offset: const Offset(0, 14),
                       ),
-                      IgnorePointer(
-                        child: CustomPaint(
-                          painter: _CLMenuPressGlowPainter(
-                            pointer: _pressPosition,
-                            color: theme.colors.textPrimary,
-                            strength: Curves.easeOutCubic.transform(
-                              _pressGlow.value,
+                    ],
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        IgnorePointer(
+                          child: ColoredBox(
+                            color: Color.fromRGBO(
+                              255,
+                              255,
+                              255,
+                              0.06 * (1 - reveal) * math.sqrt(shadowStrength),
                             ),
                           ),
                         ),
-                      ),
-                      Opacity(
-                        opacity: opacity.clamp(0.0, 1.0).toDouble(),
-                        child: Flow(
-                          delegate: _CLMenuContentFlowDelegate(
-                            targetWidth: widget.menuWidth,
-                            maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                            alignment: _anchor,
+                        IgnorePointer(
+                          child: CustomPaint(
+                            painter: _CLMenuPressGlowPainter(
+                              pointer: _pressPosition,
+                              color: theme.colors.textPrimary,
+                              strength: Curves.easeOutCubic.transform(
+                                _pressGlow.value,
+                              ),
+                            ),
                           ),
-                          children: [measuredList],
                         ),
-                      ),
-                    ],
+                        Opacity(
+                          opacity: opacity.clamp(0.0, 1.0).toDouble(),
+                          child: Flow(
+                            delegate: _CLMenuContentFlowDelegate(
+                              targetWidth: widget.menuWidth,
+                              maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                              alignment: _anchor,
+                            ),
+                            children: [measuredList],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -835,6 +840,78 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  Matrix4 _computeMenuMorphMatrix(double width, double height) {
+    final tMorph = _morphProgress;
+    if (tMorph <= 0.001 || tMorph >= 0.999) return Matrix4.identity();
+
+    final clampedProgress = tMorph.clamp(0.0, 1.0);
+    // Dynamic 3D perspective trapezoid skew during mid-flight morphing
+    final factor = math.sin(clampedProgress * math.pi);
+
+    final skewX = 0.0003 * factor * (_anchor.x > 0 ? -1.0 : 1.0);
+    final skewY = 0.0004 * factor * (_growDown ? 1.0 : -1.0);
+
+    return Matrix4.identity()
+      ..setEntry(3, 0, skewX)
+      ..setEntry(3, 1, skewY);
+  }
+
+  static Matrix4 _computeHomography(
+    Size childSize,
+    Offset p1,
+    Offset p2,
+    Offset p3,
+    Offset p4,
+  ) {
+    final w = childSize.width;
+    final h = childSize.height;
+    if (w <= 0 || h <= 0) return Matrix4.identity();
+
+    final x1 = p1.dx, y1 = p1.dy;
+    final x2 = p2.dx, y2 = p2.dy;
+    final x3 = p3.dx, y3 = p3.dy;
+    final x4 = p4.dx, y4 = p4.dy;
+
+    final m03 = x1;
+    final m13 = y1;
+
+    final c = x4 - x2 - x3 + x1;
+    final f = y4 - y2 - y3 + y1;
+
+    final a = (x2 - x4) * w;
+    final b = (x3 - x4) * h;
+    final d = (y2 - y4) * w;
+    final e = (y3 - y4) * h;
+
+    final det = a * e - b * d;
+
+    double m30 = 0.0;
+    double m31 = 0.0;
+
+    if (det.abs() > 1e-6) {
+      m30 = (c * e - b * f) / det;
+      m31 = (a * f - c * d) / det;
+    }
+
+    final m00 = (x2 - x1 + m30 * w * x2) / w;
+    final m10 = (y2 - y1 + m30 * w * y2) / w;
+    final m01 = (x3 - x1 + m31 * h * x3) / h;
+    final m11 = (y3 - y1 + m31 * h * y3) / h;
+
+    final matrix = Matrix4.identity();
+    matrix.storage[0] = m00;
+    matrix.storage[1] = m10;
+    matrix.storage[3] = m30;
+    matrix.storage[4] = m01;
+    matrix.storage[5] = m11;
+    matrix.storage[7] = m31;
+    matrix.storage[12] = m03;
+    matrix.storage[13] = m13;
+    matrix.storage[15] = 1.0;
+
+    return matrix;
   }
 
   Widget _buildMeasuredList({required double maxHeight}) {

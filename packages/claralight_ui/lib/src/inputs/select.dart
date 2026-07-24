@@ -759,6 +759,8 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       math.max(0, _panelHeight - _panelOutlineWidth * 2),
     );
 
+    final matrix = _computeSelectMorphMatrix(width, height);
+
     return IgnorePointer(
       ignoring: !_open,
       child: ExcludeSemantics(
@@ -768,29 +770,32 @@ class _CLSelectState<T> extends State<CLSelect<T>>
           child: SizedBox(
             width: width,
             height: height,
-            child: CLSurface(
-              frosted: true,
-              borderRadius: borderRadius,
-              outlined: true,
-              shadow: [
-                BoxShadow(
-                  color: Color.fromARGB(
-                    (0x59 * shadowStrength).round(),
-                    0,
-                    0,
-                    0,
+            child: Transform(
+              transform: matrix,
+              child: CLSurface(
+                frosted: true,
+                borderRadius: borderRadius,
+                outlined: true,
+                shadow: [
+                  BoxShadow(
+                    color: Color.fromARGB(
+                      (0x59 * shadowStrength).round(),
+                      0,
+                      0,
+                      0,
+                    ),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
                   ),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-              child: Opacity(
-                opacity: contentOpacity.clamp(0.0, 1.0).toDouble(),
-                child: Flow(
-                  delegate: _CLSelectContentFlowDelegate(
-                    targetSize: targetContentSize,
+                ],
+                child: Opacity(
+                  opacity: contentOpacity.clamp(0.0, 1.0).toDouble(),
+                  child: Flow(
+                    delegate: _CLSelectContentFlowDelegate(
+                      targetSize: targetContentSize,
+                    ),
+                    children: [list],
                   ),
-                  children: [list],
                 ),
               ),
             ),
@@ -798,6 +803,21 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         ),
       ),
     );
+  }
+
+  Matrix4 _computeSelectMorphMatrix(double width, double height) {
+    final tMorph = _morphProgress;
+    if (tMorph <= 0.001 || tMorph >= 0.999) return Matrix4.identity();
+
+    final clampedProgress = tMorph.clamp(0.0, 1.0);
+    final factor = math.sin(clampedProgress * math.pi);
+
+    final skewX = 0.00003 * factor * (width > 120 ? 1.0 : -1.0);
+    final skewY = 0.00004 * factor;
+
+    return Matrix4.identity()
+      ..setEntry(3, 0, skewX)
+      ..setEntry(3, 1, skewY);
   }
 }
 

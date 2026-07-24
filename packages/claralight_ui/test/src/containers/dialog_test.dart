@@ -85,6 +85,38 @@ void main() {
     expect(find.byKey(_dialogContentKey), findsOneWidget);
   });
 
+  testWidgets('can be interrupted mid-flight by tapping barrier', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                child: const Text('Dialog body', key: _dialogContentKey),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+    // Advance just 50ms into 380ms transition (mid-flight)
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Tap background scrim barrier to interrupt mid-flight
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(_dialogContentKey), findsNothing);
+  });
+
   testWidgets('show accepts triggerContext', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

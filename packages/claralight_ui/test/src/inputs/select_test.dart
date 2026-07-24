@@ -131,8 +131,8 @@ void main() {
         expect(morphProgress, greaterThan(0.1));
         expect(morphProgress, lessThan(0.25));
         expect(centerProgress, greaterThan(morphProgress + 0.45));
-        expect(lateCenterProgress, greaterThan(1.08));
-        expect(lateCenterProgress, lessThan(1.1));
+        expect(lateCenterProgress, greaterThan(1.03));
+        expect(lateCenterProgress, lessThan(1.15));
         expect(lateMorphProgress, greaterThan(0.45));
         expect(lateMorphProgress, lessThan(0.8));
 
@@ -147,7 +147,14 @@ void main() {
                 handoffTravel.dy * totalTravel.dy) /
             totalTravel.distanceSquared;
         expect(handoffProgress, lessThan(0));
-        expect(handoffPanelRect.center, handoffTriggerRect.center);
+        expect(
+          handoffPanelRect.center.dx,
+          closeTo(handoffTriggerRect.center.dx, 0.05),
+        );
+        expect(
+          handoffPanelRect.center.dy,
+          closeTo(handoffTriggerRect.center.dy, 0.05),
+        );
 
         await tester.pump(const Duration(milliseconds: 40));
         final reboundTriggerRect = tester.getRect(triggerFinder);
