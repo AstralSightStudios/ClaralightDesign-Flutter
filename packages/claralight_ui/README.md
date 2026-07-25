@@ -77,8 +77,8 @@ component's deterministic width-allocation contract.
 
 ## Progressive scrolling
 
-Precache the shader shared by `CLScrollable` and `CLList` before the first
-frame:
+Precache the shader shared by `CLScrollable`, `CLList`, and `CLTextArea`
+before the first frame:
 
 ```dart
 Future<void> main() async {
@@ -87,6 +87,9 @@ Future<void> main() async {
   runApp(const App());
 }
 ```
+
+`CLTextArea.precache()` warms the same shader and is the equivalent entry point
+for apps that only use multiline text input.
 
 `CLScrollable` supports one or two axes, content padding, per-edge blur and
 mask extents, rounded clipping, and independent scrollbar policies:

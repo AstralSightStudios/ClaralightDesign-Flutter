@@ -291,6 +291,85 @@ class _InputsSection extends StatelessWidget {
   }
 }
 
+class _TextAreasSection extends StatefulWidget {
+  const _TextAreasSection();
+
+  @override
+  State<_TextAreasSection> createState() => _TextAreasSectionState();
+}
+
+class _TextAreasSectionState extends State<_TextAreasSection> {
+  final _fixedController = TextEditingController(
+    text:
+        '本次版本完善了导出流程。\n'
+        '图片与视频共用同一套命名规则。\n'
+        '批量任务会保留原始时间戳。\n'
+        '失败项目可在记录中单独重试。\n'
+        '交付前请再次核对输出目录。',
+  );
+  final _readOnlyController = TextEditingController(text: '已确认的说明内容');
+  final _errorController = TextEditingController(text: '这段内容需要修改');
+
+  @override
+  void dispose() {
+    _fixedController.dispose();
+    _readOnlyController.dispose();
+    _errorController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      title: 'CLTextArea',
+      child: Column(
+        children: [
+          CLTextArea(
+            key: const Key('fixed-text-area-demo'),
+            controller: _fixedController,
+            maxLength: 120,
+          ),
+          const SizedBox(height: 10),
+          const CLTextArea(
+            key: Key('auto-text-area-demo'),
+            placeholder: '补充更多细节',
+            minHeight: 80,
+            maxHeight: 160,
+            maxLength: 240,
+            size: CLControlSize.medium,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: CLTextArea(
+                  key: const Key('read-only-text-area-demo'),
+                  controller: _readOnlyController,
+                  minHeight: 80,
+                  readOnly: true,
+                  size: CLControlSize.small,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: CLTextArea(
+                  key: const Key('error-text-area-demo'),
+                  controller: _errorController,
+                  minHeight: 80,
+                  maxLength: 20,
+                  error: true,
+                  size: CLControlSize.small,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SelectSection extends StatefulWidget {
   const _SelectSection();
 

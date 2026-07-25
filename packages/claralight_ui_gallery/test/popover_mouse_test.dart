@@ -1,6 +1,7 @@
 import 'package:claralight_ui/claralight_ui.dart';
 import 'package:claralight_ui_gallery/main.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -8,6 +9,10 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const GalleryApp());
+    // Let CLScrollable measure overflow and install its stable edge-effect
+    // wrapper before retaining or hovering descendant component state.
+    await tester.pump();
+    await tester.pump();
     final popover = find.byType(CLPopover);
     expect(popover, findsOneWidget);
     await tester.ensureVisible(popover);
@@ -31,6 +36,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
     }
 
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
   });
 }

@@ -136,6 +136,7 @@ class _GalleryHomeState extends State<GalleryHome> {
                     _SheetSection(),
                     _DialogSection(),
                     _MenuSection(),
+                    _TextAreasSection(),
                   ],
                 ),
               ],

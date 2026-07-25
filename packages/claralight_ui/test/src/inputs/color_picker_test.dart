@@ -13,6 +13,17 @@ void main() {
     );
   }
 
+  BorderSide fieldBorder(WidgetTester tester) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byType(CLTextField),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final decoration = container.decoration! as ShapeDecoration;
+    return (decoration.shape as RoundedSuperellipseBorder).side;
+  }
+
   testWidgets('CLColorPicker reports picks from the SV area', (
     WidgetTester tester,
   ) async {
@@ -114,15 +125,17 @@ void main() {
 
     expect(
       tester.widget<CupertinoTextField>(field).style?.color,
-      CLThemeData().colors.danger,
+      CLThemeData().colors.textPrimary,
     );
+    expect(fieldBorder(tester).color, CLThemeData().colors.danger);
 
     final area = find.byKey(const Key('cl-color-picker-sv'));
     await tester.tapAt(tester.getTopRight(area) + const Offset(-1, 1));
     await tester.pumpAndSettle();
 
     final textField = tester.widget<CupertinoTextField>(field);
-    expect(textField.style?.color, isNot(CLThemeData().colors.danger));
+    expect(textField.style?.color, CLThemeData().colors.textPrimary);
+    expect(fieldBorder(tester).color, isNot(CLThemeData().colors.danger));
     expect(textField.controller?.text, isNot('invalid'));
     expect(picked, isNotNull);
   });
@@ -150,14 +163,16 @@ void main() {
     CupertinoTextField textField() => tester.widget<CupertinoTextField>(field);
 
     expect(textField().controller?.text, 'invalid');
-    expect(textField().style?.color, CLThemeData().colors.danger);
+    expect(textField().style?.color, CLThemeData().colors.textPrimary);
+    expect(fieldBorder(tester).color, CLThemeData().colors.danger);
     expect(picked, isNull);
 
     await tester.tap(field);
     await tester.enterText(field, '00FF00');
     await tester.pumpAndSettle();
 
-    expect(textField().style?.color, isNot(CLThemeData().colors.danger));
+    expect(textField().style?.color, CLThemeData().colors.textPrimary);
+    expect(fieldBorder(tester).color, isNot(CLThemeData().colors.danger));
     expect(picked?.toARGB32(), const Color(0xFF00FF00).toARGB32());
   });
 }

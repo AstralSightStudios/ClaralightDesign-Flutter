@@ -1,4 +1,4 @@
-import 'dart:ui' show SemanticsAction;
+import 'dart:ui' show SemanticsAction, SemanticsValidationResult;
 
 import 'package:claralight_ui/claralight_ui.dart';
 import 'package:flutter/cupertino.dart';
@@ -19,6 +19,17 @@ void main() {
   final stepUp = find.byKey(const Key('cl-text-field-step-up'));
   final stepDown = find.byKey(const Key('cl-text-field-step-down'));
   final dragZone = find.byKey(const Key('cl-text-field-stepper-drag-zone'));
+
+  BorderSide fieldBorder(WidgetTester tester) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byType(CLTextField),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final decoration = container.decoration! as ShapeDecoration;
+    return (decoration.shape as RoundedSuperellipseBorder).side;
+  }
 
   testWidgets('sizes use the standard control heights', (tester) async {
     for (final size in CLControlSize.values) {
@@ -841,23 +852,51 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('external error state turns text red', (tester) async {
-    await tester.pumpWidget(host(const CLTextField(error: true)));
+  testWidgets('external error keeps text readable and exposes semantics', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final focusNode = FocusNode();
+    addTearDown(focusNode.dispose);
 
-    Color? textColor() => tester
-        .widget<CupertinoTextField>(find.byType(CupertinoTextField))
-        .style
-        ?.color;
+    await tester.pumpWidget(
+      host(CLTextField(focusNode: focusNode, error: true)),
+    );
 
-    expect(textColor(), CLThemeData().colors.danger);
+    final field = tester.widget<CupertinoTextField>(
+      find.byType(CupertinoTextField),
+    );
+    expect(field.style?.color, CLThemeData().colors.textPrimary);
+    expect(fieldBorder(tester).color, CLThemeData().colors.danger);
+    expect(fieldBorder(tester).width, 1);
+    expect(
+      tester
+          .getSemantics(find.byType(CLTextField))
+          .getSemanticsData()
+          .validationResult,
+      SemanticsValidationResult.invalid,
+    );
+
+    focusNode.requestFocus();
+    await tester.pump();
+    expect(fieldBorder(tester).color, CLThemeData().colors.danger);
+    expect(fieldBorder(tester).width, 1.5);
 
     await tester.pumpWidget(host(const CLTextField()));
     await tester.pumpAndSettle();
 
-    expect(textColor(), isNot(CLThemeData().colors.danger));
+    expect(fieldBorder(tester).color.a, 0);
+    expect(
+      tester
+          .getSemantics(find.byType(CLTextField))
+          .getSemanticsData()
+          .validationResult,
+      SemanticsValidationResult.none,
+    );
+    semantics.dispose();
   });
 
-  testWidgets('invalid numeric input turns red after losing focus', (
+  testWidgets('invalid numeric input uses a danger outline after blur', (
     tester,
   ) async {
     final controller = TextEditingController();
@@ -882,20 +921,23 @@ void main() {
         .style
         ?.color;
 
-    expect(textColor(), isNot(CLThemeData().colors.danger));
+    expect(textColor(), CLThemeData().colors.textPrimary);
+    expect(fieldBorder(tester).color.a, 0);
 
     await tester.tap(find.byType(CupertinoTextField));
     await tester.enterText(find.byType(CupertinoTextField), '12');
     focusNode.unfocus();
     await tester.pump();
 
-    expect(textColor(), CLThemeData().colors.danger);
+    expect(textColor(), CLThemeData().colors.textPrimary);
+    expect(fieldBorder(tester).color, CLThemeData().colors.danger);
 
     await tester.tap(find.byType(CupertinoTextField));
     await tester.enterText(find.byType(CupertinoTextField), '8');
     await tester.pump();
 
-    expect(textColor(), isNot(CLThemeData().colors.danger));
+    expect(textColor(), CLThemeData().colors.textPrimary);
+    expect(fieldBorder(tester).color, CLThemeData().colors.accent);
   });
 
   testWidgets('invalid submission is blocked and retains focus', (
@@ -924,12 +966,13 @@ void main() {
 
     expect(submitted, isNull);
     expect(focusNode.hasFocus, isTrue);
+    expect(fieldBorder(tester).color, CLThemeData().colors.danger);
     expect(
       tester
           .widget<CupertinoTextField>(find.byType(CupertinoTextField))
           .style
           ?.color,
-      CLThemeData().colors.danger,
+      CLThemeData().colors.textPrimary,
     );
 
     await tester.enterText(find.byType(CupertinoTextField), '7');

@@ -34,6 +34,17 @@ Widget _galleryHost({bool disableAnimations = false}) {
   );
 }
 
+Future<void> _pumpGalleryHost(
+  WidgetTester tester, {
+  bool disableAnimations = false,
+}) async {
+  await tester.pumpWidget(_galleryHost(disableAnimations: disableAnimations));
+  // Scrollability is measured post-frame; settle the edge-effect wrapper
+  // before tests retain descendant state or geometry.
+  await tester.pump();
+  await tester.pump();
+}
+
 void _useLargeView(WidgetTester tester) {
   tester.platformDispatcher.accessibilityFeaturesTestValue =
       const FakeAccessibilityFeatures();
@@ -115,7 +126,40 @@ void main() {
     expect(find.byType(CLColorSwatchGroup), findsWidgets);
     expect(find.byType(CLProgressBar), findsWidgets);
     expect(find.byType(CLMenu), findsWidgets);
+    expect(find.byType(CLTextArea), findsNWidgets(4));
     expect(find.byType(CLTreeView), findsOneWidget);
+
+    final fixedTextArea = tester.widget<CLTextArea>(
+      find.byKey(const Key('fixed-text-area-demo')),
+    );
+    final autoTextArea = tester.widget<CLTextArea>(
+      find.byKey(const Key('auto-text-area-demo')),
+    );
+    final readOnlyTextArea = tester.widget<CLTextArea>(
+      find.byKey(const Key('read-only-text-area-demo')),
+    );
+    final errorTextArea = tester.widget<CLTextArea>(
+      find.byKey(const Key('error-text-area-demo')),
+    );
+    expect(fixedTextArea.minHeight, 120);
+    expect(fixedTextArea.maxHeight, 120);
+    expect(fixedTextArea.maxLength, 120);
+    expect(fixedTextArea.controller?.text.split('\n'), hasLength(5));
+    final fixedScrollable = tester.widget<CLScrollable>(
+      find.descendant(
+        of: find.byKey(const Key('fixed-text-area-demo')),
+        matching: find.byType(CLScrollable),
+      ),
+    );
+    expect(
+      fixedScrollable.verticalController!.position.maxScrollExtent,
+      greaterThan(0),
+    );
+    expect(autoTextArea.minHeight, 80);
+    expect(autoTextArea.maxHeight, 160);
+    expect(autoTextArea.maxLength, 240);
+    expect(readOnlyTextArea.readOnly, isTrue);
+    expect(errorTextArea.error, isTrue);
     expect(
       tester
           .widget<CLButton>(find.byKey(const Key('primary-button-demo')))
@@ -165,8 +209,7 @@ void main() {
     WidgetTester tester,
   ) async {
     _useLargeView(tester);
-    await tester.pumpWidget(_galleryHost());
-    await tester.pump();
+    await _pumpGalleryHost(tester);
 
     final branch = _branch(_groupBranchKey);
     final container = _branch(_containerBranchKey);
@@ -217,8 +260,7 @@ void main() {
     (WidgetTester tester) async {
       _useLargeView(tester);
       final semantics = tester.ensureSemantics();
-      await tester.pumpWidget(_galleryHost());
-      await tester.pump();
+      await _pumpGalleryHost(tester);
       await tester.ensureVisible(_tile('进度条 1'));
       await tester.pump();
 
@@ -253,8 +295,7 @@ void main() {
     'tree branch reverses continuously and honors the last target',
     (WidgetTester tester) async {
       _useLargeView(tester);
-      await tester.pumpWidget(_galleryHost());
-      await tester.pump();
+      await _pumpGalleryHost(tester);
 
       final branch = _branch(_groupBranchKey);
       void expectSingleChildren() {
@@ -326,8 +367,7 @@ void main() {
     'nested tree preserves expanded geometry and independent state',
     (WidgetTester tester) async {
       _useLargeView(tester);
-      await tester.pumpWidget(_galleryHost());
-      await tester.pump();
+      await _pumpGalleryHost(tester);
 
       const labels = [
         'Frame 114',
@@ -414,8 +454,7 @@ void main() {
   ) async {
     _useLargeView(tester);
     final semantics = tester.ensureSemantics();
-    await tester.pumpWidget(_galleryHost(disableAnimations: true));
-    await tester.pump();
+    await _pumpGalleryHost(tester, disableAnimations: true);
 
     expect(tester.getSize(_branch(_groupBranchKey)).height, 113);
     _toggleTile(tester, '组 2');
@@ -470,6 +509,7 @@ void main() {
           },
         ),
       );
+      await tester.pump();
       await tester.pump();
 
       _toggleTile(tester, '组 2');

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsValidationResult;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
@@ -315,11 +316,7 @@ class _CLTextFieldState extends State<CLTextField> {
                 ? theme.typography.body
                 : theme.typography.callout)
             .copyWith(
-              color: !widget.enabled
-                  ? colors.textDisabled
-                  : _showsError
-                  ? colors.danger
-                  : colors.textPrimary,
+              color: widget.enabled ? colors.textPrimary : colors.textDisabled,
             );
 
     final field = CupertinoTextField(
@@ -361,10 +358,13 @@ class _CLTextFieldState extends State<CLTextField> {
               borderRadius: BorderRadius.circular(
                 widget.borderRadius ?? theme.radii.control,
               ),
-              // Borderless at rest; focused fields use the accent or error ring.
+              // Error fields retain a visible danger outline at rest; focus
+              // strengthens the active accent or danger ring.
               side: BorderSide(
-                color: focused
-                    ? (_showsError ? colors.danger : colors.accent)
+                color: _showsError
+                    ? colors.danger
+                    : focused
+                    ? colors.accent
                     : const Color(0x00000000),
                 width: focused ? 1.5 : 1,
               ),
@@ -423,6 +423,9 @@ class _CLTextFieldState extends State<CLTextField> {
     );
 
     return Semantics(
+      validationResult: _showsError
+          ? SemanticsValidationResult.invalid
+          : SemanticsValidationResult.none,
       onIncrease: _canStep(1) ? () => _bump(1) : null,
       onDecrease: _canStep(-1) ? () => _bump(-1) : null,
       child: Listener(
