@@ -72,32 +72,29 @@ class _IconButtonsSectionState extends State<_IconButtonsSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               CLIconButton(icon: Icons.add_rounded, onPressed: () {}),
-              const SizedBox(width: 8),
               CLIconButton(icon: Icons.favorite_rounded, onPressed: () {}),
-              const SizedBox(width: 8),
               CLIconButton(
                 icon: Icons.more_horiz_rounded,
                 variant: CLIconButtonVariant.ghost,
                 onPressed: () {},
               ),
-              const SizedBox(width: 8),
               CLIconButton(
                 key: const Key('primary-icon-button-demo'),
                 icon: Icons.ios_share_rounded,
                 variant: CLIconButtonVariant.primary,
                 onPressed: () {},
               ),
-              const SizedBox(width: 8),
               CLIconButton(
                 key: const Key('danger-icon-button-demo'),
                 icon: Icons.delete_outline_rounded,
                 variant: CLIconButtonVariant.danger,
                 onPressed: () {},
               ),
-              const SizedBox(width: 8),
               const CLIconButton(icon: Icons.block_rounded, onPressed: null),
             ],
           ),

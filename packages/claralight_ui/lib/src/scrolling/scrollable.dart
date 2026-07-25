@@ -51,6 +51,122 @@ class _CLScrollPhysics extends ScrollPhysics {
   }
 }
 
+/// Delegates platform scroll chrome while suppressing locked-axis indicators.
+class _CLScrollBehavior extends ScrollBehavior {
+  _CLScrollBehavior({
+    required this.delegate,
+    required this.horizontalEnabled,
+    required this.verticalEnabled,
+  });
+
+  final ScrollBehavior delegate;
+  final bool horizontalEnabled;
+  final bool verticalEnabled;
+  final Expando<bool> _handledIndicatorNotifications = Expando<bool>();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => delegate.dragDevices;
+
+  @override
+  Set<LogicalKeyboardKey> get pointerAxisModifiers =>
+      delegate.pointerAxisModifiers;
+
+  @override
+  MultitouchDragStrategy getMultitouchDragStrategy(BuildContext context) =>
+      delegate.getMultitouchDragStrategy(context);
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => delegate.buildScrollbar(context, child, details);
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    final axisEnabled = switch (axisDirectionToAxis(details.direction)) {
+      Axis.horizontal => horizontalEnabled,
+      Axis.vertical => verticalEnabled,
+    };
+    if (!axisEnabled) return child;
+
+    return NotificationListener<OverscrollIndicatorNotification>(
+      onNotification: (notification) {
+        if (notification.depth != 0 ||
+            _handledIndicatorNotifications[notification] == true) {
+          return false;
+        }
+        _handledIndicatorNotifications[notification] = true;
+
+        final controller = details.controller;
+        final position = controller?.hasClients == true
+            ? controller!.position
+            : null;
+        final hasScrollableExtent =
+            position != null &&
+            position.hasContentDimensions &&
+            position.minScrollExtent < position.maxScrollExtent;
+        if (!hasScrollableExtent) notification.disallowIndicator();
+        return false;
+      },
+      child: delegate.buildOverscrollIndicator(context, child, details),
+    );
+  }
+
+  @override
+  GestureVelocityTrackerBuilder velocityTrackerBuilder(BuildContext context) =>
+      delegate.velocityTrackerBuilder(context);
+
+  @override
+  TargetPlatform getPlatform(BuildContext context) =>
+      delegate.getPlatform(context);
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      delegate.getScrollPhysics(context);
+
+  @override
+  ScrollViewKeyboardDismissBehavior getKeyboardDismissBehavior(
+    BuildContext context,
+  ) => delegate.getKeyboardDismissBehavior(context);
+
+  @override
+  ScrollBehavior copyWith({
+    bool? scrollbars,
+    bool? overscroll,
+    Set<PointerDeviceKind>? dragDevices,
+    MultitouchDragStrategy? multitouchDragStrategy,
+    Set<LogicalKeyboardKey>? pointerAxisModifiers,
+    ScrollPhysics? physics,
+    TargetPlatform? platform,
+    ScrollViewKeyboardDismissBehavior? keyboardDismissBehavior,
+  }) => _CLScrollBehavior(
+    delegate: delegate.copyWith(
+      scrollbars: scrollbars,
+      overscroll: overscroll,
+      dragDevices: dragDevices,
+      multitouchDragStrategy: multitouchDragStrategy,
+      pointerAxisModifiers: pointerAxisModifiers,
+      physics: physics,
+      platform: platform,
+      keyboardDismissBehavior: keyboardDismissBehavior,
+    ),
+    horizontalEnabled: horizontalEnabled,
+    verticalEnabled: verticalEnabled,
+  );
+
+  @override
+  bool shouldNotify(covariant _CLScrollBehavior oldDelegate) =>
+      horizontalEnabled != oldDelegate.horizontalEnabled ||
+      verticalEnabled != oldDelegate.verticalEnabled ||
+      delegate.runtimeType != oldDelegate.delegate.runtimeType ||
+      delegate.shouldNotify(oldDelegate.delegate);
+}
+
 /// A one- or two-dimensional Claralight viewport.
 ///
 /// Content approaching an edge with more scrollable content behind it is
@@ -242,7 +358,13 @@ class CLScrollable extends StatefulWidget {
           child: result,
         );
         return ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          behavior: _CLScrollBehavior(
+            delegate: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            horizontalEnabled: _horizontalEnabled,
+            verticalEnabled: _verticalEnabled,
+          ),
           child: result,
         );
       },

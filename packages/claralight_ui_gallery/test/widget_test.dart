@@ -108,6 +108,35 @@ bool _hasSemanticsLabel(WidgetTester tester, String label) {
 void main() {
   setUpAll(CLScrollable.precache);
 
+  _galleryTestWidgets('Gallery tolerates transient zero and phone viewports', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = Size.zero;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const GalleryApp());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(375.38, 817.23);
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final addButton = find.byWidgetPredicate(
+      (widget) => widget is CLIconButton && widget.icon == Icons.add_rounded,
+    );
+    final disabledButton = find.byWidgetPredicate(
+      (widget) => widget is CLIconButton && widget.icon == Icons.block_rounded,
+    );
+    expect(
+      tester.getTopLeft(disabledButton).dy,
+      greaterThan(tester.getTopLeft(addButton).dy),
+    );
+  });
+
   _galleryTestWidgets('Gallery shows the Claralight component sections', (
     WidgetTester tester,
   ) async {

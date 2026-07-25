@@ -24,6 +24,27 @@ void main() {
     return (decoration.shape as RoundedSuperellipseBorder).side;
   }
 
+  testWidgets('CLColorPicker tolerates a transient zero-width layout', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 0,
+            child: CLColorPicker(
+              color: const Color(0xFFFF0000),
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('CLColorPicker reports picks from the SV area', (
     WidgetTester tester,
   ) async {

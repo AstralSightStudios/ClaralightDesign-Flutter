@@ -303,6 +303,7 @@ class _HueBar extends StatelessWidget {
   ];
 
   void _pick(Offset local, double width) {
+    if (width <= 0) return;
     onChanged((local.dx / width).clamp(0.0, 1.0) * 360);
   }
 
@@ -313,6 +314,9 @@ class _HueBar extends StatelessWidget {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
         final x = (hue / 360) * width;
+        final thumbLeft = width < 14
+            ? (width - 18) / 2
+            : (x - 9).clamp(-2.0, width - 16);
 
         return GestureDetector(
           key: const Key('cl-color-picker-hue'),
@@ -332,7 +336,7 @@ class _HueBar extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: (x - 9).clamp(-2.0, width - 16),
+                left: thumbLeft,
                 top: (height - 18) / 2,
                 child: _Loupe(color: HSVColor.fromAHSV(1, hue, 1, 1).toColor()),
               ),

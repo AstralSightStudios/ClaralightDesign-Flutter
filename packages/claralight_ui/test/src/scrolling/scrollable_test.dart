@@ -423,22 +423,38 @@ void main() {
     addTearDown(horizontal.dispose);
     addTearDown(vertical.dispose);
     const viewportKey = Key('locked-axis-viewport');
+    var indicatorCount = 0;
+    final overscrolls = <OverscrollNotification>[];
 
     await tester.pumpWidget(
       MaterialApp(
-        scrollBehavior: const MaterialScrollBehavior().copyWith(
-          physics: const BouncingScrollPhysics(),
-        ),
+        theme: ThemeData(platform: TargetPlatform.android),
         home: Center(
-          child: SizedBox(
-            key: viewportKey,
-            width: 100,
-            height: 80,
-            child: CLScrollable(
-              direction: CLScrollDirection.vertical,
-              horizontalController: horizontal,
-              verticalController: vertical,
-              child: const SizedBox(width: 240, height: 200),
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is OverscrollNotification) {
+                overscrolls.add(notification);
+              }
+              return false;
+            },
+            child: NotificationListener<OverscrollIndicatorNotification>(
+              onNotification: (notification) {
+                indicatorCount += 1;
+                return false;
+              },
+              child: SizedBox(
+                key: viewportKey,
+                width: 100,
+                height: 80,
+                child: CLScrollable(
+                  direction: CLScrollDirection.vertical,
+                  blurExtent: EdgeInsets.zero,
+                  blurSigma: EdgeInsets.zero,
+                  horizontalController: horizontal,
+                  verticalController: vertical,
+                  child: const SizedBox(width: 100, height: 200),
+                ),
+              ),
             ),
           ),
         ),
@@ -453,50 +469,64 @@ void main() {
 
     expect(horizontal.offset, 0);
     expect(vertical.offset, 0);
+    expect(overscrolls, hasLength(1));
+    expect(overscrolls.single.metrics.axis, Axis.horizontal);
+    expect(indicatorCount, 0);
 
     await gesture.up();
   });
 
-  testWidgets('a touch drag does not overscroll non-scrollable content', (
-    tester,
-  ) async {
-    final horizontal = ScrollController();
-    final vertical = ScrollController();
-    addTearDown(horizontal.dispose);
-    addTearDown(vertical.dispose);
-    const viewportKey = Key('non-scrollable-viewport');
+  testWidgets(
+    'a touch drag does not animate a non-scrollable axis on Android',
+    (tester) async {
+      final horizontal = ScrollController();
+      final vertical = ScrollController();
+      addTearDown(horizontal.dispose);
+      addTearDown(vertical.dispose);
+      const viewportKey = Key('non-scrollable-viewport');
+      final indicatorRequests = <OverscrollIndicatorNotification>[];
 
-    await tester.pumpWidget(
-      MaterialApp(
-        scrollBehavior: const MaterialScrollBehavior().copyWith(
-          physics: const BouncingScrollPhysics(),
-        ),
-        home: Center(
-          child: SizedBox(
-            key: viewportKey,
-            width: 100,
-            height: 80,
-            child: CLScrollable(
-              horizontalController: horizontal,
-              verticalController: vertical,
-              child: const SizedBox(width: 100, height: 200),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.android),
+          scrollBehavior: const MaterialScrollBehavior().copyWith(
+            physics: const BouncingScrollPhysics(),
+          ),
+          home: Center(
+            child: NotificationListener<OverscrollIndicatorNotification>(
+              onNotification: (notification) {
+                indicatorRequests.add(notification);
+                return false;
+              },
+              child: SizedBox(
+                key: viewportKey,
+                width: 100,
+                height: 80,
+                child: CLScrollable(
+                  horizontalController: horizontal,
+                  verticalController: vertical,
+                  child: const SizedBox(width: 100, height: 200),
+                ),
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(viewportKey)),
-    );
-    await gesture.moveBy(const Offset(30, -30));
-    await tester.pump();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(viewportKey)),
+      );
+      await gesture.moveBy(const Offset(30, -30));
+      await tester.pump();
 
-    expect(horizontal.offset, 0);
-    expect(vertical.offset, greaterThan(0));
+      expect(horizontal.offset, 0);
+      expect(vertical.offset, greaterThan(0));
+      expect(indicatorRequests, hasLength(1));
+      expect(indicatorRequests.single.accepted, isFalse);
 
-    await gesture.up();
-  });
+      await gesture.up();
+    },
+  );
 
   testWidgets('scrollable content keeps platform overscroll physics', (
     tester,
@@ -532,6 +562,53 @@ void main() {
     await tester.pump();
 
     expect(horizontal.offset, lessThan(0));
+
+    await gesture.up();
+  });
+
+  testWidgets('scrollable content keeps the Android overscroll indicator', (
+    tester,
+  ) async {
+    final horizontal = ScrollController();
+    final vertical = ScrollController();
+    addTearDown(horizontal.dispose);
+    addTearDown(vertical.dispose);
+    const viewportKey = Key('scrollable-indicator-viewport');
+    final indicatorRequests = <OverscrollIndicatorNotification>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        home: Center(
+          child: NotificationListener<OverscrollIndicatorNotification>(
+            onNotification: (notification) {
+              indicatorRequests.add(notification);
+              return false;
+            },
+            child: SizedBox(
+              key: viewportKey,
+              width: 100,
+              height: 80,
+              child: CLScrollable(
+                horizontalController: horizontal,
+                verticalController: vertical,
+                child: const SizedBox(width: 200, height: 80),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(viewportKey)),
+    );
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+
+    expect(horizontal.offset, 0);
+    expect(indicatorRequests, hasLength(1));
+    expect(indicatorRequests.single.accepted, isTrue);
 
     await gesture.up();
   });

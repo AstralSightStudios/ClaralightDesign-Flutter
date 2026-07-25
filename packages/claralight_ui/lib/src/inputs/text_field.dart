@@ -199,6 +199,14 @@ class _CLTextFieldState extends State<CLTextField> {
     return true;
   }
 
+  String? _semanticSteppedValue(double direction) {
+    if (!_canStep(direction)) return null;
+    final stepped = _number! + direction * widget.step;
+    if (!stepped.isFinite) return null;
+    final next = _clampNumber(stepped);
+    return widget.format?.call(next) ?? _defaultNumberFormat(next);
+  }
+
   bool _bump(double direction) => _bumpSteps(direction > 0 ? 1 : -1);
 
   bool _bumpSteps(int steps) {
@@ -422,12 +430,19 @@ class _CLTextFieldState extends State<CLTextField> {
       ),
     );
 
+    final increasedValue = _semanticSteppedValue(1);
+    final decreasedValue = _semanticSteppedValue(-1);
     return Semantics(
       validationResult: _showsError
           ? SemanticsValidationResult.invalid
           : SemanticsValidationResult.none,
-      onIncrease: _canStep(1) ? () => _bump(1) : null,
-      onDecrease: _canStep(-1) ? () => _bump(-1) : null,
+      value: increasedValue != null || decreasedValue != null
+          ? _controller.text
+          : null,
+      increasedValue: increasedValue,
+      decreasedValue: decreasedValue,
+      onIncrease: increasedValue != null ? () => _bump(1) : null,
+      onDecrease: decreasedValue != null ? () => _bump(-1) : null,
       child: Listener(
         onPointerSignal: _showsStepper ? _handlePointerSignal : null,
         child: control,

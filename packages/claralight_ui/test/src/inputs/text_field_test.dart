@@ -835,8 +835,12 @@ void main() {
     );
 
     var node = tester.getSemantics(find.byType(CLTextField));
-    expect(node.getSemanticsData().hasAction(SemanticsAction.increase), isTrue);
-    expect(node.getSemanticsData().hasAction(SemanticsAction.decrease), isTrue);
+    var data = node.getSemanticsData();
+    expect(data.hasAction(SemanticsAction.increase), isTrue);
+    expect(data.hasAction(SemanticsAction.decrease), isTrue);
+    expect(data.value, '1');
+    expect(data.increasedValue, '2');
+    expect(data.decreasedValue, '0');
 
     node.owner!.performAction(node.id, SemanticsAction.increase);
     await tester.pump();
@@ -844,11 +848,12 @@ void main() {
     expect(focusNode.hasFocus, isFalse);
 
     node = tester.getSemantics(find.byType(CLTextField));
-    expect(
-      node.getSemanticsData().hasAction(SemanticsAction.increase),
-      isFalse,
-    );
-    expect(node.getSemanticsData().hasAction(SemanticsAction.decrease), isTrue);
+    data = node.getSemanticsData();
+    expect(data.hasAction(SemanticsAction.increase), isFalse);
+    expect(data.hasAction(SemanticsAction.decrease), isTrue);
+    expect(data.value, '2');
+    expect(data.increasedValue, isEmpty);
+    expect(data.decreasedValue, '1');
     semantics.dispose();
   });
 
