@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter, SemanticsValidationResult;
+import 'dart:ui' show SemanticsValidationResult;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
@@ -35,18 +35,11 @@ class CLTextArea extends StatefulWidget {
   final TextAlign textAlign;
   final CLControlSize size;
 
-  /// Minimum outer height, including padding and any counter safe area.
+  /// Minimum outer height, including content padding.
   final double minHeight;
 
   /// Maximum outer height. Equal to [minHeight] when omitted.
   final double maxHeight;
-
-  /// Maximum number of Unicode grapheme clusters accepted from user input.
-  ///
-  /// When set, a character counter floats over the bottom-end corner inside
-  /// the surface. Programmatic controller values above the limit are preserved
-  /// and rendered in the error state rather than silently truncated.
-  final int? maxLength;
 
   /// Fixed width; null fills the available width.
   final double? width;
@@ -79,7 +72,6 @@ class CLTextArea extends StatefulWidget {
     this.size = CLControlSize.large,
     this.minHeight = 120,
     double? maxHeight,
-    this.maxLength,
     this.width,
     this.borderRadius,
     this.semanticLabel,
@@ -89,7 +81,6 @@ class CLTextArea extends StatefulWidget {
          maxHeight == null || (maxHeight > 0 && maxHeight < double.infinity),
        ),
        assert(maxHeight == null || maxHeight >= minHeight),
-       assert(maxLength == null || maxLength > 0),
        assert(width == null || (width > 0 && width < double.infinity)),
        assert(
          borderRadius == null ||
@@ -184,89 +175,6 @@ class _CLTextAreaScrollBehavior extends ScrollBehavior {
       delegate.shouldNotify(oldDelegate.delegate);
 }
 
-const _counterBlurSigma = 10.0;
-const _counterMaxBlurFeather = 10.0;
-const _counterHorizontalInset = 6.0;
-const _counterVerticalInset = 2.0;
-
-/// A backdrop blur whose alpha feathers to zero before every edge.
-///
-/// The transparent perimeter removes the rectangular boundary produced by a
-/// clipped backdrop filter while preserving a locally bounded blur layer.
-class _CLTextAreaEdgelessBlur extends StatelessWidget {
-  const _CLTextAreaEdgelessBlur({required this.feather, required this.child});
-
-  final double feather;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget blur = ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: _counterBlurSigma,
-          sigmaY: _counterBlurSigma,
-        ),
-        child: const SizedBox.expand(),
-      ),
-    );
-    blur = ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (bounds) {
-        final featherStop = bounds.height == 0
-            ? 0.5
-            : (feather / bounds.height).clamp(0.0, 0.5);
-        return LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: const [
-            Color(0x00000000),
-            Color(0xffffffff),
-            Color(0xffffffff),
-            Color(0x00000000),
-          ],
-          stops: [0, featherStop, 1 - featherStop, 1],
-        ).createShader(bounds);
-      },
-      child: blur,
-    );
-    blur = ShaderMask(
-      key: const Key('cl-text-area-counter-blur'),
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (bounds) {
-        final featherStop = bounds.width == 0
-            ? 0.5
-            : (feather / bounds.width).clamp(0.0, 0.5);
-        return LinearGradient(
-          colors: const [
-            Color(0x00000000),
-            Color(0xffffffff),
-            Color(0xffffffff),
-            Color(0x00000000),
-          ],
-          stops: [0, featherStop, 1 - featherStop, 1],
-        ).createShader(bounds);
-      },
-      child: blur,
-    );
-
-    return Stack(
-      alignment: AlignmentDirectional.center,
-      children: [
-        Positioned.fill(child: blur),
-        Padding(
-          padding: EdgeInsets.all(feather),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerEnd,
-            child: child,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _CLTextAreaState extends State<CLTextArea> {
   late TextEditingController _controller;
   late FocusNode _focusNode;
@@ -276,7 +184,8 @@ class _CLTextAreaState extends State<CLTextArea> {
   bool _ownsScrollController = false;
   bool _selectionRevealScheduled = false;
   double _layoutTextMaxWidth = double.infinity;
-  double _layoutCounterReserve = 0;
+  double _layoutTextTopInset = 0;
+  double _layoutBottomSafeInset = 0;
   TextStyle? _layoutTextStyle;
   TextAlign _layoutTextAlign = TextAlign.start;
   TextDirection _layoutTextDirection = TextDirection.ltr;
@@ -375,13 +284,13 @@ class _CLTextAreaState extends State<CLTextArea> {
 
       final scrollPosition = _scrollController.position;
       final currentOffset = scrollPosition.pixels;
-      final caretTop = caretOffset.dy;
+      final caretTop = _layoutTextTopInset + caretOffset.dy;
       final caretBottom = caretTop + caretHeight;
       final topBoundary = currentOffset + 24;
       final bottomBoundary =
           currentOffset +
           scrollPosition.viewportDimension -
-          _layoutCounterReserve;
+          _layoutBottomSafeInset;
       var targetOffset = currentOffset;
       if (caretTop < topBoundary && currentOffset > 0) {
         targetOffset = caretTop - 24;
@@ -389,7 +298,7 @@ class _CLTextAreaState extends State<CLTextArea> {
         targetOffset =
             caretBottom -
             scrollPosition.viewportDimension +
-            _layoutCounterReserve;
+            _layoutBottomSafeInset;
       }
       targetOffset = targetOffset.clamp(
         scrollPosition.minScrollExtent,
@@ -401,14 +310,7 @@ class _CLTextAreaState extends State<CLTextArea> {
     });
   }
 
-  int get _characterCount => _controller.text.characters.length;
-
-  bool get _isOverLimit {
-    final maxLength = widget.maxLength;
-    return maxLength != null && _characterCount > maxLength;
-  }
-
-  bool get _showsError => widget.enabled && (widget.error || _isOverLimit);
+  bool get _showsError => widget.enabled && widget.error;
 
   @override
   void dispose() {
@@ -493,69 +395,14 @@ class _CLTextAreaState extends State<CLTextArea> {
                 textScaler: textScaler,
                 maxWidth: textMaxWidth,
               ).height;
-              final maxLength = widget.maxLength;
-              final counterText = maxLength == null
-                  ? null
-                  : '$_characterCount/$maxLength';
-              final counterIntrinsicSize = counterText == null
-                  ? Size.zero
-                  : _measureText(
-                      text: counterText,
-                      style: theme.typography.caption,
-                      textAlign: TextAlign.start,
-                      textDirection: textDirection,
-                      textScaler: textScaler,
-                      maxWidth: double.infinity,
-                    );
-              final outerWidth = constraints.hasBoundedWidth
-                  ? math.max(0.0, constraints.maxWidth)
-                  : double.infinity;
-              final counterBlurFeather = !outerWidth.isFinite
-                  ? _counterMaxBlurFeather
-                  : math.min(_counterMaxBlurFeather, outerWidth / 4);
-              final desiredCounterEnd = math.max(
-                0.0,
-                inset + _counterHorizontalInset - counterBlurFeather,
-              );
-              final counterOverlayEnd = !outerWidth.isFinite
-                  ? desiredCounterEnd
-                  : math.min(desiredCounterEnd, outerWidth / 4);
-              final counterOverlayBottom = math.max(
-                0.0,
-                inset + _counterVerticalInset - counterBlurFeather,
-              );
-              final counterOverlayMaxWidth = !outerWidth.isFinite
-                  ? double.infinity
-                  : math.max(0.0, outerWidth - counterOverlayEnd);
-              final counterTextMaxWidth = !counterOverlayMaxWidth.isFinite
-                  ? double.infinity
-                  : math.max(
-                      0.0,
-                      counterOverlayMaxWidth - counterBlurFeather * 2,
-                    );
-              final counterScale =
-                  counterText == null ||
-                      counterIntrinsicSize.width == 0 ||
-                      !counterTextMaxWidth.isFinite
-                  ? 1.0
-                  : math.min(
-                      1,
-                      counterTextMaxWidth / counterIntrinsicSize.width,
-                    );
-              final counterHeight = counterText == null
-                  ? 0.0
-                  : counterIntrinsicSize.height * counterScale +
-                        _counterVerticalInset * 2;
-              final counterReserve = counterText == null
-                  ? 0.0
-                  : counterHeight + 8;
-              final naturalHeight = editableHeight + inset * 2 + counterReserve;
+              final naturalHeight = editableHeight + inset * 2;
               final targetHeight = naturalHeight.clamp(
                 widget.minHeight,
                 widget.maxHeight,
               );
               _layoutTextMaxWidth = textMaxWidth;
-              _layoutCounterReserve = counterReserve;
+              _layoutTextTopInset = inset;
+              _layoutBottomSafeInset = inset;
               _layoutTextStyle = textStyle;
               _layoutTextAlign = widget.textAlign;
               _layoutTextDirection = textDirection;
@@ -586,14 +433,8 @@ class _CLTextAreaState extends State<CLTextArea> {
                 padding: EdgeInsets.zero,
                 minLines: 1,
                 maxLines: null,
-                maxLength: widget.maxLength,
                 scrollPhysics: const NeverScrollableScrollPhysics(),
-                scrollPadding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  counterText == null ? 20 : counterReserve,
-                ),
+                scrollPadding: const EdgeInsets.all(20),
               );
 
               Widget scrollingRegion = ScrollConfiguration(
@@ -604,11 +445,7 @@ class _CLTextAreaState extends State<CLTextArea> {
                   direction: CLScrollDirection.vertical,
                   blurExtent: const EdgeInsets.symmetric(vertical: 24),
                   blurSigma: const EdgeInsets.symmetric(vertical: 5),
-                  padding: EdgeInsets.only(bottom: counterReserve),
-                  scrollbarPadding:
-                      counterText != null && textDirection == TextDirection.ltr
-                      ? EdgeInsets.only(bottom: counterReserve)
-                      : EdgeInsets.zero,
+                  padding: EdgeInsets.all(inset),
                   horizontalScrollbar: CLScrollbarVisibility.hidden,
                   verticalScrollbar: CLScrollbarVisibility.auto,
                   verticalController: _scrollController,
@@ -617,36 +454,6 @@ class _CLTextAreaState extends State<CLTextArea> {
               );
               if (!widget.enabled) {
                 scrollingRegion = IgnorePointer(child: scrollingRegion);
-              }
-
-              Widget? counterOverlay;
-              if (counterText != null) {
-                counterOverlay = PositionedDirectional(
-                  end: counterOverlayEnd,
-                  bottom: counterOverlayBottom,
-                  child: IgnorePointer(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: counterOverlayMaxWidth,
-                      ),
-                      child: _CLTextAreaEdgelessBlur(
-                        feather: counterBlurFeather,
-                        child: Text(
-                          key: const Key('cl-text-area-counter'),
-                          counterText,
-                          maxLines: 1,
-                          style: theme.typography.caption.copyWith(
-                            color: _showsError
-                                ? colors.danger
-                                : widget.enabled
-                                ? colors.textTertiary
-                                : colors.textDisabled,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
               }
 
               return AnimatedContainer(
@@ -668,16 +475,7 @@ class _CLTextAreaState extends State<CLTextArea> {
                 ),
                 child: CLSmoothClip(
                   borderRadius: BorderRadius.circular(radius),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.all(inset),
-                        child: scrollingRegion,
-                      ),
-                      ?counterOverlay,
-                    ],
-                  ),
+                  child: scrollingRegion,
                 ),
               );
             },

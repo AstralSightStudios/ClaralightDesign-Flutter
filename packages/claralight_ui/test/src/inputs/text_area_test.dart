@@ -44,9 +44,6 @@ void main() {
     return (decoration.shape as RoundedSuperellipseBorder).side;
   }
 
-  Text counter(WidgetTester tester) =>
-      tester.widget<Text>(find.byKey(const Key('cl-text-area-counter')));
-
   ProgressiveBlurWidget edgeEffect(WidgetTester tester) =>
       tester.widget<ProgressiveBlurWidget>(find.byType(ProgressiveBlurWidget));
 
@@ -80,7 +77,6 @@ void main() {
     await tester.pumpWidget(host(const CLTextArea(placeholder: 'Description')));
 
     expect(tester.getSize(find.byType(CLTextArea)).height, 120);
-    expect(find.byKey(const Key('cl-text-area-counter')), findsNothing);
     expect(find.byType(RawScrollbar), findsOneWidget);
     expect(find.byType(Scrollbar), findsNothing);
     expect(find.byType(CupertinoScrollbar), findsNothing);
@@ -91,6 +87,11 @@ void main() {
     expect(scrollable.blurSigma, const EdgeInsets.symmetric(vertical: 5));
     expect(scrollable.horizontalScrollbar, CLScrollbarVisibility.hidden);
     expect(scrollable.verticalScrollbar, CLScrollbarVisibility.auto);
+    expect(scrollable.padding, const EdgeInsets.all(12));
+    expect(
+      tester.getRect(find.byType(CLScrollable)),
+      tester.getRect(find.byKey(const Key('cl-text-area-surface'))).deflate(1),
+    );
 
     final field = tester.widget<CupertinoTextField>(
       find.byType(CupertinoTextField),
@@ -201,42 +202,7 @@ void main() {
     expect(activations.layer3, 0);
   });
 
-  testWidgets('counter reserve is real scroll-content padding', (tester) async {
-    final controller = TextEditingController(
-      text: List.generate(20, (index) => 'Line $index').join('\n'),
-    );
-    final scrollController = ScrollController();
-    addTearDown(controller.dispose);
-    addTearDown(scrollController.dispose);
-
-    await tester.pumpWidget(
-      host(
-        CLTextArea(controller: controller, scrollController: scrollController),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final extentWithoutCounter = scrollController.position.maxScrollExtent;
-
-    await tester.pumpWidget(
-      host(
-        CLTextArea(
-          controller: controller,
-          scrollController: scrollController,
-          maxLength: 500,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final scrollable = tester.widget<CLScrollable>(find.byType(CLScrollable));
-    expect(scrollable.padding, const EdgeInsets.only(bottom: 28));
-    expect(
-      scrollController.position.maxScrollExtent - extentWithoutCounter,
-      closeTo(28, 0.01),
-    );
-  });
-
-  testWidgets('caret and selection extent avoid the counter overlay', (
+  testWidgets('caret and selection extent respect scroll content padding', (
     tester,
   ) async {
     final text = List.generate(20, (index) => 'Line $index').join('\n');
@@ -254,7 +220,6 @@ void main() {
           controller: controller,
           focusNode: focusNode,
           scrollController: scrollController,
-          maxLength: 500,
         ),
       ),
     );
@@ -263,12 +228,13 @@ void main() {
     controller.selection = TextSelection.collapsed(offset: text.length);
     await tester.pumpAndSettle();
 
-    final counterRect = tester.getRect(
-      find.byKey(const Key('cl-text-area-counter')),
-    );
+    final scrollableRect = tester.getRect(find.byType(CLScrollable));
     var caretRect = globalCaretRect(tester, controller.selection.extent);
     expect(scrollController.offset, greaterThan(0));
-    expect(counterRect.top - caretRect.bottom, greaterThanOrEqualTo(7.5));
+    expect(
+      scrollableRect.bottom - caretRect.bottom,
+      greaterThanOrEqualTo(11.5),
+    );
 
     controller.selection = TextSelection(
       baseOffset: 0,
@@ -277,7 +243,10 @@ void main() {
     await tester.pumpAndSettle();
 
     caretRect = globalCaretRect(tester, controller.selection.extent);
-    expect(counterRect.top - caretRect.bottom, greaterThanOrEqualTo(7.5));
+    expect(
+      scrollableRect.bottom - caretRect.bottom,
+      greaterThanOrEqualTo(11.5),
+    );
   });
 
   testWidgets('auto growth animates between pixel height limits', (
@@ -347,9 +316,7 @@ void main() {
     );
   });
 
-  testWidgets('counter reserve and placeholder drive auto growth', (
-    tester,
-  ) async {
+  testWidgets('placeholder drives auto growth', (tester) async {
     const multiline = 'One\nTwo\nThree';
 
     await tester.pumpWidget(
@@ -371,123 +338,6 @@ void main() {
       tester.getSize(find.byType(CLTextArea)).height,
       closeTo(placeholderHeight, 0.01),
     );
-
-    await tester.pumpWidget(
-      host(
-        CLTextArea(
-          controller: controller,
-          minHeight: 80,
-          maxHeight: 200,
-          maxLength: 100,
-        ),
-      ),
-    );
-    expect(find.byKey(const Key('cl-text-area-counter')), findsOneWidget);
-    await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(CLTextArea)).height, closeTo(112, 0.01));
-  });
-
-  testWidgets('maxLength counts and limits Unicode grapheme clusters', (
-    tester,
-  ) async {
-    final controller = TextEditingController();
-    addTearDown(controller.dispose);
-
-    await tester.pumpWidget(
-      host(CLTextArea(controller: controller, maxLength: 3)),
-    );
-
-    await tester.enterText(find.byType(CupertinoTextField), 'A👨‍👩‍👧‍👦中');
-    await tester.pump();
-    expect(controller.text, 'A👨‍👩‍👧‍👦中');
-    expect(counter(tester).data, '3/3');
-    expect(counter(tester).style?.color, isNot(CLThemeData().colors.danger));
-
-    await tester.enterText(find.byType(CupertinoTextField), 'A👨‍👩‍👧‍👦中文');
-    await tester.pump();
-    expect(controller.text, 'A👨‍👩‍👧‍👦中');
-    expect(counter(tester).data, '3/3');
-  });
-
-  testWidgets('programmatic overflow is preserved and marked invalid', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    final controller = TextEditingController(text: 'ABCD');
-    addTearDown(controller.dispose);
-
-    await tester.pumpWidget(
-      host(
-        CLTextArea(
-          controller: controller,
-          maxLength: 3,
-          semanticLabel: 'Description',
-        ),
-      ),
-    );
-
-    expect(controller.text, 'ABCD');
-    expect(counter(tester).data, '4/3');
-    expect(counter(tester).style?.color, CLThemeData().colors.danger);
-    expect(surfaceBorder(tester).color, CLThemeData().colors.danger);
-    expect(
-      tester
-          .widget<CupertinoTextField>(find.byType(CupertinoTextField))
-          .style
-          ?.color,
-      CLThemeData().colors.textPrimary,
-    );
-
-    final node = tester.getSemantics(find.byType(CLTextArea));
-    expect(node.label, contains('Description'));
-    expect(find.bySemanticsLabel(RegExp('4/3')), findsOneWidget);
-    expect(
-      node.getSemanticsData().flagsCollection.isLiveRegion,
-      isNot(Tristate.isTrue),
-    );
-    expect(
-      node.getSemanticsData().validationResult,
-      SemanticsValidationResult.invalid,
-    );
-
-    await tester.pumpWidget(
-      host(CLTextArea(controller: controller, maxLength: 5)),
-    );
-    await tester.pumpAndSettle();
-    expect(controller.text, 'ABCD');
-    expect(counter(tester).data, '4/5');
-    expect(surfaceBorder(tester).color.a, 0);
-    semantics.dispose();
-  });
-
-  testWidgets('active composing overflow remains marked invalid', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    final controller = TextEditingController();
-    addTearDown(controller.dispose);
-
-    await tester.pumpWidget(
-      host(CLTextArea(controller: controller, maxLength: 3)),
-    );
-    controller.value = const TextEditingValue(
-      text: 'ABCD',
-      selection: TextSelection.collapsed(offset: 4),
-      composing: TextRange(start: 0, end: 4),
-    );
-    await tester.pump();
-
-    expect(controller.text, 'ABCD');
-    expect(counter(tester).data, '4/3');
-    expect(surfaceBorder(tester).color, CLThemeData().colors.danger);
-    expect(
-      tester
-          .getSemantics(find.byType(CLTextArea))
-          .getSemanticsData()
-          .validationResult,
-      SemanticsValidationResult.invalid,
-    );
-    semantics.dispose();
   });
 
   testWidgets('external error uses a persistent danger outline', (
@@ -498,12 +348,11 @@ void main() {
     addTearDown(focusNode.dispose);
 
     await tester.pumpWidget(
-      host(CLTextArea(focusNode: focusNode, error: true, maxLength: 20)),
+      host(CLTextArea(focusNode: focusNode, error: true)),
     );
 
     expect(surfaceBorder(tester).color, CLThemeData().colors.danger);
     expect(surfaceBorder(tester).width, 1);
-    expect(counter(tester).style?.color, CLThemeData().colors.danger);
     expect(
       tester
           .getSemantics(find.byType(CLTextArea))
@@ -638,21 +487,13 @@ void main() {
     addTearDown(focusNode.dispose);
 
     await tester.pumpWidget(
-      host(
-        CLTextArea(
-          focusNode: focusNode,
-          enabled: false,
-          error: true,
-          maxLength: 2,
-        ),
-      ),
+      host(CLTextArea(focusNode: focusNode, enabled: false, error: true)),
     );
 
     await tester.tap(find.byType(CLTextArea));
     await tester.pump();
     expect(focusNode.hasFocus, isFalse);
     expect(surfaceBorder(tester).color.a, 0);
-    expect(counter(tester).style?.color, CLThemeData().colors.textDisabled);
     expect(
       tester
           .getSemantics(find.byType(CLTextArea))
@@ -735,11 +576,9 @@ void main() {
           controller: firstText,
           focusNode: firstFocus,
           scrollController: firstScroll,
-          maxLength: 20,
         ),
       ),
     );
-    expect(counter(tester).data, '3/20');
 
     await tester.pumpWidget(
       host(
@@ -747,7 +586,6 @@ void main() {
           controller: secondText,
           focusNode: secondFocus,
           scrollController: secondScroll,
-          maxLength: 20,
         ),
       ),
     );
@@ -763,11 +601,10 @@ void main() {
       tester.widget<CLScrollable>(find.byType(CLScrollable)).verticalController,
       same(secondScroll),
     );
-    expect(counter(tester).data, '6/20');
 
     firstText.text = 'Detached controller';
     await tester.pump();
-    expect(counter(tester).data, '6/20');
+    expect(secondText.text, 'Second');
 
     await tester.pumpWidget(const SizedBox.shrink());
     secondText.text = 'Still owned by caller';
@@ -777,111 +614,12 @@ void main() {
     secondScroll.removeListener(listener);
   });
 
-  testWidgets('counter uses a click-through edgeless blur overlay', (
-    tester,
-  ) async {
-    final focusNode = FocusNode();
-    addTearDown(focusNode.dispose);
-
-    await tester.pumpWidget(
-      host(CLTextArea(focusNode: focusNode, maxLength: 20)),
-    );
-
-    final counterBlur = find.byKey(const Key('cl-text-area-counter-blur'));
-    expect(counterBlur, findsOneWidget);
-    final backdropFilter = find.descendant(
-      of: counterBlur,
-      matching: find.byType(BackdropFilter),
-    );
-    expect(backdropFilter, findsOneWidget);
-    expect(
-      find.ancestor(of: backdropFilter, matching: find.byType(ClipRect)),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: counterBlur, matching: find.byType(ColoredBox)),
-      findsNothing,
-    );
-    expect(
-      find.ancestor(
-        of: find.byKey(const Key('cl-text-area-counter')),
-        matching: find.byType(CLSurface),
-      ),
-      findsNothing,
-    );
-    expect(
-      find.ancestor(
-        of: find.byKey(const Key('cl-text-area-counter')),
-        matching: find.byType(Column),
-      ),
-      findsNothing,
-    );
-
-    await tester.tapAt(tester.getCenter(counterBlur));
-    await tester.pump();
-    expect(focusNode.hasFocus, isTrue);
-  });
-
-  testWidgets('counter scales inside large-text and tiny surfaces', (
-    tester,
-  ) async {
-    for (final width in [52.0, 24.0, 1.0]) {
-      await tester.pumpWidget(
-        host(CLTextArea(width: width, maxLength: 2000000000), textScale: 2),
-      );
-      await tester.pump();
-
-      expect(tester.takeException(), isNull, reason: 'width $width');
-      final surfaceRect = tester.getRect(
-        find.byKey(const Key('cl-text-area-surface')),
-      );
-      final counterRect = tester.getRect(
-        find.byKey(const Key('cl-text-area-counter')),
-      );
-      expect(
-        surfaceRect.contains(counterRect.bottomRight),
-        isTrue,
-        reason: 'width $width',
-      );
-      expect(
-        surfaceRect.contains(counterRect.topLeft),
-        isTrue,
-        reason: 'width $width',
-      );
-      final scrollable = tester.widget<CLScrollable>(find.byType(CLScrollable));
-      final reserve = scrollable.padding.resolve(TextDirection.ltr).bottom;
-      expect(reserve, closeTo(counterRect.height + 12, 0.01));
-      expect(
-        tester
-            .widget<CupertinoTextField>(find.byType(CupertinoTextField))
-            .scrollPadding
-            .bottom,
-        closeTo(reserve, 0.01),
-      );
-    }
-  });
-
-  testWidgets('counter follows directional end alignment', (tester) async {
-    await tester.pumpWidget(
-      host(const CLTextArea(maxLength: 20), textDirection: TextDirection.rtl),
-    );
-
-    final surfaceRect = tester.getRect(
-      find.byKey(const Key('cl-text-area-surface')),
-    );
-    final counterRect = tester.getRect(
-      find.byKey(const Key('cl-text-area-counter')),
-    );
-    expect(counterRect.center.dx, lessThan(surfaceRect.center.dx));
-  });
-
-  test('validates height, length, width, and radius inputs', () {
+  test('validates height, width, and radius inputs', () {
     expect(() => CLTextArea(minHeight: 0), throwsAssertionError);
     expect(
       () => CLTextArea(minHeight: 120, maxHeight: 100),
       throwsAssertionError,
     );
-    expect(() => CLTextArea(maxLength: 0), throwsAssertionError);
     expect(() => CLTextArea(width: double.infinity), throwsAssertionError);
     expect(() => CLTextArea(borderRadius: -1), throwsAssertionError);
   });

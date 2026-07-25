@@ -143,7 +143,6 @@ void main() {
     );
     expect(fixedTextArea.minHeight, 120);
     expect(fixedTextArea.maxHeight, 120);
-    expect(fixedTextArea.maxLength, 120);
     expect(fixedTextArea.controller?.text.split('\n'), hasLength(5));
     final fixedScrollable = tester.widget<CLScrollable>(
       find.descendant(
@@ -157,7 +156,6 @@ void main() {
     );
     expect(autoTextArea.minHeight, 80);
     expect(autoTextArea.maxHeight, 160);
-    expect(autoTextArea.maxLength, 240);
     expect(readOnlyTextArea.readOnly, isTrue);
     expect(errorTextArea.error, isTrue);
     expect(

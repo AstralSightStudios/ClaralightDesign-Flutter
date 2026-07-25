@@ -327,7 +327,6 @@ class _TextAreasSectionState extends State<_TextAreasSection> {
           CLTextArea(
             key: const Key('fixed-text-area-demo'),
             controller: _fixedController,
-            maxLength: 120,
           ),
           const SizedBox(height: 10),
           const CLTextArea(
@@ -335,7 +334,6 @@ class _TextAreasSectionState extends State<_TextAreasSection> {
             placeholder: '补充更多细节',
             minHeight: 80,
             maxHeight: 160,
-            maxLength: 240,
             size: CLControlSize.medium,
           ),
           const SizedBox(height: 10),
@@ -357,7 +355,6 @@ class _TextAreasSectionState extends State<_TextAreasSection> {
                   key: const Key('error-text-area-demo'),
                   controller: _errorController,
                   minHeight: 80,
-                  maxLength: 20,
                   error: true,
                   size: CLControlSize.small,
                 ),
