@@ -163,7 +163,8 @@ Three free-for-commercial-use families ship with the package (see
   and red `danger` variants)
 - **Controls** — `CLToggle`, `CLSegmentedControl`, `CLSlider`,
   `CLChipTabs`
-- **Inputs** — `CLTextField` (`mono:` and external `error:` states),
+- **Inputs** — `CLTextField` (`mono:` and external `error:` states; numeric
+  steppers support buttons, trailing-strip drag, wheel, and Up/Down adjustment),
   `CLSearchField`, `CLSelect`, `CLStepper`, `CLColorPicker`
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
   `CLToolbar`, `CLOverflowToolbar`, `CLSideBar`

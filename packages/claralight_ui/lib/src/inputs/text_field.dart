@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
 import '../foundation/control_size.dart';
@@ -36,10 +39,10 @@ class CLTextField extends StatefulWidget {
   final TextAlign textAlign;
   final CLControlSize size;
 
-  /// The numeric increment used by the step buttons and arrow keys.
+  /// The numeric increment used by buttons, dragging, scrolling, and keys.
   ///
-  /// A value of zero hides the step buttons. This only applies when
-  /// [keyboardType] is numeric.
+  /// A value of zero disables numeric adjustment and hides the step buttons.
+  /// This only applies when [keyboardType] is numeric.
   final double step;
 
   /// Optional inclusive bounds for numeric input.
@@ -195,13 +198,24 @@ class _CLTextFieldState extends State<CLTextField> {
     return true;
   }
 
-  void _bump(double direction) {
-    if (!_canStep(direction)) return;
+  bool _bump(double direction) => _bumpSteps(direction > 0 ? 1 : -1);
+
+  bool _bumpSteps(int steps) {
+    if (steps == 0) return false;
+    final direction = steps.sign.toDouble();
+    if (!_canStep(direction)) return false;
+
     final current = _number!;
     var next = current + direction * widget.step;
-    if (!next.isFinite) return;
-    if (widget.min case final min? when next < min) next = min;
-    if (widget.max case final max? when next > max) next = max;
+    if (!next.isFinite) return false;
+    next = _clampNumber(next);
+
+    final remaining = steps.abs() - 1;
+    if (remaining > 0) {
+      next += direction * widget.step * remaining;
+      if (!next.isFinite) return false;
+      next = _clampNumber(next);
+    }
 
     final text = widget.format?.call(next) ?? _defaultNumberFormat(next);
     _controller.value = TextEditingValue(
@@ -209,6 +223,14 @@ class _CLTextFieldState extends State<CLTextField> {
       selection: TextSelection.collapsed(offset: text.length),
     );
     widget.onChanged?.call(text);
+    return true;
+  }
+
+  double _clampNumber(double value) {
+    var result = value;
+    if (widget.min case final min? when result < min) result = min;
+    if (widget.max case final max? when result > max) result = max;
+    return result;
   }
 
   String _defaultNumberFormat(double value) {
@@ -227,17 +249,22 @@ class _CLTextFieldState extends State<CLTextField> {
     widget.onSubmitted?.call(value);
   }
 
+  bool get _hasStepModifier {
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isShiftPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed;
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (!_showsStepper || !widget.enabled) return KeyEventResult.ignored;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
 
-    final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isShiftPressed ||
-        keyboard.isAltPressed ||
-        keyboard.isControlPressed ||
-        keyboard.isMetaPressed) {
+    final composing = _controller.value.composing;
+    if ((composing.isValid && !composing.isCollapsed) || _hasStepModifier) {
       return KeyEventResult.ignored;
     }
 
@@ -250,6 +277,28 @@ class _CLTextFieldState extends State<CLTextField> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        event.kind != PointerDeviceKind.mouse ||
+        _hasStepModifier) {
+      return;
+    }
+
+    final delta = event.scrollDelta;
+    if (delta.dy == 0 || delta.dy.abs() < delta.dx.abs()) return;
+    final direction = delta.dy < 0 ? 1 : -1;
+    if (!_canStep(direction.toDouble())) return;
+
+    GestureBinding.instance.pointerSignalResolver.register(event, (
+      resolvedEvent,
+    ) {
+      final scrollEvent = resolvedEvent as PointerScrollEvent;
+      if (_bump(direction.toDouble())) {
+        scrollEvent.respond(allowPlatformDefault: false);
+      }
+    });
   }
 
   @override
@@ -293,7 +342,7 @@ class _CLTextFieldState extends State<CLTextField> {
 
     final horizontalPad = widget.size == CLControlSize.small ? 10.0 : 12.0;
 
-    return GestureDetector(
+    final control = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.enabled ? _focusNode.requestFocus : null,
       child: Focus(
@@ -322,7 +371,7 @@ class _CLTextFieldState extends State<CLTextField> {
             ),
             padding: EdgeInsets.only(
               left: horizontalPad,
-              right: _showsStepper ? 6 : horizontalPad,
+              right: _showsStepper ? 0 : horizontalPad,
             ),
             child: Row(
               children: [
@@ -347,28 +396,13 @@ class _CLTextFieldState extends State<CLTextField> {
                       ),
                     ),
                   ),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _ChevronButton(
-                        key: const Key('cl-text-field-step-up'),
-                        up: true,
-                        enabled: _canStep(1),
-                        onTap: () {
-                          _focusNode.requestFocus();
-                          _bump(1);
-                        },
-                      ),
-                      _ChevronButton(
-                        key: const Key('cl-text-field-step-down'),
-                        up: false,
-                        enabled: _canStep(-1),
-                        onTap: () {
-                          _focusNode.requestFocus();
-                          _bump(-1);
-                        },
-                      ),
-                    ],
+                  _NumericStepper(
+                    key: const Key('cl-text-field-stepper-drag-zone'),
+                    height: _height,
+                    focused: focused,
+                    canStep: (direction) => _canStep(direction.toDouble()),
+                    onStep: _bumpSteps,
+                    onRequestFocus: _focusNode.requestFocus,
                   ),
                 ] else ...[
                   if (widget.prefix != null) ...[
@@ -385,6 +419,15 @@ class _CLTextFieldState extends State<CLTextField> {
             ),
           ),
         ),
+      ),
+    );
+
+    return Semantics(
+      onIncrease: _canStep(1) ? () => _bump(1) : null,
+      onDecrease: _canStep(-1) ? () => _bump(-1) : null,
+      child: Listener(
+        onPointerSignal: _showsStepper ? _handlePointerSignal : null,
+        child: control,
       ),
     );
   }
@@ -425,16 +468,445 @@ class _CLTextFieldState extends State<CLTextField> {
   }
 }
 
+class _NumericStepper extends StatefulWidget {
+  static const double width = 24;
+  static const double arrowWidth = 18;
+  static const double arrowHeight = 10;
+
+  final double height;
+  final bool focused;
+  final bool Function(int direction) canStep;
+  final bool Function(int steps) onStep;
+  final VoidCallback onRequestFocus;
+
+  const _NumericStepper({
+    super.key,
+    required this.height,
+    required this.focused,
+    required this.canStep,
+    required this.onStep,
+    required this.onRequestFocus,
+  });
+
+  @override
+  State<_NumericStepper> createState() => _NumericStepperState();
+}
+
+class _NumericStepperState extends State<_NumericStepper>
+    with WidgetsBindingObserver {
+  static const _touchLongPressDelay = Duration(milliseconds: 300);
+  static const _repeatDelay = Duration(milliseconds: 500);
+  static const _touchRepeatDelay = Duration(milliseconds: 200);
+  static const _repeatInterval = Duration(milliseconds: 80);
+  static const double _pixelsPerStep = 8;
+  static const _precisePointerKinds = <PointerDeviceKind>{
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+    PointerDeviceKind.unknown,
+  };
+
+  Timer? _repeatDelayTimer;
+  Timer? _repeatTimer;
+  int? _pressedDirection;
+  bool _didRepeat = false;
+  bool _touchLongPressActive = false;
+  bool _touchDragActive = false;
+  bool _preciseDragActive = false;
+  bool _interactionCanceled = false;
+  double _scrubRemainder = 0;
+  double _lastTouchOffset = 0;
+
+  bool get _canAdjust => widget.canStep(1) || widget.canStep(-1);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didUpdateWidget(_NumericStepper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((oldWidget.focused && !widget.focused) || !_canAdjust) {
+      _cancelInteraction(markCanceled: true);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _cancelInteraction(markCanceled: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cancelInteraction();
+    super.dispose();
+  }
+
+  void _stopRepeatTimers() {
+    _repeatDelayTimer?.cancel();
+    _repeatDelayTimer = null;
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+  }
+
+  void _cancelInteraction({bool markCanceled = false}) {
+    _stopRepeatTimers();
+    _pressedDirection = null;
+    _didRepeat = false;
+    _touchLongPressActive = false;
+    _touchDragActive = false;
+    _preciseDragActive = false;
+    _interactionCanceled = markCanceled;
+    _scrubRemainder = 0;
+    _lastTouchOffset = 0;
+  }
+
+  void _finishInteraction() {
+    _cancelInteraction();
+    _interactionCanceled = false;
+  }
+
+  void _scheduleRepeat(Duration delay) {
+    _repeatDelayTimer?.cancel();
+    _repeatDelayTimer = Timer(delay, _startRepeating);
+  }
+
+  void _startRepeating() {
+    _repeatDelayTimer = null;
+    final direction = _pressedDirection;
+    if (!mounted || _interactionCanceled || direction == null) return;
+
+    _didRepeat = true;
+    if (!widget.canStep(direction)) return;
+    widget.onRequestFocus();
+    if (!widget.onStep(direction) || !widget.canStep(direction)) return;
+
+    _repeatTimer = Timer.periodic(_repeatInterval, (_) {
+      if (!mounted ||
+          _interactionCanceled ||
+          !widget.canStep(direction) ||
+          !widget.onStep(direction)) {
+        _repeatTimer?.cancel();
+        _repeatTimer = null;
+      }
+    });
+  }
+
+  void _handleButtonDown(int direction, PointerDownEvent event) {
+    if (!_primaryButtonOnly(event.buttons)) return;
+    _stopRepeatTimers();
+    _interactionCanceled = false;
+    _pressedDirection = direction;
+    _didRepeat = false;
+    if (event.kind != PointerDeviceKind.touch) {
+      _scheduleRepeat(_repeatDelay);
+    }
+  }
+
+  void _handleButtonTap(int direction) {
+    final repeated = _didRepeat;
+    _stopRepeatTimers();
+    _pressedDirection = null;
+    _didRepeat = false;
+
+    if (!_interactionCanceled && !repeated && widget.canStep(direction)) {
+      widget.onRequestFocus();
+      widget.onStep(direction);
+    }
+    _interactionCanceled = false;
+  }
+
+  void _handleButtonCancel() {
+    if (_touchLongPressActive || _preciseDragActive) return;
+    _cancelInteraction(markCanceled: true);
+  }
+
+  void _handleButtonExit(int direction) {
+    if (_pressedDirection == direction &&
+        !_touchLongPressActive &&
+        !_preciseDragActive) {
+      _cancelInteraction(markCanceled: true);
+    }
+  }
+
+  int? _directionAt(Offset localPosition) {
+    if (localPosition.dx < 0 ||
+        localPosition.dx >= _NumericStepper.arrowWidth) {
+      return null;
+    }
+
+    final top = (widget.height - 2 * _NumericStepper.arrowHeight) / 2;
+    if (localPosition.dy >= top &&
+        localPosition.dy < top + _NumericStepper.arrowHeight) {
+      return 1;
+    }
+    if (localPosition.dy >= top + _NumericStepper.arrowHeight &&
+        localPosition.dy < top + 2 * _NumericStepper.arrowHeight) {
+      return -1;
+    }
+    return null;
+  }
+
+  void _handleTouchLongPressStart(LongPressStartDetails details) {
+    if (!_canAdjust) return;
+    _stopRepeatTimers();
+    _pressedDirection = null;
+    _didRepeat = false;
+    _touchLongPressActive = true;
+    _touchDragActive = false;
+    _preciseDragActive = false;
+    _interactionCanceled = false;
+    _scrubRemainder = 0;
+    _lastTouchOffset = 0;
+
+    widget.onRequestFocus();
+    unawaited(HapticFeedback.selectionClick());
+
+    final direction = _directionAt(details.localPosition);
+    if (direction != null && widget.canStep(direction)) {
+      _pressedDirection = direction;
+      _scheduleRepeat(_touchRepeatDelay);
+    }
+  }
+
+  void _handleTouchLongPressMove(LongPressMoveUpdateDetails details) {
+    if (!_touchLongPressActive || _interactionCanceled) return;
+    final offset = details.localOffsetFromOrigin;
+
+    if (!_touchDragActive) {
+      if (offset.dx.abs() >= _pixelsPerStep &&
+          offset.dx.abs() > offset.dy.abs()) {
+        _stopRepeatTimers();
+        _pressedDirection = null;
+        _interactionCanceled = true;
+        return;
+      }
+      if (offset.dy.abs() < _pixelsPerStep ||
+          offset.dy.abs() < offset.dx.abs()) {
+        return;
+      }
+
+      _touchDragActive = true;
+      _stopRepeatTimers();
+      _pressedDirection = null;
+      _scrubRemainder = 0;
+      _lastTouchOffset = 0;
+    }
+
+    final delta = offset.dy - _lastTouchOffset;
+    _lastTouchOffset = offset.dy;
+    _applyScrubDelta(delta);
+  }
+
+  void _handlePreciseDragStart(DragStartDetails details) {
+    if (!_canAdjust) return;
+    _stopRepeatTimers();
+    _pressedDirection = null;
+    _didRepeat = false;
+    _touchLongPressActive = false;
+    _touchDragActive = false;
+    _preciseDragActive = true;
+    _interactionCanceled = false;
+    _scrubRemainder = 0;
+    widget.onRequestFocus();
+  }
+
+  void _handlePreciseDragUpdate(DragUpdateDetails details) {
+    if (!_preciseDragActive || _interactionCanceled) return;
+    _applyScrubDelta(details.primaryDelta ?? 0);
+  }
+
+  void _handlePreciseDragEnd(DragEndDetails details) {
+    _finishInteraction();
+  }
+
+  void _handleTouchLongPressEnd(LongPressEndDetails details) {
+    _finishInteraction();
+  }
+
+  void _handleTouchLongPressCancel() {
+    if (_touchLongPressActive) _finishInteraction();
+  }
+
+  void _applyScrubDelta(double pointerDelta) {
+    _scrubRemainder -= pointerDelta;
+    final steps = (_scrubRemainder / _pixelsPerStep).truncate();
+    if (steps == 0) return;
+
+    if (!widget.onStep(steps)) {
+      _scrubRemainder = 0;
+      return;
+    }
+
+    _scrubRemainder -= steps * _pixelsPerStep;
+    if (!widget.canStep(steps.sign)) {
+      _scrubRemainder = 0;
+    }
+  }
+
+  Map<Type, GestureRecognizerFactory> _gestureFactories(
+    DeviceGestureSettings? gestureSettings,
+  ) {
+    if (!_canAdjust) return const <Type, GestureRecognizerFactory>{};
+
+    return <Type, GestureRecognizerFactory>{
+      _VerticalScrubGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<_VerticalScrubGestureRecognizer>(
+            () => _VerticalScrubGestureRecognizer(
+              debugOwner: this,
+              supportedDevices: _precisePointerKinds,
+            ),
+            (recognizer) {
+              recognizer
+                ..gestureSettings = gestureSettings
+                ..dragStartBehavior = DragStartBehavior.down
+                ..onlyAcceptDragOnThreshold = true
+                ..onStart = _handlePreciseDragStart
+                ..onUpdate = _handlePreciseDragUpdate
+                ..onEnd = _handlePreciseDragEnd
+                ..onCancel = _finishInteraction;
+            },
+          ),
+      LongPressGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+            () => LongPressGestureRecognizer(
+              duration: _touchLongPressDelay,
+              postAcceptSlopTolerance: null,
+              supportedDevices: const <PointerDeviceKind>{
+                PointerDeviceKind.touch,
+              },
+              allowedButtonsFilter: _primaryButtonOnly,
+              debugOwner: this,
+            ),
+            (recognizer) {
+              recognizer
+                ..gestureSettings = gestureSettings
+                ..onLongPressStart = _handleTouchLongPressStart
+                ..onLongPressMoveUpdate = _handleTouchLongPressMove
+                ..onLongPressEnd = _handleTouchLongPressEnd
+                ..onLongPressCancel = _handleTouchLongPressCancel;
+            },
+          ),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdjust = _canAdjust;
+    final gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+
+    return ExcludeSemantics(
+      child: MouseRegion(
+        cursor: canAdjust ? SystemMouseCursors.resizeUpDown : MouseCursor.defer,
+        child: RawGestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          gestures: _gestureFactories(gestureSettings),
+          child: SizedBox(
+            width: _NumericStepper.width,
+            height: widget.height,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ChevronButton(
+                    key: const Key('cl-text-field-step-up'),
+                    up: true,
+                    enabled: widget.canStep(1),
+                    onPointerDown: (event) => _handleButtonDown(1, event),
+                    onTap: () => _handleButtonTap(1),
+                    onTapCancel: _handleButtonCancel,
+                    onExit: () => _handleButtonExit(1),
+                  ),
+                  _ChevronButton(
+                    key: const Key('cl-text-field-step-down'),
+                    up: false,
+                    enabled: widget.canStep(-1),
+                    onPointerDown: (event) => _handleButtonDown(-1, event),
+                    onTap: () => _handleButtonTap(-1),
+                    onTapCancel: _handleButtonCancel,
+                    onExit: () => _handleButtonExit(-1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+bool _primaryButtonOnly(int buttons) => buttons == kPrimaryButton;
+
+class _VerticalScrubGestureRecognizer extends VerticalDragGestureRecognizer {
+  Offset _distance = Offset.zero;
+  bool _trackingSequence = false;
+
+  _VerticalScrubGestureRecognizer({super.debugOwner, super.supportedDevices})
+    : super(allowedButtonsFilter: _primaryButtonOnly);
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (!_trackingSequence) {
+      _distance = Offset.zero;
+      _trackingSequence = true;
+    }
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      _distance += event.localDelta;
+    }
+    super.handleEvent(event);
+  }
+
+  @override
+  bool hasSufficientGlobalDistanceToAccept(
+    PointerDeviceKind pointerDeviceKind,
+    double? deviceTouchSlop,
+  ) {
+    final hitSlop = switch (pointerDeviceKind) {
+      PointerDeviceKind.stylus ||
+      PointerDeviceKind.invertedStylus => kPrecisePointerHitSlop,
+      _ => computeHitSlop(pointerDeviceKind, gestureSettings),
+    };
+    return _distance.dy.abs() > hitSlop &&
+        _distance.dy.abs() >= _distance.dx.abs();
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    super.didStopTrackingLastPointer(pointer);
+    _trackingSequence = false;
+    _distance = Offset.zero;
+  }
+}
+
 class _ChevronButton extends StatefulWidget {
   final bool up;
   final bool enabled;
+  final ValueChanged<PointerDownEvent> onPointerDown;
   final VoidCallback onTap;
+  final VoidCallback onTapCancel;
+  final VoidCallback onExit;
 
   const _ChevronButton({
     super.key,
     required this.up,
     required this.enabled,
+    required this.onPointerDown,
     required this.onTap,
+    required this.onTapCancel,
+    required this.onExit,
   });
 
   @override
@@ -452,19 +924,26 @@ class _ChevronButtonState extends State<_ChevronButton> {
         : colors.textDisabled;
 
     return MouseRegion(
-      cursor: widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
+      onExit: (_) {
+        setState(() => _hovered = false);
+        widget.onExit();
+      },
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.enabled ? widget.onTap : null,
-        child: SizedBox(
-          width: 18,
-          height: 10,
-          child: Center(
-            child: CustomPaint(
-              size: const Size(8, 4.5),
-              painter: _StepChevronPainter(color: color, up: widget.up),
+        onPointerDown: widget.enabled ? widget.onPointerDown : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.enabled ? widget.onTap : null,
+          onTapCancel: widget.enabled ? widget.onTapCancel : null,
+          child: SizedBox(
+            width: _NumericStepper.arrowWidth,
+            height: _NumericStepper.arrowHeight,
+            child: Center(
+              child: CustomPaint(
+                size: const Size(8, 4.5),
+                painter: _StepChevronPainter(color: color, up: widget.up),
+              ),
             ),
           ),
         ),

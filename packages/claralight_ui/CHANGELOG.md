@@ -1,5 +1,10 @@
 ## Unreleased
 
+* Numeric `CLTextField` steppers now support vertical scrubbing from the
+  trailing arrow strip, mouse-wheel and Up/Down adjustment, press-and-hold
+  repeat, touch long-press activation, and accessible increase/decrease
+  actions. All adjustment paths share `step`, `min`, `max`, and `format`.
+
 * Added `CLOverflowToolbar<T>` and `CLOverflowToolbarItem<T>` for fixed-extent
   responsive toolbars that preserve pinned tools and move low-priority tools
   into a `CLMenu` without building hidden toolbar widgets.
