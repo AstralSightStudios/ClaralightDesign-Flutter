@@ -201,7 +201,8 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
             _CLDialogMorphWidget(
               progress: t,
               triggerRect: triggerRect,
-              child: SafeArea(
+              child: Padding(
+                padding: MediaQuery.paddingOf(context),
                 child: Opacity(
                   opacity: contentOpacity,
                   child: builder(context),
@@ -385,6 +386,13 @@ class _RenderCLDialogMorph extends RenderProxyBox {
         context.paintChild(child!, Offset.zero);
       },
     );
+  }
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) {
+    assert(child == this.child);
+    final transformMatrix = _lastTransformMatrix;
+    if (transformMatrix != null) transform.multiply(transformMatrix);
   }
 
   @override

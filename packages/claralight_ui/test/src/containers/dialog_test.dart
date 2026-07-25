@@ -142,6 +142,65 @@ void main() {
     expect(find.text('Dialog body'), findsOneWidget);
   });
 
+  testWidgets('select overlay stays inside safe area when shown in a dialog', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    const safePadding = EdgeInsets.fromLTRB(20, 48, 30, 34);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            padding: safePadding,
+            viewPadding: safePadding,
+          ),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                child: CLSelect<int>(
+                  width: 180,
+                  options: [
+                    for (var index = 0; index < 50; index++)
+                      CLSelectOption(index, 'Option $index'),
+                  ],
+                  value: 25,
+                  onChanged: (_) {},
+                ),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(200, 400));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CLList), findsOneWidget);
+    final listRect = tester.getRect(find.byType(CLList));
+    expect(listRect.left, greaterThanOrEqualTo(safePadding.left + 8));
+    expect(listRect.top, greaterThanOrEqualTo(safePadding.top + 8));
+    expect(
+      listRect.right,
+      lessThanOrEqualTo(400 - safePadding.right - 8),
+    );
+    expect(
+      listRect.bottom,
+      lessThanOrEqualTo(800 - safePadding.bottom - 8),
+    );
+  });
+
   testWidgets('lays out two actions horizontally with equal widths', (
     tester,
   ) async {
