@@ -80,6 +80,10 @@ class CLTextField extends StatefulWidget {
   /// optically concentric.
   final double? borderRadius;
 
+  /// Per-corner radius override for controls joined inside a group.
+  /// Takes precedence over [borderRadius].
+  final BorderRadiusGeometry? borderRadiusGeometry;
+
   /// Fixed width; null fills the parent.
   final double? width;
 
@@ -107,6 +111,7 @@ class CLTextField extends StatefulWidget {
     this.format,
     this.mono = false,
     this.borderRadius,
+    this.borderRadiusGeometry,
     this.width,
   }) : assert(step >= 0 && step < double.infinity),
        assert(
@@ -412,9 +417,11 @@ class _CLTextFieldState extends State<CLTextField> {
               color: widget.enabled
                   ? colors.control
                   : colors.control.withValues(alpha: colors.control.a * 0.5),
-              borderRadius: BorderRadius.circular(
-                widget.borderRadius ?? theme.radii.control,
-              ),
+              borderRadius:
+                  widget.borderRadiusGeometry ??
+                  BorderRadius.circular(
+                    widget.borderRadius ?? theme.radii.control,
+                  ),
               // Error fields retain a visible danger outline at rest; focus
               // strengthens the active accent or danger ring.
               side: BorderSide(
@@ -424,6 +431,7 @@ class _CLTextFieldState extends State<CLTextField> {
                     ? colors.accent
                     : const Color(0x00000000),
                 width: focused ? 1.5 : 1,
+                strokeAlign: BorderSide.strokeAlignInside,
               ),
             ),
             padding: EdgeInsets.only(
