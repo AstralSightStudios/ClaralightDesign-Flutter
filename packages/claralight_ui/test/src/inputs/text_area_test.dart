@@ -458,6 +458,33 @@ void main() {
     expect(scrollController.offset, 0);
   });
 
+  testWidgets('disabled state leaves its fill to the Claralight surface', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(const CLTextArea(enabled: false, placeholder: 'Unavailable')),
+    );
+
+    final theme = CLThemeData();
+    final surface = tester.widget<AnimatedContainer>(
+      find.byKey(const Key('cl-text-area-surface')),
+    );
+    final surfaceDecoration = surface.decoration! as ShapeDecoration;
+    expect(
+      surfaceDecoration.color,
+      theme.colors.control.withValues(alpha: theme.colors.control.a * 0.5),
+    );
+
+    final field = tester.widget<CupertinoTextField>(
+      find.byType(CupertinoTextField),
+    );
+    final fieldDecoration = field.decoration!;
+    expect(field.enabled, isFalse);
+    expect(fieldDecoration, isA<BoxDecoration>());
+    expect(fieldDecoration.color, isNull);
+    expect(field.placeholderStyle?.color, theme.colors.textDisabled);
+  });
+
   testWidgets('disabling a focused field clears focus styling', (tester) async {
     final focusNode = FocusNode();
     addTearDown(focusNode.dispose);

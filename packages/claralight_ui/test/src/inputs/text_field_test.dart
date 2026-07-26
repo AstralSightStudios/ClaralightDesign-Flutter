@@ -250,6 +250,33 @@ void main() {
     expect(corrected.canWrap, isFalse);
   });
 
+  test(
+    'cursor warp keeps high-speed movement after an unsynchronized teleport',
+    () {
+      final session = NumericScrubCursorSession(backend: cursorBackend);
+      session.prepare(enabled: true, position: const Offset(300, 200));
+      session.activate(enabled: true);
+
+      cursorBackend.ignoreMoves = true;
+      session.maybeWrap(
+        position: const Offset(796, 200),
+        horizontalDirection: 1,
+        viewSize: const Size(800, 600),
+        devicePixelRatio: 1,
+        canIncrease: true,
+        canDecrease: true,
+      );
+
+      final corrected = session.correctUpdate(
+        delta: const Offset(-712, 0),
+        position: const Offset(84, 200),
+      );
+
+      expect(corrected.delta, const Offset(80, 0));
+      expect(corrected.canWrap, isFalse);
+    },
+  );
+
   test('cursor session survives hardware movement racing a warp', () {
     final session = NumericScrubCursorSession(backend: cursorBackend);
     session.prepare(enabled: true, position: const Offset(300, 200));

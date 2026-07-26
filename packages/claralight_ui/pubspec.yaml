@@ -14,7 +14,7 @@ dependencies:
   mouse:
     git:
       url: https://github.com/leset0ng/mouse.git
-      ref: 7dce0599d6d17837510d9375e12a25797813615d
+      ref: e2cbcef8974659f7007987ac365ea528ea2c3ed5
   progressive_blur:
     git:
       url: https://github.com/leset0ng/progressive_blur.git

@@ -37,6 +37,7 @@ class NumericScrubCursorSession {
   Offset? _activeLocalStart;
   double? _systemUnitsPerLogicalPixel;
   double? _systemOriginX;
+  Offset? _pendingWarpSource;
   Offset? _pendingWarpTarget;
   bool _pendingWarpSawStaleEvent = false;
   bool _operational = false;
@@ -61,6 +62,7 @@ class NumericScrubCursorSession {
     _preparedLocalStart = null;
     _systemUnitsPerLogicalPixel = null;
     _systemOriginX = null;
+    _pendingWarpSource = null;
     _pendingWarpTarget = null;
     _pendingWarpSawStaleEvent = false;
     _operational = _activeStart != null && _activeLocalStart != null;
@@ -89,13 +91,20 @@ class NumericScrubCursorSession {
     }
 
     if (!synchronized) {
+      final source = _pendingWarpSource;
+      final teleportDelta = source == null ? 0.0 : target.dx - source.dx;
       final isUnsynchronizedTeleport =
-          (position.dx - target.dx).abs() <= edgeInset &&
-          delta.dx.abs() > edgeInset;
+          teleportDelta.sign == delta.dx.sign &&
+          delta.dx.abs() >= teleportDelta.abs() / 2;
       if (isUnsynchronizedTeleport) {
+        _pendingWarpSource = null;
         _pendingWarpTarget = null;
         _pendingWarpSawStaleEvent = false;
-        return (delta: Offset.zero, position: position, canWrap: false);
+        return (
+          delta: Offset(position.dx - target.dx, delta.dy),
+          position: position,
+          canWrap: false,
+        );
       }
 
       _pendingWarpSawStaleEvent = true;
@@ -103,6 +112,7 @@ class NumericScrubCursorSession {
     }
 
     final hadStaleEvent = _pendingWarpSawStaleEvent;
+    _pendingWarpSource = null;
     _pendingWarpTarget = null;
     _pendingWarpSawStaleEvent = false;
     if (hadStaleEvent) {
@@ -158,10 +168,12 @@ class NumericScrubCursorSession {
       );
       _backend.moveTo(target);
       _systemOriginX = systemOriginX;
+      _pendingWarpSource = position;
       _pendingWarpTarget = Offset(targetX, position.dy);
       _pendingWarpSawStaleEvent = false;
     } on Object {
       _operational = false;
+      _pendingWarpSource = null;
       _pendingWarpTarget = null;
     }
   }
@@ -200,6 +212,7 @@ class NumericScrubCursorSession {
     _activeLocalStart = null;
     _systemUnitsPerLogicalPixel = null;
     _systemOriginX = null;
+    _pendingWarpSource = null;
     _pendingWarpTarget = null;
     _pendingWarpSawStaleEvent = false;
     _operational = false;

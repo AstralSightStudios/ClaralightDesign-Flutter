@@ -429,7 +429,10 @@ class _CLTextAreaState extends State<CLTextArea> {
                 textAlignVertical: TextAlignVertical.top,
                 onChanged: widget.onChanged,
                 onSubmitted: widget.onSubmitted,
-                decoration: null,
+                // Keep the Claralight surface in charge of disabled styling.
+                // A null decoration makes CupertinoTextField inject its opaque
+                // platform disabled background behind the editable region.
+                decoration: const BoxDecoration(),
                 padding: EdgeInsets.zero,
                 minLines: 1,
                 maxLines: null,
