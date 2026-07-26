@@ -191,7 +191,8 @@ Three free-for-commercial-use families ship with the package (see
 - **Inputs** — `CLTextField` (`mono:` and external `error:` states; numeric
   steppers support buttons, wheel, Up/Down, and Figma-style horizontal scrubbing
   from the prefix or arrow strip; vertical movement selects 2/4/8/16/32px tick
-  spacing in stable 40px bands, with native per-frame macOS trackpad feedback),
+  spacing in stable 40px bands, finite min/max values truncate unreachable
+  ticks, and macOS provides native per-frame trackpad feedback),
   `CLSearchField`, `CLSelect`, `CLStepper`, `CLColorPicker`
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
   `CLToolbar`, `CLOverflowToolbar`, `CLSideBar`

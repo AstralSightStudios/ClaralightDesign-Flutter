@@ -31,7 +31,8 @@ enum CLNumericStepperDirection { up, down, left, right }
 ///
 /// Numeric fields with a non-zero [step] can be scrubbed horizontally from the
 /// prefix or arrow strip. Vertical movement changes ruler spacing and therefore
-/// precision; every tick crossing the center commits exactly one step.
+/// precision; every tick crossing the center commits exactly one step. Finite
+/// [min] and [max] bounds truncate unreachable ruler ticks.
 class CLTextField extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
@@ -511,6 +512,37 @@ class _CLTextFieldState extends State<CLTextField>
 
   bool get _canAdjustNumber => _canStep(1) || _canStep(-1);
 
+  ({int? increase, int? decrease}) get _scrubTickCounts {
+    final value = _number;
+    if (value == null || !_isValidNumber) {
+      return (increase: null, decrease: null);
+    }
+    return (
+      increase: _stepsToBoundary(widget.max, value, increasing: true),
+      decrease: _stepsToBoundary(widget.min, value, increasing: false),
+    );
+  }
+
+  int? _stepsToBoundary(
+    double? boundary,
+    double value, {
+    required bool increasing,
+  }) {
+    if (boundary == null || !boundary.isFinite || !widget.step.isFinite) {
+      return null;
+    }
+    final distance = increasing ? boundary - value : value - boundary;
+    if (distance <= 0) return 0;
+
+    final ratio = distance / widget.step;
+    if (!ratio.isFinite) return null;
+    final nearest = ratio.roundToDouble();
+    final tolerance = 1e-9 * math.max(1.0, ratio.abs());
+    return (ratio - nearest).abs() <= tolerance
+        ? nearest.toInt()
+        : ratio.ceil();
+  }
+
   double _updateScrubMultiplierForDy(double dy) {
     while (true) {
       final previousTier = _scrubTier;
@@ -855,6 +887,7 @@ class _CLTextFieldState extends State<CLTextField>
       child: regularContent,
       builder: (context, child) {
         final presence = CLMotion.easeOut.transform(_scrubReveal.value);
+        final tickCounts = _scrubTickCounts;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -870,6 +903,8 @@ class _CLTextFieldState extends State<CLTextField>
                         color: theme.colors.textPrimary,
                         progress: _scrubProgress,
                         spacing: _currentRulerSpacing,
+                        increaseTickCount: tickCounts.increase,
+                        decreaseTickCount: tickCounts.decrease,
                       ),
                     ),
                   ),
@@ -1560,11 +1595,15 @@ class _NumericScrubRulerPainter extends CustomPainter {
     required this.color,
     required this.progress,
     required this.spacing,
+    required this.increaseTickCount,
+    required this.decreaseTickCount,
   });
 
   final Color color;
   final double progress;
   final double spacing;
+  final int? increaseTickCount;
+  final int? decreaseTickCount;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1581,6 +1620,8 @@ class _NumericScrubRulerPainter extends CustomPainter {
       ..strokeWidth = 1
       ..strokeCap = StrokeCap.round;
     for (var index = -lineCount; index <= lineCount; index++) {
+      if (increaseTickCount case final count? when index < -count) continue;
+      if (decreaseTickCount case final count? when index > count) continue;
       final x = center + phase + index * spacing;
       if (x < -spacing || x > size.width + spacing) continue;
       final distance = ((x - center).abs() / halfWidth).clamp(0.0, 1.0);
@@ -1600,7 +1641,9 @@ class _NumericScrubRulerPainter extends CustomPainter {
   bool shouldRepaint(_NumericScrubRulerPainter oldDelegate) =>
       color != oldDelegate.color ||
       progress != oldDelegate.progress ||
-      spacing != oldDelegate.spacing;
+      spacing != oldDelegate.spacing ||
+      increaseTickCount != oldDelegate.increaseTickCount ||
+      decreaseTickCount != oldDelegate.decreaseTickCount;
 }
 
 class _NumericScrubValueOverlay extends StatelessWidget {

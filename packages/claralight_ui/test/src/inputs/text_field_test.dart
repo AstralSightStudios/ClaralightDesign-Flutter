@@ -52,6 +52,14 @@ void main() {
     return (decoration.shape as RoundedSuperellipseBorder).side;
   }
 
+  ({int? increase, int? decrease}) rulerTickCounts(WidgetTester tester) {
+    final dynamic painter = tester.widget<CustomPaint>(scrubRuler).painter;
+    return (
+      increase: painter.increaseTickCount as int?,
+      decrease: painter.decreaseTickCount as int?,
+    );
+  }
+
   testWidgets('sizes use the standard control heights', (tester) async {
     for (final size in CLControlSize.values) {
       await tester.pumpWidget(host(CLTextField(size: size)));
@@ -681,6 +689,107 @@ void main() {
     await tester.pump();
     expect(controller.text, '9');
     expect(changes, ['10', '9']);
+
+    await mouse.up();
+  });
+
+  testWidgets('ruler truncates ticks at both finite value boundaries', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '8');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+          min: 0,
+          max: 10,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, 4));
+    await tester.pump();
+
+    expect(rulerTickCounts(tester), (increase: 2, decrease: 8));
+
+    controller.text = '10';
+    await tester.pump();
+    expect(rulerTickCounts(tester), (increase: 0, decrease: 10));
+
+    controller.text = '0';
+    await tester.pump();
+    expect(rulerTickCounts(tester), (increase: 10, decrease: 0));
+
+    await mouse.up();
+  });
+
+  testWidgets('ruler keeps a partial-step endpoint and expands when invalid', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '9');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 3,
+          min: 0,
+          max: 10,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, 4));
+    await tester.pump();
+
+    expect(rulerTickCounts(tester), (increase: 1, decrease: 3));
+
+    controller.text = '11';
+    await tester.pump();
+    expect(rulerTickCounts(tester), (increase: null, decrease: null));
+
+    await mouse.up();
+  });
+
+  testWidgets('a null scrub bound leaves only that ruler side unbounded', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '10');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+          max: 10,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, 4));
+    await tester.pump();
+
+    expect(rulerTickCounts(tester), (increase: 0, decrease: null));
 
     await mouse.up();
   });
