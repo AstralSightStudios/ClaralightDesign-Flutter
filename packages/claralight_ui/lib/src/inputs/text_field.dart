@@ -1002,8 +1002,8 @@ class _CLTextFieldState extends State<CLTextField>
 abstract final class _NumericScrubMetrics {
   static const double baseSpacing = 8;
   static const Duration spacingTransitionDuration = Duration(milliseconds: 80);
-  static const double innerBandBoundary = 20;
-  static const double outerBandBoundary = 60;
+  static const double innerBandBoundary = 50;
+  static const double outerBandBoundary = 150;
   static const double bandHysteresis = 4;
   static const double preciseActivationDistance = 4;
   static const double touchActivationDistance = 8;
