@@ -191,7 +191,7 @@ Three free-for-commercial-use families ship with the package (see
 - **Inputs** — `CLTextField` (`mono:` and external `error:` states; numeric
   steppers support buttons, wheel, Up/Down, and Figma-style horizontal scrubbing
   from the prefix or arrow strip; vertical movement selects 2/4/8/16/32px tick
-  spacing in stable 40px bands, finite min/max values truncate unreachable
+  spacing in stable 100px bands, finite min/max values truncate unreachable
   ticks, and macOS provides native per-frame trackpad feedback),
   `CLSearchField`, `CLSelect`, `CLStepper`, `CLColorPicker`
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
@@ -202,6 +202,16 @@ Three free-for-commercial-use families ship with the package (see
   hosts caller-built rows in an internal `CLList`)
 - **Indicators** — `CLProgressBar`, `CLProgressRing`, `CLColorSwatchGroup`,
   `CLBanner`, `CLBadge`, `CLDivider` (solid/dashed), `CLTooltip`
+
+### Numeric scrub cursor wrapping
+
+Mouse-based numeric scrubbing wraps across the active Flutter window's left and
+right edges, then restores the cursor to its pointer-down position on release.
+Set `wrapNumericScrubCursor: false` to opt out. Cursor control is best-effort on
+macOS, Windows, and Linux X11; unsupported environments fall back to finite
+movement without affecting the value gesture. Linux Wayland is not supported by
+the underlying `mouse` package, and its Windows multi-display positioning is
+currently limited to the primary display coordinate model.
 
 Floating layers (menus, popovers, dialogs, sheets, tooltips) are
 frosted: a backdrop blur under a translucent `colors.frost` wash.

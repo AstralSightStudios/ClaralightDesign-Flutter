@@ -1,6 +1,8 @@
+import 'dart:math' as math;
 import 'dart:ui' show SemanticsAction, SemanticsValidationResult;
 
 import 'package:claralight_ui/claralight_ui.dart';
+import 'package:claralight_ui/src/inputs/numeric_scrub_cursor.dart';
 import 'package:claralight_ui/src/overlays/anchored_overlay.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -9,7 +11,50 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _FakeNumericScrubCursorBackend implements NumericScrubCursorBackend {
+  _FakeNumericScrubCursorBackend({
+    this.isSupported = true,
+    this.scale = 1,
+    math.Point<double>? position,
+  }) : position = position ?? const math.Point<double>(320, 240);
+
+  @override
+  final bool isSupported;
+  final double scale;
+  math.Point<double> position;
+  final moves = <math.Point<double>>[];
+  int getPositionCalls = 0;
+  bool throwOnGet = false;
+  bool throwOnMove = false;
+  bool ignoreMoves = false;
+
+  @override
+  math.Point<double> getPosition() {
+    getPositionCalls++;
+    if (throwOnGet) throw StateError('cursor unavailable');
+    return position;
+  }
+
+  @override
+  double logicalToSystemScale(double devicePixelRatio) => scale;
+
+  @override
+  void moveTo(math.Point<double> position) {
+    if (throwOnMove) throw StateError('cursor unavailable');
+    moves.add(position);
+    if (!ignoreMoves) this.position = position;
+  }
+}
+
 void main() {
+  late _FakeNumericScrubCursorBackend cursorBackend;
+
+  setUp(() {
+    cursorBackend = _FakeNumericScrubCursorBackend();
+    debugNumericScrubCursorBackendOverride = cursorBackend;
+  });
+  tearDown(() => debugNumericScrubCursorBackendOverride = null);
+
   Widget host(
     Widget child, {
     Alignment alignment = Alignment.center,
@@ -59,6 +104,273 @@ void main() {
       decrease: painter.decreaseTickCount as int?,
     );
   }
+
+  test('cursor session wraps with overshoot and removes warp delta', () {
+    cursorBackend = _FakeNumericScrubCursorBackend(
+      scale: 2,
+      position: const math.Point<double>(1000, 500),
+    );
+    final session = NumericScrubCursorSession(backend: cursorBackend);
+    session.prepare(enabled: true, position: const Offset(300, 200));
+    session.activate(enabled: true);
+
+    session.maybeWrap(
+      position: const Offset(803, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 2,
+      canIncrease: true,
+      canDecrease: true,
+    );
+
+    expect(cursorBackend.moves, [const math.Point<double>(-584, 500)]);
+    expect(
+      session
+          .correctUpdate(
+            delta: const Offset(-789, 1),
+            position: const Offset(14, 201),
+          )
+          .delta,
+      const Offset(3, 1),
+    );
+
+    session.finish();
+    expect(cursorBackend.moves.last, const math.Point<double>(1000, 500));
+  });
+
+  test('cursor warp calibrates system units from pointer travel', () {
+    cursorBackend = _FakeNumericScrubCursorBackend(
+      position: const math.Point<double>(1000, 500),
+    );
+    final session = NumericScrubCursorSession(backend: cursorBackend);
+    session.prepare(enabled: true, position: const Offset(300, 200));
+    session.activate(enabled: true);
+
+    cursorBackend.position = const math.Point<double>(1992, 500);
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 2,
+      canIncrease: true,
+      canDecrease: true,
+    );
+
+    expect(cursorBackend.moves, [const math.Point<double>(408, 500)]);
+  });
+
+  test('cursor warp preserves queued pre-warp movement', () {
+    cursorBackend = _FakeNumericScrubCursorBackend(
+      position: const math.Point<double>(772.7, 875.6),
+    );
+    final session = NumericScrubCursorSession(backend: cursorBackend);
+    session.prepare(enabled: true, position: const Offset(456.7, 842.6));
+    session.activate(enabled: true);
+
+    cursorBackend.position = const math.Point<double>(1198.3, 759.4);
+    session.maybeWrap(
+      position: const Offset(882.3, 726.4),
+      horizontalDirection: 9.5,
+      viewSize: const Size(880, 949),
+      devicePixelRatio: 2,
+      canIncrease: true,
+      canDecrease: true,
+    );
+
+    final corrected = session.correctUpdate(
+      delta: const Offset(9.5, -0.3),
+      position: const Offset(891.8, 726.1),
+    );
+    expect(corrected.delta, const Offset(9.5, -0.3));
+    expect(corrected.canWrap, isFalse);
+
+    session.maybeWrap(
+      position: corrected.position,
+      horizontalDirection: corrected.canWrap ? corrected.delta.dx : 0,
+      viewSize: const Size(880, 949),
+      devicePixelRatio: 2,
+      canIncrease: true,
+      canDecrease: true,
+    );
+    expect(cursorBackend.moves, hasLength(1));
+  });
+
+  test('cursor warp allows an immediate reverse crossing', () {
+    final session = NumericScrubCursorSession(backend: cursorBackend);
+    session.prepare(enabled: true, position: const Offset(300, 200));
+    session.activate(enabled: true);
+
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: true,
+      canDecrease: true,
+    );
+    expect(cursorBackend.moves, hasLength(1));
+
+    final corrected = session.correctUpdate(
+      delta: const Offset(-792.5, 0),
+      position: const Offset(3.5, 200),
+    );
+    session.maybeWrap(
+      position: corrected.position,
+      horizontalDirection: corrected.canWrap ? corrected.delta.dx : 0,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: true,
+      canDecrease: true,
+    );
+
+    expect(cursorBackend.moves, hasLength(2));
+  });
+
+  test('cursor session survives hardware movement racing a warp', () {
+    final session = NumericScrubCursorSession(backend: cursorBackend);
+    session.prepare(enabled: true, position: const Offset(300, 200));
+    session.activate(enabled: true);
+
+    cursorBackend.ignoreMoves = true;
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: true,
+      canDecrease: true,
+    );
+    expect(cursorBackend.moves, hasLength(1));
+
+    cursorBackend
+      ..ignoreMoves = false
+      ..position = const math.Point<double>(-472, 240);
+    session.correctUpdate(
+      delta: const Offset(-792, 0),
+      position: const Offset(4, 200),
+    );
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: true,
+      canDecrease: true,
+    );
+
+    expect(cursorBackend.moves, hasLength(2));
+  });
+
+  test('cursor session respects bounds and silently disables failed warps', () {
+    final unsupportedBackend = _FakeNumericScrubCursorBackend(
+      isSupported: false,
+    );
+    final unsupportedSession = NumericScrubCursorSession(
+      backend: unsupportedBackend,
+    );
+    unsupportedSession.prepare(enabled: true, position: const Offset(300, 200));
+    unsupportedSession.activate(enabled: true);
+    expect(unsupportedBackend.getPositionCalls, 0);
+
+    final session = NumericScrubCursorSession(backend: cursorBackend);
+    session.prepare(enabled: true, position: const Offset(300, 200));
+    session.activate(enabled: true);
+
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: false,
+      canDecrease: true,
+    );
+    expect(cursorBackend.moves, isEmpty);
+
+    cursorBackend.throwOnMove = true;
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: true,
+      canDecrease: true,
+    );
+    expect(cursorBackend.moves, isEmpty);
+
+    cursorBackend.throwOnMove = false;
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: true,
+      canDecrease: true,
+    );
+    expect(cursorBackend.moves, isEmpty);
+    expect(
+      session
+          .correctUpdate(
+            delta: const Offset(5, 0),
+            position: const Offset(10, 200),
+          )
+          .delta,
+      const Offset(5, 0),
+    );
+  });
+
+  testWidgets('mouse scrub restores the pointer-down cursor position', (
+    tester,
+  ) async {
+    cursorBackend.position = const math.Point<double>(420, 260);
+    final controller = TextEditingController(text: '4');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          step: 1,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    await mouse.up();
+
+    expect(cursorBackend.getPositionCalls, 1);
+    expect(cursorBackend.moves, [const math.Point<double>(420, 260)]);
+  });
+
+  testWidgets('cursor wrapping can be disabled per text field', (tester) async {
+    final controller = TextEditingController(text: '4');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          step: 1,
+          wrapNumericScrubCursor: false,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    await mouse.up();
+
+    expect(cursorBackend.getPositionCalls, 0);
+    expect(cursorBackend.moves, isEmpty);
+  });
 
   testWidgets('sizes use the standard control heights', (tester) async {
     for (final size in CLControlSize.values) {
@@ -412,6 +724,40 @@ void main() {
     expect(scrubOverlay, findsNothing);
   });
 
+  testWidgets('focus loss immediately finishes a mouse scrub', (tester) async {
+    final controller = TextEditingController(text: '10');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          focusNode: focusNode,
+          keyboardType: TextInputType.number,
+          step: 1,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    expect(focusNode.hasFocus, isTrue);
+    expect(scrubRuler, findsOneWidget);
+
+    focusNode.unfocus();
+    await tester.pump();
+
+    expect(scrubRuler, findsNothing);
+    expect(cursorBackend.moves, [const math.Point<double>(320, 240)]);
+    await mouse.up();
+  });
+
   testWidgets('prefix scrub moves right to increase and left to decrease', (
     tester,
   ) async {
@@ -469,28 +815,28 @@ void main() {
     await mouse.moveBy(const Offset(0, -4));
     await tester.pump();
 
-    await mouse.moveBy(const Offset(0, -16));
+    await mouse.moveBy(const Offset(0, -46));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     await mouse.moveBy(const Offset(4, 0));
     await tester.pump();
     expect(controller.text, '1');
 
-    await mouse.moveBy(const Offset(0, -40));
+    await mouse.moveBy(const Offset(0, -100));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     await mouse.moveBy(const Offset(2, 0));
     await tester.pump();
     expect(controller.text, '2');
 
-    await mouse.moveBy(const Offset(0, 80));
+    await mouse.moveBy(const Offset(0, 200));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     await mouse.moveBy(const Offset(16, 0));
     await tester.pump();
     expect(controller.text, '3');
 
-    await mouse.moveBy(const Offset(0, 40));
+    await mouse.moveBy(const Offset(0, 100));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     await mouse.moveBy(const Offset(32, 0));
@@ -526,7 +872,7 @@ void main() {
       kind: PointerDeviceKind.mouse,
     );
     await mouse.moveBy(const Offset(0, -4));
-    await mouse.moveBy(const Offset(0, -16));
+    await mouse.moveBy(const Offset(0, -46));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 40));
 
@@ -540,7 +886,7 @@ void main() {
     await mouse.up();
   });
 
-  testWidgets('40px vertical bands use 4px return hysteresis', (tester) async {
+  testWidgets('100px vertical bands use 4px return hysteresis', (tester) async {
     final controller = TextEditingController(text: '0');
     addTearDown(controller.dispose);
 
@@ -560,7 +906,7 @@ void main() {
       kind: PointerDeviceKind.mouse,
     );
     await mouse.moveBy(const Offset(0, -4));
-    await mouse.moveBy(const Offset(0, -16));
+    await mouse.moveBy(const Offset(0, -46));
     await mouse.moveBy(const Offset(0, 3));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
@@ -1255,7 +1601,7 @@ void main() {
     expect(popover.opacity, inExclusiveRange(0, 1));
     expect(popover.scale, 1);
 
-    await mouse.moveBy(const Offset(0, -24));
+    await mouse.moveBy(const Offset(0, -54));
     await mouse.moveBy(const Offset(4, 0));
     await tester.pump();
     expect(controller.text, '2');

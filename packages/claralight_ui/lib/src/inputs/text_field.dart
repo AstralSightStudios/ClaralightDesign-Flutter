@@ -12,6 +12,7 @@ import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
 import '../overlays/anchored_overlay.dart';
 import '../theme/theme.dart';
+import 'numeric_scrub_cursor.dart';
 
 const _macOSHapticsChannel = MethodChannel('dev.claralight.ui/haptics');
 
@@ -82,6 +83,12 @@ class CLTextField extends StatefulWidget {
   /// a [double] so it can be edited and stepped again.
   final String Function(double value)? format;
 
+  /// Whether mouse-based numeric scrubbing wraps the system cursor across the
+  /// desktop window and restores it to its pointer-down position on release.
+  ///
+  /// Unsupported desktop environments silently keep finite cursor movement.
+  final bool wrapNumericScrubCursor;
+
   /// Renders the value in the monospace family — for numeric fields like
   /// the design's "X 12px" inspector inputs.
   final bool mono;
@@ -120,6 +127,7 @@ class CLTextField extends StatefulWidget {
     this.min,
     this.max,
     this.format,
+    this.wrapNumericScrubCursor = true,
     this.mono = false,
     this.borderRadius,
     this.borderRadiusGeometry,
@@ -150,6 +158,7 @@ class _CLTextFieldState extends State<CLTextField>
   final GlobalKey _scrubAnchorKey = GlobalKey();
   late final AnimationController _scrubReveal;
   late final AnimationController _rulerSpacingTransition;
+  late final NumericScrubCursorSession _scrubCursorSession;
 
   bool _ownsController = false;
   bool _ownsFocusNode = false;
@@ -170,6 +179,7 @@ class _CLTextFieldState extends State<CLTextField>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scrubCursorSession = NumericScrubCursorSession();
     _scrubReveal = AnimationController(
       vsync: this,
       duration: CLMotion.fast,
@@ -211,6 +221,9 @@ class _CLTextFieldState extends State<CLTextField>
       if (_ownsFocusNode) _focusNode.dispose();
       _adoptFocusNode();
     }
+    if (oldWidget.wrapNumericScrubCursor && !widget.wrapNumericScrubCursor) {
+      _scrubCursorSession.finish();
+    }
     if ((!widget.enabled || !_showsStepper || _number == null) &&
         (_scrubGestureActive || _scrubVisualMounted)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -236,8 +249,9 @@ class _CLTextFieldState extends State<CLTextField>
   }
 
   void _onFocusChanged() {
-    if (!_focusNode.hasFocus && _isNumeric) {
-      _showValidationError = true;
+    if (!_focusNode.hasFocus) {
+      if (_isNumeric) _showValidationError = true;
+      _closeScrub(immediate: true);
     }
     if (mounted) setState(() {});
   }
@@ -259,6 +273,7 @@ class _CLTextFieldState extends State<CLTextField>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scrubCursorSession.finish();
     _scrubReveal.dispose();
     _rulerSpacingTransition.dispose();
     _operationFocusNode.removeListener(_onOperationFocusChanged);
@@ -410,9 +425,21 @@ class _CLTextFieldState extends State<CLTextField>
     _scrubMultiplier = multiplier;
   }
 
+  void _prepareScrubCursor(PointerDownEvent event) {
+    _scrubCursorSession.prepare(
+      enabled:
+          widget.wrapNumericScrubCursor &&
+          event.kind == PointerDeviceKind.mouse,
+      position: event.position,
+    );
+  }
+
   bool _beginScrub(PointerDeviceKind kind) {
     if (_scrubGestureActive || !_canAdjustNumber) return false;
 
+    _scrubCursorSession.activate(
+      enabled: widget.wrapNumericScrubCursor && kind == PointerDeviceKind.mouse,
+    );
     if (kind == PointerDeviceKind.touch) {
       _requestOperationFocus();
     } else {
@@ -433,9 +460,14 @@ class _CLTextFieldState extends State<CLTextField>
     return true;
   }
 
-  void _updateScrub(Offset delta) {
+  void _updateScrub(_NumericScrubUpdate update) {
     if (!_scrubGestureActive) return;
 
+    final corrected = _scrubCursorSession.correctUpdate(
+      delta: update.delta,
+      position: update.position,
+    );
+    final delta = corrected.delta;
     _scrubDy += delta.dy;
     _transitionRulerSpacing(_updateScrubMultiplierForDy(_scrubDy));
 
@@ -457,11 +489,20 @@ class _CLTextFieldState extends State<CLTextField>
       }
     }
 
+    _scrubCursorSession.maybeWrap(
+      position: corrected.position,
+      horizontalDirection: corrected.canWrap ? delta.dx : 0,
+      viewSize: update.viewSize,
+      devicePixelRatio: update.devicePixelRatio,
+      canIncrease: _canStep(1),
+      canDecrease: _canStep(-1),
+    );
     if (mounted) setState(() {});
   }
 
   void _endScrub() {
     if (!_scrubGestureActive) return;
+    _scrubCursorSession.finish();
     _scrubGestureActive = false;
     _scrubProgress = 0;
     _scrubDy = 0;
@@ -472,6 +513,7 @@ class _CLTextFieldState extends State<CLTextField>
 
   void _closeScrub({required bool immediate}) {
     if (!_scrubGestureActive && !_scrubVisualMounted) return;
+    _scrubCursorSession.finish();
     _scrubGestureActive = false;
     _scrubProgress = 0;
     _scrubDy = 0;
@@ -746,6 +788,7 @@ class _CLTextFieldState extends State<CLTextField>
                   enabled: _canAdjustNumber,
                   height: _height,
                   onRequestOperationFocus: _requestOperationFocus,
+                  onScrubPointerDown: _prepareScrubCursor,
                   onScrubStart: _beginScrub,
                   onScrubUpdate: _updateScrub,
                   onScrubEnd: _endScrub,
@@ -875,6 +918,7 @@ class _CLTextFieldState extends State<CLTextField>
           onPointerStep: _handlePointerStep,
           onRequestEditingFocus: _requestEditingFocus,
           onRequestOperationFocus: _requestOperationFocus,
+          onScrubPointerDown: _prepareScrubCursor,
           onScrubStart: _beginScrub,
           onScrubUpdate: _updateScrub,
           onScrubEnd: _endScrub,
@@ -1019,6 +1063,26 @@ const _preciseScrubPointerKinds = <PointerDeviceKind>{
 bool _primaryButtonOnly(int buttons) => buttons == kPrimaryButton;
 
 typedef _ScrubStartCallback = bool Function(PointerDeviceKind kind);
+typedef _NumericScrubUpdate = ({
+  Offset delta,
+  Offset position,
+  Size viewSize,
+  double devicePixelRatio,
+});
+
+_NumericScrubUpdate _scrubUpdateFor(
+  BuildContext context, {
+  required Offset delta,
+  required Offset position,
+}) {
+  final view = View.of(context);
+  return (
+    delta: delta,
+    position: position,
+    viewSize: view.physicalSize / view.devicePixelRatio,
+    devicePixelRatio: view.devicePixelRatio,
+  );
+}
 
 class _NumericPrefixScrubRegion extends StatefulWidget {
   const _NumericPrefixScrubRegion({
@@ -1026,6 +1090,7 @@ class _NumericPrefixScrubRegion extends StatefulWidget {
     required this.enabled,
     required this.height,
     required this.onRequestOperationFocus,
+    required this.onScrubPointerDown,
     required this.onScrubStart,
     required this.onScrubUpdate,
     required this.onScrubEnd,
@@ -1035,8 +1100,9 @@ class _NumericPrefixScrubRegion extends StatefulWidget {
   final bool enabled;
   final double height;
   final VoidCallback onRequestOperationFocus;
+  final ValueChanged<PointerDownEvent> onScrubPointerDown;
   final _ScrubStartCallback onScrubStart;
-  final ValueChanged<Offset> onScrubUpdate;
+  final ValueChanged<_NumericScrubUpdate> onScrubUpdate;
   final VoidCallback onScrubEnd;
   final Widget child;
 
@@ -1058,7 +1124,15 @@ class _NumericPrefixScrubRegionState extends State<_NumericPrefixScrubRegion> {
   }
 
   void _handlePreciseUpdate(DragUpdateDetails details) {
-    if (_preciseScrubActive) widget.onScrubUpdate(details.delta);
+    if (_preciseScrubActive) {
+      widget.onScrubUpdate(
+        _scrubUpdateFor(
+          context,
+          delta: details.delta,
+          position: details.globalPosition,
+        ),
+      );
+    }
   }
 
   void _handlePreciseEnd([Object? _]) {
@@ -1087,7 +1161,9 @@ class _NumericPrefixScrubRegionState extends State<_NumericPrefixScrubRegion> {
 
     final delta = offset - _lastTouchOffset;
     _lastTouchOffset = offset;
-    widget.onScrubUpdate(delta);
+    widget.onScrubUpdate(
+      _scrubUpdateFor(context, delta: delta, position: details.globalPosition),
+    );
   }
 
   void _handleTouchEnd([Object? _]) {
@@ -1106,6 +1182,7 @@ class _NumericPrefixScrubRegionState extends State<_NumericPrefixScrubRegion> {
             : MouseCursor.defer,
         child: _NumericScrubGestureDetector(
           enabled: widget.enabled,
+          onPointerDown: widget.onScrubPointerDown,
           onPreciseStart: _handlePreciseStart,
           onPreciseUpdate: _handlePreciseUpdate,
           onPreciseEnd: _handlePreciseEnd,
@@ -1136,6 +1213,7 @@ class _NumericStepper extends StatefulWidget {
     required this.onPointerStep,
     required this.onRequestEditingFocus,
     required this.onRequestOperationFocus,
+    required this.onScrubPointerDown,
     required this.onScrubStart,
     required this.onScrubUpdate,
     required this.onScrubEnd,
@@ -1148,8 +1226,9 @@ class _NumericStepper extends StatefulWidget {
   final bool Function(int steps) onPointerStep;
   final VoidCallback onRequestEditingFocus;
   final VoidCallback onRequestOperationFocus;
+  final ValueChanged<PointerDownEvent> onScrubPointerDown;
   final _ScrubStartCallback onScrubStart;
-  final ValueChanged<Offset> onScrubUpdate;
+  final ValueChanged<_NumericScrubUpdate> onScrubUpdate;
   final VoidCallback onScrubEnd;
 
   @override
@@ -1387,7 +1466,9 @@ class _NumericStepperState extends State<_NumericStepper>
 
     final delta = offset - _lastTouchOffset;
     _lastTouchOffset = offset;
-    widget.onScrubUpdate(delta);
+    widget.onScrubUpdate(
+      _scrubUpdateFor(context, delta: delta, position: details.globalPosition),
+    );
   }
 
   void _handlePreciseDragStart(DragStartDetails details) {
@@ -1406,7 +1487,13 @@ class _NumericStepperState extends State<_NumericStepper>
 
   void _handlePreciseDragUpdate(DragUpdateDetails details) {
     if (_preciseScrubActive && !_interactionCanceled) {
-      widget.onScrubUpdate(details.delta);
+      widget.onScrubUpdate(
+        _scrubUpdateFor(
+          context,
+          delta: details.delta,
+          position: details.globalPosition,
+        ),
+      );
     }
   }
 
@@ -1420,6 +1507,7 @@ class _NumericStepperState extends State<_NumericStepper>
             : MouseCursor.defer,
         child: _NumericScrubGestureDetector(
           enabled: canAdjust,
+          onPointerDown: widget.onScrubPointerDown,
           onPreciseStart: _handlePreciseDragStart,
           onPreciseUpdate: _handlePreciseDragUpdate,
           onPreciseEnd: (_) => _finishInteraction(),
@@ -1480,6 +1568,7 @@ class _NumericStepperState extends State<_NumericStepper>
 class _NumericScrubGestureDetector extends StatelessWidget {
   const _NumericScrubGestureDetector({
     required this.enabled,
+    required this.onPointerDown,
     required this.onPreciseStart,
     required this.onPreciseUpdate,
     required this.onPreciseEnd,
@@ -1490,6 +1579,7 @@ class _NumericScrubGestureDetector extends StatelessWidget {
   });
 
   final bool enabled;
+  final ValueChanged<PointerDownEvent> onPointerDown;
   final GestureDragStartCallback onPreciseStart;
   final GestureDragUpdateCallback onPreciseUpdate;
   final ValueChanged<Object?> onPreciseEnd;
@@ -1545,11 +1635,20 @@ class _NumericScrubGestureDetector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RawGestureDetector(
-      behavior: HitTestBehavior.opaque,
-      excludeFromSemantics: true,
-      gestures: _gestureFactories(MediaQuery.maybeGestureSettingsOf(context)),
-      child: child,
+    return Listener(
+      onPointerDown: enabled
+          ? (event) {
+              if (_primaryButtonOnly(event.buttons)) {
+                onPointerDown(event);
+              }
+            }
+          : null,
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        gestures: _gestureFactories(MediaQuery.maybeGestureSettingsOf(context)),
+        child: child,
+      ),
     );
   }
 }
