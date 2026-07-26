@@ -234,6 +234,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   });
 
+  _galleryTestWidgets('tooltip position control updates the demo', (
+    WidgetTester tester,
+  ) async {
+    _useLargeView(tester);
+    await _pumpGalleryHost(tester);
+
+    final control = find.byKey(const Key('tooltip-position-control'));
+    final tooltip = find.byKey(const Key('tooltip-demo'));
+    await tester.ensureVisible(control);
+    await tester.pump();
+
+    expect(tester.widget<CLTooltip>(tooltip).position, CLPopoverPosition.top);
+
+    tester.widget<CLSegmentedControl>(control).onChanged!(3);
+    await tester.pump();
+
+    expect(tester.widget<CLTooltip>(tooltip).position, CLPopoverPosition.right);
+  });
+
   _galleryTestWidgets('animated number demo exercises formatted retargets', (
     WidgetTester tester,
   ) async {

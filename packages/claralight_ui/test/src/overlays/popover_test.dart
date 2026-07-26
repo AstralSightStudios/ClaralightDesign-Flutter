@@ -155,26 +155,67 @@ void main() {
     expect(content.left, greaterThanOrEqualTo(8));
   });
 
-  testWidgets('showArrow does not move the popover body', (tester) async {
-    final controller = CLPopoverController();
-    addTearDown(controller.dispose);
+  for (final position in CLPopoverPosition.values) {
+    testWidgets('showArrow does not move the ${position.name} popover body', (
+      tester,
+    ) async {
+      final controller = CLPopoverController();
+      addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      buildPopover(controller: controller, showArrow: true),
+      await tester.pumpWidget(
+        buildPopover(
+          controller: controller,
+          position: position,
+          showArrow: true,
+        ),
+      );
+      await openPopover(tester, controller);
+      final withArrow = tester.getRect(find.byKey(_contentKey));
+
+      controller.close();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        buildPopover(
+          controller: controller,
+          position: position,
+          showArrow: false,
+        ),
+      );
+      await openPopover(tester, controller);
+      final withoutArrow = tester.getRect(find.byKey(_contentKey));
+
+      expect(withoutArrow, withArrow);
+    });
+
+    testWidgets(
+      'the ${position.name} tail remains inside the popover tap region',
+      (tester) async {
+        final controller = CLPopoverController();
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          buildPopover(controller: controller, position: position),
+        );
+        await openPopover(tester, controller);
+
+        final anchor = tester.getRect(find.byKey(_anchorKey));
+        final point = switch (position) {
+          CLPopoverPosition.top => Offset(anchor.center.dx, anchor.top - 5),
+          CLPopoverPosition.bottom => Offset(
+            anchor.center.dx,
+            anchor.bottom + 5,
+          ),
+          CLPopoverPosition.left => Offset(anchor.left - 5, anchor.center.dy),
+          CLPopoverPosition.right => Offset(anchor.right + 5, anchor.center.dy),
+        };
+
+        await tester.tapAt(point);
+        await tester.pump();
+
+        expect(controller.isOpen, isTrue);
+        expect(tester.takeException(), isNull);
+      },
     );
-    await openPopover(tester, controller);
-    final withArrow = tester.getRect(find.byKey(_contentKey));
-
-    controller.close();
-    await tester.pumpAndSettle();
-    await tester.pumpWidget(
-      buildPopover(controller: controller, showArrow: false),
-    );
-    await openPopover(tester, controller);
-    final withoutArrow = tester.getRect(find.byKey(_contentKey));
-
-    expect(withoutArrow.topLeft, withArrow.topLeft);
-  });
+  }
 
   testWidgets('controller and callback report logical open state', (
     tester,

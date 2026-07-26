@@ -179,30 +179,52 @@ class _ColorPickerSectionState extends State<_ColorPickerSection> {
   }
 }
 
-class _TooltipSection extends StatelessWidget {
+class _TooltipSection extends StatefulWidget {
   const _TooltipSection();
+
+  @override
+  State<_TooltipSection> createState() => _TooltipSectionState();
+}
+
+class _TooltipSectionState extends State<_TooltipSection> {
+  static const _positions = CLPopoverPosition.values;
+  int _positionIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'CLTooltip',
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CLTooltip(
-            message: '这按钮是干嘛的',
-            child: CLIconButton(
-              icon: Icons.help_outline_rounded,
-              onPressed: () {},
-            ),
+          CLSegmentedControl(
+            key: const Key('tooltip-position-control'),
+            segments: const ['上', '下', '左', '右'],
+            selectedIndex: _positionIndex,
+            onChanged: (value) => setState(() => _positionIndex = value),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '悬停或长按查看提示',
-              style: CLTheme.of(context).typography.caption.copyWith(
-                color: CLTheme.of(context).colors.textHint,
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              CLTooltip(
+                key: const Key('tooltip-demo'),
+                message: '这按钮是干嘛的',
+                position: _positions[_positionIndex],
+                child: CLIconButton(
+                  icon: Icons.help_outline_rounded,
+                  onPressed: () {},
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '悬停或长按查看提示',
+                  style: CLTheme.of(context).typography.caption.copyWith(
+                    color: CLTheme.of(context).colors.textHint,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

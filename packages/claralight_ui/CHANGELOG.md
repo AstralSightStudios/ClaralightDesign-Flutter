@@ -1,5 +1,8 @@
 ## Unreleased
 
+* Smoothed every anchored overlay tail into one four-direction, G2-continuous
+  profile shared by tooltips, popovers, and numeric scrub value overlays.
+
 * Added `CLAnimatedNumber`, an interruptible SwiftUI-style numeric-text
   transition with changed-digit rolling, stable formatting decoration,
   animated intrinsic width, spring velocity handoff, velocity-driven vertical

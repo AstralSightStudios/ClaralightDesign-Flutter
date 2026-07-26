@@ -11,7 +11,7 @@ import '../theme/motion.dart';
 enum CLPopoverPosition { top, bottom, left, right }
 
 const double _arrowExtent = 7;
-const double _arrowHalfWidth = 9;
+const double _arrowHalfWidth = 12;
 const double _anchorGap = 4;
 const double _screenMargin = 8;
 
@@ -787,78 +787,83 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
 
   Path _tailPath(Rect body, double center) {
     const overlap = 1.5;
-    switch (_position) {
-      case CLPopoverPosition.top:
-        final baseY = body.bottom - overlap;
-        return Path()
-          ..moveTo(center - _arrowHalfWidth, baseY)
-          ..cubicTo(
-            center - 5,
-            baseY,
-            center - 4,
-            size.height,
-            center,
-            size.height,
-          )
-          ..cubicTo(
-            center + 4,
-            size.height,
-            center + 5,
-            baseY,
-            center + _arrowHalfWidth,
-            baseY,
-          )
-          ..close();
-      case CLPopoverPosition.bottom:
-        final baseY = body.top + overlap;
-        return Path()
-          ..moveTo(center - _arrowHalfWidth, baseY)
-          ..cubicTo(center - 5, baseY, center - 4, 0, center, 0)
-          ..cubicTo(
-            center + 4,
-            0,
-            center + 5,
-            baseY,
-            center + _arrowHalfWidth,
-            baseY,
-          )
-          ..close();
-      case CLPopoverPosition.left:
-        final baseX = body.right - overlap;
-        return Path()
-          ..moveTo(baseX, center - _arrowHalfWidth)
-          ..cubicTo(
-            baseX,
-            center - 5,
-            size.width,
-            center - 4,
-            size.width,
-            center,
-          )
-          ..cubicTo(
-            size.width,
-            center + 4,
-            baseX,
-            center + 5,
-            baseX,
-            center + _arrowHalfWidth,
-          )
-          ..close();
-      case CLPopoverPosition.right:
-        final baseX = body.left + overlap;
-        return Path()
-          ..moveTo(baseX, center - _arrowHalfWidth)
-          ..cubicTo(baseX, center - 5, 0, center - 4, 0, center)
-          ..cubicTo(
-            0,
-            center + 4,
-            baseX,
-            center + 5,
-            baseX,
-            center + _arrowHalfWidth,
-          )
-          ..close();
-    }
+    final width = _arrowHalfWidth;
+    final height = _arrowExtent;
+
+    Offset point(double cross, double outward) => switch (_position) {
+      CLPopoverPosition.top => Offset(center + cross, body.bottom + outward),
+      CLPopoverPosition.bottom => Offset(center - cross, body.top - outward),
+      CLPopoverPosition.left => Offset(body.right + outward, center - cross),
+      CLPopoverPosition.right => Offset(body.left - outward, center + cross),
+    };
+
+    // Two cubic segments per half keep the body join G2 with the flat edge.
+    // The compact 0.16w body handle controls the root rounding; the following
+    // cross-axis controls are derived so the shoulder join remains C2.
+    // Mirroring preserves tangent and curvature at the rounded tip, whose
+    // 0.225w handle gives a radius of about 0.446h for the fixed 24x7 tail.
+    final bodyControlCross = -0.84 * width;
+    final midCross = -0.50 * width;
+    final tipControlCross = -0.225 * width;
+    final shoulderControlCross =
+        (4 * midCross + bodyControlCross - tipControlCross) / 4;
+    final midControlCross = 2 * midCross - shoulderControlCross;
+
+    final leftBase = point(-width, 0);
+    final leftBodyControl = point(bodyControlCross, 0);
+    final leftShoulderControl = point(shoulderControlCross, 0);
+    final leftMid = point(midCross, 0.25 * height);
+    final leftMidControl = point(midControlCross, 0.50 * height);
+    final leftTipControl = point(tipControlCross, height);
+    final tip = point(0, height);
+    final rightTipControl = point(-tipControlCross, height);
+    final rightMidControl = point(-midControlCross, 0.50 * height);
+    final rightMid = point(-midCross, 0.25 * height);
+    final rightShoulderControl = point(-shoulderControlCross, 0);
+    final rightBodyControl = point(-bodyControlCross, 0);
+    final rightBase = point(width, 0);
+    final backingRight = point(width, -overlap);
+    final backingLeft = point(-width, -overlap);
+
+    return Path()
+      ..moveTo(leftBase.dx, leftBase.dy)
+      ..cubicTo(
+        leftBodyControl.dx,
+        leftBodyControl.dy,
+        leftShoulderControl.dx,
+        leftShoulderControl.dy,
+        leftMid.dx,
+        leftMid.dy,
+      )
+      ..cubicTo(
+        leftMidControl.dx,
+        leftMidControl.dy,
+        leftTipControl.dx,
+        leftTipControl.dy,
+        tip.dx,
+        tip.dy,
+      )
+      ..cubicTo(
+        rightTipControl.dx,
+        rightTipControl.dy,
+        rightMidControl.dx,
+        rightMidControl.dy,
+        rightMid.dx,
+        rightMid.dy,
+      )
+      ..cubicTo(
+        rightShoulderControl.dx,
+        rightShoulderControl.dy,
+        rightBodyControl.dx,
+        rightBodyControl.dy,
+        rightBase.dx,
+        rightBase.dy,
+      )
+      // Keep overlap inside the body for robust path union without moving the
+      // visible curve away from the body edge.
+      ..lineTo(backingRight.dx, backingRight.dy)
+      ..lineTo(backingLeft.dx, backingLeft.dy)
+      ..close();
   }
 
   Offset get _scaleOrigin => switch (_position) {
