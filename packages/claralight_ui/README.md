@@ -22,6 +22,26 @@ CLTheme(
 Widgets also work without an ancestor `CLTheme` by falling back to the
 default dark theme.
 
+## Animated numbers
+
+`CLAnimatedNumber` keeps unchanged digits and formatting decoration stable while
+changed digits roll in the value's direction. It inherits `DefaultTextStyle`,
+uses tabular figures by default, and snaps immediately when reduced motion is
+enabled:
+
+```dart
+CLAnimatedNumber(
+  score,
+  formatter: (value) => '${value.toInt()}%',
+  style: CLTheme.of(context).typography.monoStrong,
+)
+```
+
+Use `trend: CLNumberTrend.decreasing` to override the inferred direction for a
+cyclic countdown. `alignment` anchors content inside the widget while its width
+animates; place it in an end-aligned or fixed-width parent when the global
+trailing edge must not move.
+
 ## Responsive overflow toolbars
 
 `CLOverflowToolbar` keeps fixed-width tools on a `CLToolbar` until the
@@ -158,6 +178,8 @@ Three free-for-commercial-use families ship with the package (see
 
 - **Theme** — `CLTheme`, `CLThemeData`, `CLColorScheme`, `CLTypography`,
   `CLRadii`, `CLSpacing`
+- **Foundation** — `CLAnimatedNumber` (interruptible numeric-text transition),
+  `CLMarqueeText`, `CLControlSize`, shape helpers
 - **Surfaces** — `CLSurface` (layered fills), `CLPressable` (springy press
   scale, jelly drag, pointer highlight)
 - **Scrolling** — `CLScrollable`, `CLList`, `CLScrollDirection`,

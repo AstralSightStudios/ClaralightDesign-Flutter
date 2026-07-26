@@ -120,6 +120,7 @@ class _GalleryHomeState extends State<GalleryHome> {
                     _TogglesSection(),
                     _SegmentedSection(),
                     _SliderSection(),
+                    _AnimatedNumberSection(),
                     _InputsSection(),
                     _SelectSection(),
                     _ScrollableSection(),

@@ -317,6 +317,107 @@ class _SwatchesSectionState extends State<_SwatchesSection> {
   }
 }
 
+class _AnimatedNumberSection extends StatefulWidget {
+  const _AnimatedNumberSection();
+
+  @override
+  State<_AnimatedNumberSection> createState() => _AnimatedNumberSectionState();
+}
+
+class _AnimatedNumberSectionState extends State<_AnimatedNumberSection> {
+  static const _samples = [9, 1299, 123450, 99999900, -4250];
+
+  int _sampleIndex = 2;
+  int _cents = _samples[2];
+
+  String _formatCents(num rawValue) {
+    final cents = rawValue.toInt();
+    final absolute = cents.abs();
+    final whole = absolute ~/ 100;
+    final fraction = (absolute % 100).toString().padLeft(2, '0');
+    final digits = whole.toString();
+    final grouped = StringBuffer();
+    for (var index = 0; index < digits.length; index++) {
+      if (index > 0 && (digits.length - index) % 3 == 0) {
+        grouped.write(',');
+      }
+      grouped.write(digits[index]);
+    }
+    return '${cents.isNegative ? '-' : ''}\$$grouped.$fraction';
+  }
+
+  void _adjust(int delta) => setState(() => _cents += delta);
+
+  void _cycleValue() {
+    setState(() {
+      _sampleIndex = (_sampleIndex + 1) % _samples.length;
+      _cents = _samples[_sampleIndex];
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = CLTheme.of(context);
+    return _SectionCard(
+      title: 'CLAnimatedNumber',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 52,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: CLAnimatedNumber(
+                _cents,
+                key: const Key('animated-number-demo'),
+                formatter: _formatCents,
+                style: theme.typography.monoStrong.copyWith(
+                  color: theme.colors.textPrimary,
+                  fontSize: 36,
+                  height: 1.15,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              CLIconButton(
+                key: const Key('animated-number-decrement'),
+                icon: Icons.remove_rounded,
+                size: CLControlSize.small,
+                semanticLabel: '减少金额',
+                onPressed: () => _adjust(-1199),
+              ),
+              const SizedBox(width: 8),
+              CLTooltip(
+                message: '切换数值',
+                child: CLIconButton(
+                  key: const Key('animated-number-cycle'),
+                  icon: Icons.swap_vert_rounded,
+                  size: CLControlSize.small,
+                  semanticLabel: '切换数值',
+                  onPressed: _cycleValue,
+                ),
+              ),
+              const SizedBox(width: 8),
+              CLIconButton(
+                key: const Key('animated-number-increment'),
+                icon: Icons.add_rounded,
+                size: CLControlSize.small,
+                semanticLabel: '增加金额',
+                onPressed: () => _adjust(1199),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProgressSection extends StatefulWidget {
   const _ProgressSection();
 

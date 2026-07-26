@@ -1,5 +1,10 @@
 ## Unreleased
 
+* Added `CLAnimatedNumber`, an interruptible SwiftUI-style numeric-text
+  transition with changed-digit rolling, stable formatting decoration,
+  animated intrinsic width, spring velocity handoff, velocity-driven vertical
+  motion blur, reduced-motion snapping, and single-value semantics.
+
 * Numeric `CLTextField` steppers now support vertical scrubbing from the
   trailing arrow strip, mouse-wheel and Up/Down adjustment, press-and-hold
   repeat, touch long-press activation, and accessible increase/decrease
