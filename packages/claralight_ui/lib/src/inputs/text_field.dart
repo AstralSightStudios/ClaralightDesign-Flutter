@@ -9,6 +9,13 @@ import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
 import '../theme/theme.dart';
 
+/// The screen direction in which a numeric field's value increases.
+///
+/// The default preserves conventional numeric steppers: up increases and down
+/// decreases. Positional fields can use [right] for X and [down] for Y so the
+/// controls move an element in the direction shown by their chevrons.
+enum CLNumericStepperDirection { up, down, left, right }
+
 /// A Claralight text field — the inspector inputs of the desktop mockup
 /// ("X 12px", "W 78") and the touch fields of the mobile mockup.
 ///
@@ -28,6 +35,10 @@ class CLTextField extends StatefulWidget {
 
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+
+  /// Called when buttons, dragging, scrolling, or arrow keys change a number.
+  final ValueChanged<String>? onStepped;
+
   final TextInputType? keyboardType;
   final bool enabled;
 
@@ -45,6 +56,9 @@ class CLTextField extends StatefulWidget {
   /// A value of zero disables numeric adjustment and hides the step buttons.
   /// This only applies when [keyboardType] is numeric.
   final double step;
+
+  /// Direction in which stepping increases the value.
+  final CLNumericStepperDirection stepperDirection;
 
   /// Optional inclusive bounds for numeric input.
   final double? min;
@@ -75,6 +89,7 @@ class CLTextField extends StatefulWidget {
     this.suffix,
     this.onChanged,
     this.onSubmitted,
+    this.onStepped,
     this.keyboardType,
     this.enabled = true,
     this.error = false,
@@ -82,6 +97,7 @@ class CLTextField extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.size = CLControlSize.large,
     this.step = 0,
+    this.stepperDirection = CLNumericStepperDirection.up,
     this.min,
     this.max,
     this.format,
@@ -232,6 +248,7 @@ class _CLTextFieldState extends State<CLTextField> {
       selection: TextSelection.collapsed(offset: text.length),
     );
     widget.onChanged?.call(text);
+    widget.onStepped?.call(text);
     return true;
   }
 
@@ -266,6 +283,18 @@ class _CLTextFieldState extends State<CLTextField> {
         keyboard.isMetaPressed;
   }
 
+  Axis get _stepperAxis => switch (widget.stepperDirection) {
+    CLNumericStepperDirection.up ||
+    CLNumericStepperDirection.down => Axis.vertical,
+    CLNumericStepperDirection.left ||
+    CLNumericStepperDirection.right => Axis.horizontal,
+  };
+
+  double get _leadingStepDirection => switch (widget.stepperDirection) {
+    CLNumericStepperDirection.up || CLNumericStepperDirection.left => 1,
+    CLNumericStepperDirection.down || CLNumericStepperDirection.right => -1,
+  };
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (!_showsStepper || !widget.enabled) return KeyEventResult.ignored;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -277,12 +306,24 @@ class _CLTextFieldState extends State<CLTextField> {
       return KeyEventResult.ignored;
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _bump(1);
+    if (_stepperAxis == Axis.vertical &&
+        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _bump(_leadingStepDirection);
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _bump(-1);
+    if (_stepperAxis == Axis.vertical &&
+        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _bump(-_leadingStepDirection);
+      return KeyEventResult.handled;
+    }
+    if (_stepperAxis == Axis.horizontal &&
+        event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _bump(_leadingStepDirection);
+      return KeyEventResult.handled;
+    }
+    if (_stepperAxis == Axis.horizontal &&
+        event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _bump(-_leadingStepDirection);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -408,6 +449,7 @@ class _CLTextFieldState extends State<CLTextField> {
                     key: const Key('cl-text-field-stepper-drag-zone'),
                     height: _height,
                     focused: focused,
+                    increaseDirection: widget.stepperDirection,
                     canStep: (direction) => _canStep(direction.toDouble()),
                     onStep: _bumpSteps,
                     onRequestFocus: _focusNode.requestFocus,
@@ -493,6 +535,7 @@ class _NumericStepper extends StatefulWidget {
 
   final double height;
   final bool focused;
+  final CLNumericStepperDirection increaseDirection;
   final bool Function(int direction) canStep;
   final bool Function(int steps) onStep;
   final VoidCallback onRequestFocus;
@@ -501,6 +544,7 @@ class _NumericStepper extends StatefulWidget {
     super.key,
     required this.height,
     required this.focused,
+    required this.increaseDirection,
     required this.canStep,
     required this.onStep,
     required this.onRequestFocus,
@@ -536,6 +580,25 @@ class _NumericStepperState extends State<_NumericStepper>
   double _lastTouchOffset = 0;
 
   bool get _canAdjust => widget.canStep(1) || widget.canStep(-1);
+
+  Axis get _axis => switch (widget.increaseDirection) {
+    CLNumericStepperDirection.up ||
+    CLNumericStepperDirection.down => Axis.vertical,
+    CLNumericStepperDirection.left ||
+    CLNumericStepperDirection.right => Axis.horizontal,
+  };
+
+  int get _leadingDirection => switch (widget.increaseDirection) {
+    CLNumericStepperDirection.up || CLNumericStepperDirection.left => 1,
+    CLNumericStepperDirection.down || CLNumericStepperDirection.right => -1,
+  };
+
+  double _primaryOffset(Offset offset) =>
+      _axis == Axis.vertical ? offset.dy : offset.dx;
+
+  bool _isPrimaryMovement(Offset offset) => _axis == Axis.vertical
+      ? offset.dy.abs() >= offset.dx.abs()
+      : offset.dx.abs() >= offset.dy.abs();
 
   @override
   void initState() {
@@ -653,19 +716,33 @@ class _NumericStepperState extends State<_NumericStepper>
   }
 
   int? _directionAt(Offset localPosition) {
-    if (localPosition.dx < 0 ||
-        localPosition.dx >= _NumericStepper.arrowWidth) {
+    if (_axis == Axis.vertical) {
+      if (localPosition.dx < 0 ||
+          localPosition.dx >= _NumericStepper.arrowWidth) {
+        return null;
+      }
+
+      final top = (widget.height - 2 * _NumericStepper.arrowHeight) / 2;
+      if (localPosition.dy >= top &&
+          localPosition.dy < top + _NumericStepper.arrowHeight) {
+        return _leadingDirection;
+      }
+      if (localPosition.dy >= top + _NumericStepper.arrowHeight &&
+          localPosition.dy < top + 2 * _NumericStepper.arrowHeight) {
+        return -_leadingDirection;
+      }
       return null;
     }
 
-    final top = (widget.height - 2 * _NumericStepper.arrowHeight) / 2;
-    if (localPosition.dy >= top &&
-        localPosition.dy < top + _NumericStepper.arrowHeight) {
-      return 1;
+    const left = 0.0;
+    if (localPosition.dy < 0 || localPosition.dy >= widget.height) return null;
+    if (localPosition.dx >= left &&
+        localPosition.dx < left + _NumericStepper.arrowHeight) {
+      return _leadingDirection;
     }
-    if (localPosition.dy >= top + _NumericStepper.arrowHeight &&
-        localPosition.dy < top + 2 * _NumericStepper.arrowHeight) {
-      return -1;
+    if (localPosition.dx >= left + _NumericStepper.arrowHeight &&
+        localPosition.dx < left + 2 * _NumericStepper.arrowHeight) {
+      return -_leadingDirection;
     }
     return null;
   }
@@ -697,17 +774,17 @@ class _NumericStepperState extends State<_NumericStepper>
     final offset = details.localOffsetFromOrigin;
 
     if (!_touchDragActive) {
-      if (offset.dx.abs() >= _pixelsPerStep &&
-          offset.dx.abs() > offset.dy.abs()) {
+      final primary = _primaryOffset(offset).abs();
+      final secondary = _axis == Axis.vertical
+          ? offset.dx.abs()
+          : offset.dy.abs();
+      if (secondary >= _pixelsPerStep && secondary > primary) {
         _stopRepeatTimers();
         _pressedDirection = null;
         _interactionCanceled = true;
         return;
       }
-      if (offset.dy.abs() < _pixelsPerStep ||
-          offset.dy.abs() < offset.dx.abs()) {
-        return;
-      }
+      if (primary < _pixelsPerStep || !_isPrimaryMovement(offset)) return;
 
       _touchDragActive = true;
       _stopRepeatTimers();
@@ -716,8 +793,9 @@ class _NumericStepperState extends State<_NumericStepper>
       _lastTouchOffset = 0;
     }
 
-    final delta = offset.dy - _lastTouchOffset;
-    _lastTouchOffset = offset.dy;
+    final primaryOffset = _primaryOffset(offset);
+    final delta = primaryOffset - _lastTouchOffset;
+    _lastTouchOffset = primaryOffset;
     _applyScrubDelta(delta);
   }
 
@@ -752,7 +830,7 @@ class _NumericStepperState extends State<_NumericStepper>
   }
 
   void _applyScrubDelta(double pointerDelta) {
-    _scrubRemainder -= pointerDelta;
+    _scrubRemainder -= pointerDelta * _leadingDirection;
     final steps = (_scrubRemainder / _pixelsPerStep).truncate();
     if (steps == 0) return;
 
@@ -773,23 +851,46 @@ class _NumericStepperState extends State<_NumericStepper>
     if (!_canAdjust) return const <Type, GestureRecognizerFactory>{};
 
     return <Type, GestureRecognizerFactory>{
-      _VerticalScrubGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<_VerticalScrubGestureRecognizer>(
-            () => _VerticalScrubGestureRecognizer(
-              debugOwner: this,
-              supportedDevices: _precisePointerKinds,
+      if (_axis == Axis.vertical)
+        _VerticalScrubGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<
+              _VerticalScrubGestureRecognizer
+            >(
+              () => _VerticalScrubGestureRecognizer(
+                debugOwner: this,
+                supportedDevices: _precisePointerKinds,
+              ),
+              (recognizer) {
+                recognizer
+                  ..gestureSettings = gestureSettings
+                  ..dragStartBehavior = DragStartBehavior.down
+                  ..onlyAcceptDragOnThreshold = true
+                  ..onStart = _handlePreciseDragStart
+                  ..onUpdate = _handlePreciseDragUpdate
+                  ..onEnd = _handlePreciseDragEnd
+                  ..onCancel = _finishInteraction;
+              },
+            )
+      else
+        _HorizontalScrubGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<
+              _HorizontalScrubGestureRecognizer
+            >(
+              () => _HorizontalScrubGestureRecognizer(
+                debugOwner: this,
+                supportedDevices: _precisePointerKinds,
+              ),
+              (recognizer) {
+                recognizer
+                  ..gestureSettings = gestureSettings
+                  ..dragStartBehavior = DragStartBehavior.down
+                  ..onlyAcceptDragOnThreshold = true
+                  ..onStart = _handlePreciseDragStart
+                  ..onUpdate = _handlePreciseDragUpdate
+                  ..onEnd = _handlePreciseDragEnd
+                  ..onCancel = _finishInteraction;
+              },
             ),
-            (recognizer) {
-              recognizer
-                ..gestureSettings = gestureSettings
-                ..dragStartBehavior = DragStartBehavior.down
-                ..onlyAcceptDragOnThreshold = true
-                ..onStart = _handlePreciseDragStart
-                ..onUpdate = _handlePreciseDragUpdate
-                ..onEnd = _handlePreciseDragEnd
-                ..onCancel = _finishInteraction;
-            },
-          ),
       LongPressGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
             () => LongPressGestureRecognizer(
@@ -820,7 +921,11 @@ class _NumericStepperState extends State<_NumericStepper>
 
     return ExcludeSemantics(
       child: MouseRegion(
-        cursor: canAdjust ? SystemMouseCursors.resizeUpDown : MouseCursor.defer,
+        cursor: canAdjust
+            ? (_axis == Axis.vertical
+                  ? SystemMouseCursors.resizeUpDown
+                  : SystemMouseCursors.resizeLeftRight)
+            : MouseCursor.defer,
         child: RawGestureDetector(
           behavior: HitTestBehavior.opaque,
           excludeFromSemantics: true,
@@ -830,26 +935,41 @@ class _NumericStepperState extends State<_NumericStepper>
             height: widget.height,
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Column(
+              child: Flex(
+                direction: _axis,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _ChevronButton(
-                    key: const Key('cl-text-field-step-up'),
-                    up: true,
-                    enabled: widget.canStep(1),
-                    onPointerDown: (event) => _handleButtonDown(1, event),
-                    onTap: () => _handleButtonTap(1),
+                    key: Key(
+                      _axis == Axis.vertical
+                          ? 'cl-text-field-step-up'
+                          : 'cl-text-field-step-left',
+                    ),
+                    direction: _axis == Axis.vertical
+                        ? CLNumericStepperDirection.up
+                        : CLNumericStepperDirection.left,
+                    enabled: widget.canStep(_leadingDirection),
+                    onPointerDown: (event) =>
+                        _handleButtonDown(_leadingDirection, event),
+                    onTap: () => _handleButtonTap(_leadingDirection),
                     onTapCancel: _handleButtonCancel,
-                    onExit: () => _handleButtonExit(1),
+                    onExit: () => _handleButtonExit(_leadingDirection),
                   ),
                   _ChevronButton(
-                    key: const Key('cl-text-field-step-down'),
-                    up: false,
-                    enabled: widget.canStep(-1),
-                    onPointerDown: (event) => _handleButtonDown(-1, event),
-                    onTap: () => _handleButtonTap(-1),
+                    key: Key(
+                      _axis == Axis.vertical
+                          ? 'cl-text-field-step-down'
+                          : 'cl-text-field-step-right',
+                    ),
+                    direction: _axis == Axis.vertical
+                        ? CLNumericStepperDirection.down
+                        : CLNumericStepperDirection.right,
+                    enabled: widget.canStep(-_leadingDirection),
+                    onPointerDown: (event) =>
+                        _handleButtonDown(-_leadingDirection, event),
+                    onTap: () => _handleButtonTap(-_leadingDirection),
                     onTapCancel: _handleButtonCancel,
-                    onExit: () => _handleButtonExit(-1),
+                    onExit: () => _handleButtonExit(-_leadingDirection),
                   ),
                 ],
               ),
@@ -909,8 +1029,53 @@ class _VerticalScrubGestureRecognizer extends VerticalDragGestureRecognizer {
   }
 }
 
+class _HorizontalScrubGestureRecognizer
+    extends HorizontalDragGestureRecognizer {
+  Offset _distance = Offset.zero;
+  bool _trackingSequence = false;
+
+  _HorizontalScrubGestureRecognizer({super.debugOwner, super.supportedDevices})
+    : super(allowedButtonsFilter: _primaryButtonOnly);
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (!_trackingSequence) {
+      _distance = Offset.zero;
+      _trackingSequence = true;
+    }
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) _distance += event.localDelta;
+    super.handleEvent(event);
+  }
+
+  @override
+  bool hasSufficientGlobalDistanceToAccept(
+    PointerDeviceKind pointerDeviceKind,
+    double? deviceTouchSlop,
+  ) {
+    final hitSlop = switch (pointerDeviceKind) {
+      PointerDeviceKind.stylus ||
+      PointerDeviceKind.invertedStylus => kPrecisePointerHitSlop,
+      _ => computeHitSlop(pointerDeviceKind, gestureSettings),
+    };
+    return _distance.dx.abs() > hitSlop &&
+        _distance.dx.abs() >= _distance.dy.abs();
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    super.didStopTrackingLastPointer(pointer);
+    _trackingSequence = false;
+    _distance = Offset.zero;
+  }
+}
+
 class _ChevronButton extends StatefulWidget {
-  final bool up;
+  final CLNumericStepperDirection direction;
   final bool enabled;
   final ValueChanged<PointerDownEvent> onPointerDown;
   final VoidCallback onTap;
@@ -919,7 +1084,7 @@ class _ChevronButton extends StatefulWidget {
 
   const _ChevronButton({
     super.key,
-    required this.up,
+    required this.direction,
     required this.enabled,
     required this.onPointerDown,
     required this.onTap,
@@ -955,12 +1120,30 @@ class _ChevronButtonState extends State<_ChevronButton> {
           onTap: widget.enabled ? widget.onTap : null,
           onTapCancel: widget.enabled ? widget.onTapCancel : null,
           child: SizedBox(
-            width: _NumericStepper.arrowWidth,
-            height: _NumericStepper.arrowHeight,
+            width: switch (widget.direction) {
+              CLNumericStepperDirection.up ||
+              CLNumericStepperDirection.down => _NumericStepper.arrowWidth,
+              CLNumericStepperDirection.left ||
+              CLNumericStepperDirection.right => _NumericStepper.arrowHeight,
+            },
+            height: switch (widget.direction) {
+              CLNumericStepperDirection.up ||
+              CLNumericStepperDirection.down => _NumericStepper.arrowHeight,
+              CLNumericStepperDirection.left ||
+              CLNumericStepperDirection.right => _NumericStepper.arrowWidth,
+            },
             child: Center(
               child: CustomPaint(
-                size: const Size(8, 4.5),
-                painter: _StepChevronPainter(color: color, up: widget.up),
+                size: switch (widget.direction) {
+                  CLNumericStepperDirection.up ||
+                  CLNumericStepperDirection.down => const Size(8, 4.5),
+                  CLNumericStepperDirection.left ||
+                  CLNumericStepperDirection.right => const Size(4.5, 8),
+                },
+                painter: _StepChevronPainter(
+                  color: color,
+                  direction: widget.direction,
+                ),
               ),
             ),
           ),
@@ -972,9 +1155,9 @@ class _ChevronButtonState extends State<_ChevronButton> {
 
 class _StepChevronPainter extends CustomPainter {
   final Color color;
-  final bool up;
+  final CLNumericStepperDirection direction;
 
-  const _StepChevronPainter({required this.color, required this.up});
+  const _StepChevronPainter({required this.color, required this.direction});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -985,19 +1168,32 @@ class _StepChevronPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final path = up
-        ? (Path()
-            ..moveTo(0, size.height)
-            ..lineTo(size.width / 2, 0)
-            ..lineTo(size.width, size.height))
-        : (Path()
-            ..moveTo(0, 0)
-            ..lineTo(size.width / 2, size.height)
-            ..lineTo(size.width, 0));
+    final path = switch (direction) {
+      CLNumericStepperDirection.up =>
+        Path()
+          ..moveTo(0, size.height)
+          ..lineTo(size.width / 2, 0)
+          ..lineTo(size.width, size.height),
+      CLNumericStepperDirection.down =>
+        Path()
+          ..moveTo(0, 0)
+          ..lineTo(size.width / 2, size.height)
+          ..lineTo(size.width, 0),
+      CLNumericStepperDirection.left =>
+        Path()
+          ..moveTo(size.width, 0)
+          ..lineTo(0, size.height / 2)
+          ..lineTo(size.width, size.height),
+      CLNumericStepperDirection.right =>
+        Path()
+          ..moveTo(0, 0)
+          ..lineTo(size.width, size.height / 2)
+          ..lineTo(0, size.height),
+    };
     canvas.drawPath(path, paint);
   }
 
   @override
   bool shouldRepaint(_StepChevronPainter oldDelegate) =>
-      color != oldDelegate.color || up != oldDelegate.up;
+      color != oldDelegate.color || direction != oldDelegate.direction;
 }
