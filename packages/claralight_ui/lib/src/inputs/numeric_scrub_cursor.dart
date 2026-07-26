@@ -89,6 +89,15 @@ class NumericScrubCursorSession {
     }
 
     if (!synchronized) {
+      final isUnsynchronizedTeleport =
+          (position.dx - target.dx).abs() <= edgeInset &&
+          delta.dx.abs() > edgeInset;
+      if (isUnsynchronizedTeleport) {
+        _pendingWarpTarget = null;
+        _pendingWarpSawStaleEvent = false;
+        return (delta: Offset.zero, position: position, canWrap: false);
+      }
+
       _pendingWarpSawStaleEvent = true;
       return (delta: delta, position: position, canWrap: false);
     }

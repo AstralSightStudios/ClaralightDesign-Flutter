@@ -160,6 +160,7 @@ class _CLTextFieldState extends State<CLTextField>
   late final AnimationController _rulerSpacingTransition;
   late final NumericScrubCursorSession _scrubCursorSession;
 
+  int? _scrubMouseDevice;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   bool _showValidationError = false;
@@ -426,12 +427,33 @@ class _CLTextFieldState extends State<CLTextField>
   }
 
   void _prepareScrubCursor(PointerDownEvent event) {
+    final isMouse = event.kind == PointerDeviceKind.mouse;
+    _scrubMouseDevice = isMouse ? event.device : null;
     _scrubCursorSession.prepare(
-      enabled:
-          widget.wrapNumericScrubCursor &&
-          event.kind == PointerDeviceKind.mouse,
+      enabled: widget.wrapNumericScrubCursor && isMouse,
       position: event.position,
     );
+  }
+
+  void _keepScrubMouseCursor() {
+    final device = _scrubMouseDevice;
+    if (device == null) return;
+
+    void activate() {
+      unawaited(
+        SystemChannels.mouseCursor.invokeMethod<void>('activateSystemCursor', {
+          'device': device,
+          'kind': SystemMouseCursors.resizeLeftRight.kind,
+        }),
+      );
+    }
+
+    activate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrubGestureActive && _scrubMouseDevice == device) {
+        activate();
+      }
+    });
   }
 
   bool _beginScrub(PointerDeviceKind kind) {
@@ -455,6 +477,7 @@ class _CLTextFieldState extends State<CLTextField>
     _resetRulerSpacing();
 
     if (!_scrubPortal.isShowing) _scrubPortal.show();
+    _keepScrubMouseCursor();
     if (mounted) setState(() {});
     _animateScrubReveal(show: true);
     return true;
@@ -497,12 +520,14 @@ class _CLTextFieldState extends State<CLTextField>
       canIncrease: _canStep(1),
       canDecrease: _canStep(-1),
     );
+    _keepScrubMouseCursor();
     if (mounted) setState(() {});
   }
 
   void _endScrub() {
     if (!_scrubGestureActive) return;
     _scrubCursorSession.finish();
+    _scrubMouseDevice = null;
     _scrubGestureActive = false;
     _scrubProgress = 0;
     _scrubDy = 0;
@@ -514,6 +539,7 @@ class _CLTextFieldState extends State<CLTextField>
   void _closeScrub({required bool immediate}) {
     if (!_scrubGestureActive && !_scrubVisualMounted) return;
     _scrubCursorSession.finish();
+    _scrubMouseDevice = null;
     _scrubGestureActive = false;
     _scrubProgress = 0;
     _scrubDy = 0;

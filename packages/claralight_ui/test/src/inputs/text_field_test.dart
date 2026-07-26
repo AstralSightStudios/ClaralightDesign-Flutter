@@ -226,6 +226,30 @@ void main() {
     expect(cursorBackend.moves, hasLength(2));
   });
 
+  test('cursor warp discards an unsynchronized teleport delta', () {
+    final session = NumericScrubCursorSession(backend: cursorBackend);
+    session.prepare(enabled: true, position: const Offset(300, 200));
+    session.activate(enabled: true);
+
+    cursorBackend.ignoreMoves = true;
+    session.maybeWrap(
+      position: const Offset(796, 200),
+      horizontalDirection: 1,
+      viewSize: const Size(800, 600),
+      devicePixelRatio: 1,
+      canIncrease: true,
+      canDecrease: true,
+    );
+
+    final corrected = session.correctUpdate(
+      delta: const Offset(-792, 0),
+      position: const Offset(4, 200),
+    );
+
+    expect(corrected.delta, Offset.zero);
+    expect(corrected.canWrap, isFalse);
+  });
+
   test('cursor session survives hardware movement racing a warp', () {
     final session = NumericScrubCursorSession(backend: cursorBackend);
     session.prepare(enabled: true, position: const Offset(300, 200));
@@ -755,6 +779,51 @@ void main() {
 
     expect(scrubRuler, findsNothing);
     expect(cursorBackend.moves, [const math.Point<double>(320, 240)]);
+    await mouse.up();
+  });
+
+  testWidgets('mouse scrub keeps the horizontal resize cursor while dragging', (
+    tester,
+  ) async {
+    final cursorKinds = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.mouseCursor,
+      (call) async {
+        if (call.method == 'activateSystemCursor') {
+          cursorKinds.add(
+            (call.arguments as Map<Object?, Object?>)['kind']! as String,
+          );
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.mouseCursor,
+        null,
+      ),
+    );
+
+    final controller = TextEditingController(text: '10');
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          step: 1,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(-280, 0));
+    await tester.pump();
+
+    expect(cursorKinds.last, SystemMouseCursors.resizeLeftRight.kind);
     await mouse.up();
   });
 
