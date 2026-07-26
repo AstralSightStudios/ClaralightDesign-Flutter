@@ -1301,6 +1301,51 @@ void main() {
     await mouse.up();
   });
 
+  testWidgets('value overlay uses light theme foreground colors', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '1');
+    final theme = CLThemeData(colors: const CLColorScheme.light());
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTheme(
+          data: theme,
+          child: CLTextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            suffix: const Text('px'),
+            step: 1,
+          ),
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    await tester.pump();
+
+    final number = tester.widget<CLAnimatedNumber>(
+      find.byType(CLAnimatedNumber),
+    );
+    final suffix = find.descendant(of: scrubOverlay, matching: find.text('px'));
+
+    expect(number.style?.color, theme.colors.textPrimary);
+    expect(
+      DefaultTextStyle.of(tester.element(suffix)).style.color,
+      theme.colors.textTertiary,
+    );
+    expect(
+      IconTheme.of(tester.element(suffix)).color,
+      theme.colors.textTertiary,
+    );
+    await mouse.up();
+  });
+
   testWidgets('macOS pointer steps use the native alignment haptic channel', (
     tester,
   ) async {

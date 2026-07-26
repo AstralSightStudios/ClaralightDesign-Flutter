@@ -1665,12 +1665,12 @@ class _NumericScrubValueOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final valueStyle = theme.typography.monoStrong.copyWith(
-      color: const Color(0xFFFFFFFF),
+      color: theme.colors.textPrimary,
       fontSize: 30,
       height: 1.12,
     );
     final suffixStyle = theme.typography.mono.copyWith(
-      color: const Color(0xCFFFFFFF),
+      color: theme.colors.textTertiary,
       fontSize: 18,
       height: 1.12,
     );
@@ -1695,8 +1695,8 @@ class _NumericScrubValueOverlay extends StatelessWidget {
                 const SizedBox(width: 3),
                 IgnorePointer(
                   child: IconTheme.merge(
-                    data: const IconThemeData(
-                      color: Color(0xCFFFFFFF),
+                    data: IconThemeData(
+                      color: theme.colors.textTertiary,
                       size: 18,
                     ),
                     child: DefaultTextStyle.merge(
