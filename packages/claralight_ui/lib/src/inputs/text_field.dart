@@ -1,13 +1,19 @@
 import 'dart:async';
-import 'dart:ui' show SemanticsValidationResult;
+import 'dart:math' as math;
+import 'dart:ui' as ui show SemanticsValidationResult;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
+import '../foundation/animated_number.dart';
 import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
+import '../overlays/anchored_overlay.dart';
 import '../theme/theme.dart';
+
+const _macOSHapticsChannel = MethodChannel('dev.claralight.ui/haptics');
 
 /// The screen direction in which a numeric field's value increases.
 ///
@@ -22,6 +28,10 @@ enum CLNumericStepperDirection { up, down, left, right }
 /// A flat control-fill rounded rectangle with an optional [prefix] label
 /// (dimmed, e.g. the axis letter), an optional [suffix] (unit or actions)
 /// and an animated accent focus ring.
+///
+/// Numeric fields with a non-zero [step] can be scrubbed horizontally from the
+/// prefix or arrow strip. Vertical movement changes ruler spacing and therefore
+/// precision; every tick crossing the center commits exactly one step.
 class CLTextField extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
@@ -128,18 +138,63 @@ class CLTextField extends StatefulWidget {
   State<CLTextField> createState() => _CLTextFieldState();
 }
 
-class _CLTextFieldState extends State<CLTextField> {
+class _CLTextFieldState extends State<CLTextField>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late TextEditingController _controller;
   late FocusNode _focusNode;
+  final FocusNode _operationFocusNode = FocusNode(
+    debugLabel: 'CLTextField numeric operation focus',
+  );
+  final OverlayPortalController _scrubPortal = OverlayPortalController();
+  final GlobalKey _scrubAnchorKey = GlobalKey();
+  late final AnimationController _scrubReveal;
+  late final AnimationController _rulerSpacingTransition;
+
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   bool _showValidationError = false;
+  bool _operationFocusRequested = false;
+  bool _disableAnimations = false;
+  bool _scrubGestureActive = false;
+  bool _scrubVisualMounted = false;
+  bool _hapticSentThisFrame = false;
+  double _scrubDy = 0;
+  int _scrubTier = 0;
+  double _scrubProgress = 0;
+  double _scrubMultiplier = 1;
+  double _rulerSpacingFrom = _NumericScrubMetrics.baseSpacing;
+  double _rulerSpacingTarget = _NumericScrubMetrics.baseSpacing;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _scrubReveal = AnimationController(
+      vsync: this,
+      duration: CLMotion.fast,
+      reverseDuration: const Duration(milliseconds: 110),
+      animationBehavior: AnimationBehavior.preserve,
+    )..addStatusListener(_handleScrubRevealStatus);
+    _rulerSpacingTransition = AnimationController(
+      vsync: this,
+      duration: _NumericScrubMetrics.spacingTransitionDuration,
+      value: 1,
+      animationBehavior: AnimationBehavior.preserve,
+    );
+    _operationFocusNode.addListener(_onOperationFocusChanged);
     _adoptController();
     _adoptFocusNode();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (disableAnimations && !_disableAnimations) {
+      _rulerSpacingFrom = _rulerSpacingTarget;
+      _rulerSpacingTransition.value = 1;
+    }
+    _disableAnimations = disableAnimations;
   }
 
   @override
@@ -154,6 +209,12 @@ class _CLTextFieldState extends State<CLTextField> {
       _focusNode.removeListener(_onFocusChanged);
       if (_ownsFocusNode) _focusNode.dispose();
       _adoptFocusNode();
+    }
+    if ((!widget.enabled || !_showsStepper || _number == null) &&
+        (_scrubGestureActive || _scrubVisualMounted)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _closeScrub(immediate: true);
+      });
     }
   }
 
@@ -180,8 +241,27 @@ class _CLTextFieldState extends State<CLTextField> {
     if (mounted) setState(() {});
   }
 
+  void _onOperationFocusChanged() {
+    if (!_operationFocusNode.hasPrimaryFocus) {
+      _operationFocusRequested = false;
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _closeScrub(immediate: true);
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scrubReveal.dispose();
+    _rulerSpacingTransition.dispose();
+    _operationFocusNode.removeListener(_onOperationFocusChanged);
+    _operationFocusNode.dispose();
     _controller.removeListener(_onTextChanged);
     _focusNode.removeListener(_onFocusChanged);
     if (_ownsController) _controller.dispose();
@@ -259,6 +339,227 @@ class _CLTextFieldState extends State<CLTextField> {
     widget.onChanged?.call(text);
     widget.onStepped?.call(text);
     return true;
+  }
+
+  void _requestEditingFocus() {
+    _operationFocusRequested = false;
+    _focusNode.requestFocus();
+  }
+
+  void _requestOperationFocus() {
+    _operationFocusRequested = true;
+    _operationFocusNode.requestFocus();
+  }
+
+  bool _handlePointerStep(int steps) {
+    final changed = _bumpSteps(steps);
+    if (changed) _emitPointerHaptic();
+    return changed;
+  }
+
+  void _emitPointerHaptic() {
+    if (_hapticSentThisFrame) return;
+    _hapticSentThisFrame = true;
+    unawaited(_performSelectionHaptic());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hapticSentThisFrame = false;
+    });
+  }
+
+  Future<void> _performSelectionHaptic() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+      try {
+        await _macOSHapticsChannel.invokeMethod<void>('selectionClick');
+      } on MissingPluginException {
+        // Older hosts may not have regenerated plugin registration yet.
+      } on PlatformException {
+        // Haptics are nonessential and may be unavailable on some Macs.
+      }
+      return;
+    }
+    await HapticFeedback.selectionClick();
+  }
+
+  double get _currentRulerSpacing {
+    final progress = Curves.easeOutCubic.transform(
+      _rulerSpacingTransition.value,
+    );
+    return _rulerSpacingFrom +
+        (_rulerSpacingTarget - _rulerSpacingFrom) * progress;
+  }
+
+  void _resetRulerSpacing() {
+    _rulerSpacingTransition.stop();
+    _rulerSpacingFrom = _NumericScrubMetrics.baseSpacing;
+    _rulerSpacingTarget = _NumericScrubMetrics.baseSpacing;
+    _rulerSpacingTransition.value = 1;
+  }
+
+  void _transitionRulerSpacing(double multiplier) {
+    if (multiplier == _scrubMultiplier) return;
+    final current = _currentRulerSpacing;
+    _rulerSpacingTransition.stop();
+    _rulerSpacingFrom = current;
+    _rulerSpacingTarget = _NumericScrubMetrics.baseSpacing / multiplier;
+    if (_disableAnimations) {
+      _rulerSpacingTransition.value = 1;
+    } else {
+      _rulerSpacingTransition.forward(from: 0);
+    }
+    _scrubMultiplier = multiplier;
+  }
+
+  bool _beginScrub(PointerDeviceKind kind) {
+    if (_scrubGestureActive || !_canAdjustNumber) return false;
+
+    if (kind == PointerDeviceKind.touch) {
+      _requestOperationFocus();
+    } else {
+      _requestEditingFocus();
+    }
+
+    _scrubGestureActive = true;
+    _scrubVisualMounted = true;
+    _scrubDy = 0;
+    _scrubTier = 0;
+    _scrubProgress = 0;
+    _scrubMultiplier = 1;
+    _resetRulerSpacing();
+
+    if (!_scrubPortal.isShowing) _scrubPortal.show();
+    if (mounted) setState(() {});
+    _animateScrubReveal(show: true);
+    return true;
+  }
+
+  void _updateScrub(Offset delta) {
+    if (!_scrubGestureActive) return;
+
+    _scrubDy += delta.dy;
+    _transitionRulerSpacing(_updateScrubMultiplierForDy(_scrubDy));
+
+    if (delta.dx != 0) {
+      final direction = delta.dx.sign;
+      if (!_canStep(direction)) {
+        _scrubProgress = 0;
+      } else {
+        final combined = _scrubProgress + delta.dx / _currentRulerSpacing;
+        final steps = combined.truncate();
+        if (steps == 0) {
+          _scrubProgress = combined;
+        } else if (_handlePointerStep(steps)) {
+          _scrubProgress = combined - steps;
+          if (!_canStep(steps.sign.toDouble())) _scrubProgress = 0;
+        } else {
+          _scrubProgress = 0;
+        }
+      }
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  void _endScrub() {
+    if (!_scrubGestureActive) return;
+    _scrubGestureActive = false;
+    _scrubProgress = 0;
+    _scrubDy = 0;
+    _scrubTier = 0;
+    if (mounted) setState(() {});
+    _animateScrubReveal(show: false);
+  }
+
+  void _closeScrub({required bool immediate}) {
+    if (!_scrubGestureActive && !_scrubVisualMounted) return;
+    _scrubGestureActive = false;
+    _scrubProgress = 0;
+    _scrubDy = 0;
+    _scrubTier = 0;
+
+    if (!immediate) {
+      if (mounted) setState(() {});
+      _animateScrubReveal(show: false);
+      return;
+    }
+
+    _scrubReveal.stop();
+    _scrubReveal.value = 0;
+    _scrubMultiplier = 1;
+    _resetRulerSpacing();
+    if (_scrubPortal.isShowing) _scrubPortal.hide();
+    _scrubVisualMounted = false;
+    if (mounted) setState(() {});
+  }
+
+  void _handleScrubRevealStatus(AnimationStatus status) {
+    if (status != AnimationStatus.dismissed || _scrubGestureActive) return;
+    if (_scrubPortal.isShowing) _scrubPortal.hide();
+    if (!_scrubVisualMounted) return;
+    _scrubMultiplier = 1;
+    _resetRulerSpacing();
+    if (mounted) setState(() => _scrubVisualMounted = false);
+  }
+
+  TickerFuture _animateScrubReveal({required bool show}) {
+    if (_disableAnimations) {
+      return show
+          ? _scrubReveal.animateTo(1, duration: CLMotion.reducedFade)
+          : _scrubReveal.animateBack(0, duration: CLMotion.reducedFade);
+    }
+    return show ? _scrubReveal.forward() : _scrubReveal.reverse();
+  }
+
+  bool get _canAdjustNumber => _canStep(1) || _canStep(-1);
+
+  double _updateScrubMultiplierForDy(double dy) {
+    while (true) {
+      final previousTier = _scrubTier;
+      switch (_scrubTier) {
+        case -2:
+          if (dy >=
+              -_NumericScrubMetrics.outerBandBoundary +
+                  _NumericScrubMetrics.bandHysteresis) {
+            _scrubTier = -1;
+          }
+        case -1:
+          if (dy <= -_NumericScrubMetrics.outerBandBoundary) {
+            _scrubTier = -2;
+          } else if (dy >=
+              -_NumericScrubMetrics.innerBandBoundary +
+                  _NumericScrubMetrics.bandHysteresis) {
+            _scrubTier = 0;
+          }
+        case 0:
+          if (dy <= -_NumericScrubMetrics.innerBandBoundary) {
+            _scrubTier = -1;
+          } else if (dy >= _NumericScrubMetrics.innerBandBoundary) {
+            _scrubTier = 1;
+          }
+        case 1:
+          if (dy <=
+              _NumericScrubMetrics.innerBandBoundary -
+                  _NumericScrubMetrics.bandHysteresis) {
+            _scrubTier = 0;
+          } else if (dy >= _NumericScrubMetrics.outerBandBoundary) {
+            _scrubTier = 2;
+          }
+        case 2:
+          if (dy <=
+              _NumericScrubMetrics.outerBandBoundary -
+                  _NumericScrubMetrics.bandHysteresis) {
+            _scrubTier = 1;
+          }
+      }
+      if (_scrubTier == previousTier) break;
+    }
+
+    return switch (_scrubTier) {
+      -2 => 4,
+      -1 => 2,
+      1 => 0.5,
+      2 => 0.25,
+      _ => 1,
+    };
   }
 
   double _clampNumber(double value) {
@@ -364,7 +665,9 @@ class _CLTextFieldState extends State<CLTextField> {
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final colors = theme.colors;
-    final focused = _focusNode.hasFocus;
+    final focused =
+        _focusNode.hasFocus ||
+        (_operationFocusRequested && _operationFocusNode.hasPrimaryFocus);
     final useMono = widget.mono || _showsStepper;
 
     final textStyle =
@@ -398,14 +701,61 @@ class _CLTextFieldState extends State<CLTextField> {
     );
 
     final horizontalPad = widget.size == CLControlSize.small ? 10.0 : 12.0;
+    final borderRadius =
+        widget.borderRadiusGeometry ??
+        BorderRadius.circular(widget.borderRadius ?? theme.radii.control);
+
+    final content = _showsStepper
+        ? Row(
+            children: [
+              if (widget.prefix case final prefix?)
+                _NumericPrefixScrubRegion(
+                  key: const Key('cl-text-field-prefix-scrub-zone'),
+                  enabled: _canAdjustNumber,
+                  height: _height,
+                  onRequestOperationFocus: _requestOperationFocus,
+                  onScrubStart: _beginScrub,
+                  onScrubUpdate: _updateScrub,
+                  onScrubEnd: _endScrub,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: horizontalPad, right: 10),
+                    child: _stepperSlot(prefix, theme, unit: false),
+                  ),
+                )
+              else
+                SizedBox(width: horizontalPad),
+              Expanded(
+                child: KeyedSubtree(
+                  key: _scrubAnchorKey,
+                  child: _buildNumericBody(
+                    field: field,
+                    theme: theme,
+                    focused: focused,
+                  ),
+                ),
+              ),
+            ],
+          )
+        : Row(
+            children: [
+              if (widget.prefix != null) ...[
+                _slot(widget.prefix!, theme),
+                SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
+              ],
+              Expanded(child: Center(child: field)),
+              if (widget.suffix != null) ...[
+                SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
+                _slot(widget.suffix!, theme),
+              ],
+            ],
+          );
 
     final control = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: widget.enabled && !widget.readOnly
-          ? _focusNode.requestFocus
-          : null,
+      onTap: widget.enabled && !widget.readOnly ? _requestEditingFocus : null,
       child: Focus(
-        canRequestFocus: false,
+        focusNode: _operationFocusNode,
+        skipTraversal: true,
         onKeyEvent: _handleKeyEvent,
         child: SizedBox(
           width: widget.width,
@@ -417,13 +767,7 @@ class _CLTextFieldState extends State<CLTextField> {
               color: widget.enabled
                   ? colors.control
                   : colors.control.withValues(alpha: colors.control.a * 0.5),
-              borderRadius:
-                  widget.borderRadiusGeometry ??
-                  BorderRadius.circular(
-                    widget.borderRadius ?? theme.radii.control,
-                  ),
-              // Error fields retain a visible danger outline at rest; focus
-              // strengthens the active accent or danger ring.
+              borderRadius: borderRadius,
               side: BorderSide(
                 color: _showsError
                     ? colors.danger
@@ -434,55 +778,10 @@ class _CLTextFieldState extends State<CLTextField> {
                 strokeAlign: BorderSide.strokeAlignInside,
               ),
             ),
-            padding: EdgeInsets.only(
-              left: horizontalPad,
-              right: _showsStepper ? 0 : horizontalPad,
-            ),
-            child: Row(
-              children: [
-                if (_showsStepper) ...[
-                  if (widget.prefix != null) ...[
-                    _stepperSlot(widget.prefix!, theme, unit: false),
-                    const SizedBox(width: 10),
-                  ],
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            fit: FlexFit.loose,
-                            child: IntrinsicWidth(child: field),
-                          ),
-                          if (widget.suffix != null)
-                            _stepperSlot(widget.suffix!, theme, unit: true),
-                        ],
-                      ),
-                    ),
-                  ),
-                  _NumericStepper(
-                    key: const Key('cl-text-field-stepper-drag-zone'),
-                    height: _height,
-                    focused: focused,
-                    increaseDirection: widget.stepperDirection,
-                    canStep: (direction) => _canStep(direction.toDouble()),
-                    onStep: _bumpSteps,
-                    onRequestFocus: _focusNode.requestFocus,
-                  ),
-                ] else ...[
-                  if (widget.prefix != null) ...[
-                    _slot(widget.prefix!, theme),
-                    SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
-                  ],
-                  Expanded(child: Center(child: field)),
-                  if (widget.suffix != null) ...[
-                    SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
-                    _slot(widget.suffix!, theme),
-                  ],
-                ],
-              ],
-            ),
+            padding: _showsStepper
+                ? EdgeInsets.zero
+                : EdgeInsets.symmetric(horizontal: horizontalPad),
+            child: content,
           ),
         ),
       ),
@@ -492,8 +791,8 @@ class _CLTextFieldState extends State<CLTextField> {
     final decreasedValue = _semanticSteppedValue(-1);
     return Semantics(
       validationResult: _showsError
-          ? SemanticsValidationResult.invalid
-          : SemanticsValidationResult.none,
+          ? ui.SemanticsValidationResult.invalid
+          : ui.SemanticsValidationResult.none,
       value: increasedValue != null || decreasedValue != null
           ? _controller.text
           : null,
@@ -503,7 +802,128 @@ class _CLTextFieldState extends State<CLTextField> {
       onDecrease: decreasedValue != null ? () => _bump(-1) : null,
       child: Listener(
         onPointerSignal: _showsStepper ? _handlePointerSignal : null,
-        child: control,
+        child: OverlayPortal(
+          controller: _scrubPortal,
+          overlayChildBuilder: _buildScrubOverlay,
+          child: control,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNumericBody({
+    required Widget field,
+    required CLThemeData theme,
+    required bool focused,
+  }) {
+    final regularContent = Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: IntrinsicWidth(child: field),
+                ),
+                if (!_scrubVisualMounted && widget.suffix != null)
+                  _stepperSlot(widget.suffix!, theme, unit: true),
+              ],
+            ),
+          ),
+        ),
+        _NumericStepper(
+          key: const Key('cl-text-field-stepper-drag-zone'),
+          height: _height,
+          focused: focused,
+          increaseDirection: widget.stepperDirection,
+          canStep: (direction) => _canStep(direction.toDouble()),
+          onPointerStep: _handlePointerStep,
+          onRequestEditingFocus: _requestEditingFocus,
+          onRequestOperationFocus: _requestOperationFocus,
+          onScrubStart: _beginScrub,
+          onScrubUpdate: _updateScrub,
+          onScrubEnd: _endScrub,
+        ),
+      ],
+    );
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([_scrubReveal, _rulerSpacingTransition]),
+      child: regularContent,
+      builder: (context, child) {
+        final presence = CLMotion.easeOut.transform(_scrubReveal.value);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Opacity(opacity: 1 - presence, child: child),
+            if (_scrubVisualMounted)
+              IgnorePointer(
+                child: ExcludeSemantics(
+                  child: Opacity(
+                    opacity: presence,
+                    child: CustomPaint(
+                      key: const Key('cl-text-field-scrub-ruler'),
+                      painter: _NumericScrubRulerPainter(
+                        color: theme.colors.textPrimary,
+                        progress: _scrubProgress,
+                        spacing: _currentRulerSpacing,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildScrubOverlay(BuildContext context) {
+    final value = _number;
+    if (!_scrubVisualMounted || value == null) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = CLTheme.of(context);
+    final colors = theme.colors;
+    final maxWidth = math.max(80.0, MediaQuery.sizeOf(context).width - 40);
+
+    return IgnorePointer(
+      child: ExcludeSemantics(
+        child: AnimatedBuilder(
+          animation: _scrubReveal,
+          builder: (context, child) {
+            final opacity = CLMotion.easeOut.transform(_scrubReveal.value);
+            return CLAnchoredOverlay(
+              key: const Key('cl-text-field-scrub-popover'),
+              anchorKey: _scrubAnchorKey,
+              position: CLPopoverPosition.top,
+              showArrow: true,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              borderRadius: theme.radii.panel,
+              fill: colors.frost.withValues(alpha: colors.frost.a * 0.68),
+              outlineColor: colors.outlineStrong,
+              shadowColor: const Color(0x59000000),
+              shadowBlur: 24,
+              shadowOffset: const Offset(0, 10),
+              opacity: opacity,
+              scale: _disableAnimations ? 1 : 0.96 + 0.04 * opacity,
+              child: child!,
+            );
+          },
+          child: _NumericScrubValueOverlay(
+            key: const Key('cl-text-field-scrub-value-overlay'),
+            value: value,
+            formattedValue:
+                widget.format?.call(value) ?? _defaultNumberFormat(value),
+            suffix: widget.suffix,
+            maxWidth: maxWidth,
+            theme: theme,
+          ),
+        ),
       ),
     );
   }
@@ -544,17 +964,133 @@ class _CLTextFieldState extends State<CLTextField> {
   }
 }
 
+abstract final class _NumericScrubMetrics {
+  static const double baseSpacing = 8;
+  static const Duration spacingTransitionDuration = Duration(milliseconds: 80);
+  static const double innerBandBoundary = 20;
+  static const double outerBandBoundary = 60;
+  static const double bandHysteresis = 4;
+  static const double preciseActivationDistance = 4;
+  static const double touchActivationDistance = 8;
+}
+
+const _preciseScrubPointerKinds = <PointerDeviceKind>{
+  PointerDeviceKind.mouse,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+  PointerDeviceKind.unknown,
+};
+
+bool _primaryButtonOnly(int buttons) => buttons == kPrimaryButton;
+
+typedef _ScrubStartCallback = bool Function(PointerDeviceKind kind);
+
+class _NumericPrefixScrubRegion extends StatefulWidget {
+  const _NumericPrefixScrubRegion({
+    super.key,
+    required this.enabled,
+    required this.height,
+    required this.onRequestOperationFocus,
+    required this.onScrubStart,
+    required this.onScrubUpdate,
+    required this.onScrubEnd,
+    required this.child,
+  });
+
+  final bool enabled;
+  final double height;
+  final VoidCallback onRequestOperationFocus;
+  final _ScrubStartCallback onScrubStart;
+  final ValueChanged<Offset> onScrubUpdate;
+  final VoidCallback onScrubEnd;
+  final Widget child;
+
+  @override
+  State<_NumericPrefixScrubRegion> createState() =>
+      _NumericPrefixScrubRegionState();
+}
+
+class _NumericPrefixScrubRegionState extends State<_NumericPrefixScrubRegion> {
+  bool _preciseScrubActive = false;
+  bool _touchLongPressActive = false;
+  bool _touchScrubActive = false;
+  Offset _lastTouchOffset = Offset.zero;
+
+  void _handlePreciseStart(DragStartDetails details) {
+    _preciseScrubActive = widget.onScrubStart(
+      details.kind ?? PointerDeviceKind.unknown,
+    );
+  }
+
+  void _handlePreciseUpdate(DragUpdateDetails details) {
+    if (_preciseScrubActive) widget.onScrubUpdate(details.delta);
+  }
+
+  void _handlePreciseEnd([Object? _]) {
+    if (_preciseScrubActive) widget.onScrubEnd();
+    _preciseScrubActive = false;
+  }
+
+  void _handleTouchStart(LongPressStartDetails details) {
+    if (!widget.enabled) return;
+    _touchLongPressActive = true;
+    _touchScrubActive = false;
+    _lastTouchOffset = Offset.zero;
+    widget.onRequestOperationFocus();
+  }
+
+  void _handleTouchMove(LongPressMoveUpdateDetails details) {
+    if (!_touchLongPressActive) return;
+    final offset = details.localOffsetFromOrigin;
+    if (!_touchScrubActive) {
+      if (offset.distance < _NumericScrubMetrics.touchActivationDistance) {
+        return;
+      }
+      _touchScrubActive = widget.onScrubStart(PointerDeviceKind.touch);
+      if (!_touchScrubActive) return;
+    }
+
+    final delta = offset - _lastTouchOffset;
+    _lastTouchOffset = offset;
+    widget.onScrubUpdate(delta);
+  }
+
+  void _handleTouchEnd([Object? _]) {
+    if (_touchScrubActive) widget.onScrubEnd();
+    _touchLongPressActive = false;
+    _touchScrubActive = false;
+    _lastTouchOffset = Offset.zero;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: MouseRegion(
+        cursor: widget.enabled
+            ? SystemMouseCursors.resizeLeftRight
+            : MouseCursor.defer,
+        child: _NumericScrubGestureDetector(
+          enabled: widget.enabled,
+          onPreciseStart: _handlePreciseStart,
+          onPreciseUpdate: _handlePreciseUpdate,
+          onPreciseEnd: _handlePreciseEnd,
+          onTouchStart: _handleTouchStart,
+          onTouchMove: _handleTouchMove,
+          onTouchEnd: _handleTouchEnd,
+          child: SizedBox(
+            height: widget.height,
+            child: Align(alignment: Alignment.center, child: widget.child),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NumericStepper extends StatefulWidget {
   static const double width = 24;
   static const double arrowWidth = 18;
   static const double arrowHeight = 10;
-
-  final double height;
-  final bool focused;
-  final CLNumericStepperDirection increaseDirection;
-  final bool Function(int direction) canStep;
-  final bool Function(int steps) onStep;
-  final VoidCallback onRequestFocus;
 
   const _NumericStepper({
     super.key,
@@ -562,9 +1098,24 @@ class _NumericStepper extends StatefulWidget {
     required this.focused,
     required this.increaseDirection,
     required this.canStep,
-    required this.onStep,
-    required this.onRequestFocus,
+    required this.onPointerStep,
+    required this.onRequestEditingFocus,
+    required this.onRequestOperationFocus,
+    required this.onScrubStart,
+    required this.onScrubUpdate,
+    required this.onScrubEnd,
   });
+
+  final double height;
+  final bool focused;
+  final CLNumericStepperDirection increaseDirection;
+  final bool Function(int direction) canStep;
+  final bool Function(int steps) onPointerStep;
+  final VoidCallback onRequestEditingFocus;
+  final VoidCallback onRequestOperationFocus;
+  final _ScrubStartCallback onScrubStart;
+  final ValueChanged<Offset> onScrubUpdate;
+  final VoidCallback onScrubEnd;
 
   @override
   State<_NumericStepper> createState() => _NumericStepperState();
@@ -576,24 +1127,17 @@ class _NumericStepperState extends State<_NumericStepper>
   static const _repeatDelay = Duration(milliseconds: 500);
   static const _touchRepeatDelay = Duration(milliseconds: 200);
   static const _repeatInterval = Duration(milliseconds: 80);
-  static const double _pixelsPerStep = 8;
-  static const _precisePointerKinds = <PointerDeviceKind>{
-    PointerDeviceKind.mouse,
-    PointerDeviceKind.stylus,
-    PointerDeviceKind.invertedStylus,
-    PointerDeviceKind.unknown,
-  };
 
   Timer? _repeatDelayTimer;
   Timer? _repeatTimer;
   int? _pressedDirection;
+  PointerDeviceKind? _pressedKind;
   bool _didRepeat = false;
   bool _touchLongPressActive = false;
-  bool _touchDragActive = false;
-  bool _preciseDragActive = false;
+  bool _touchScrubActive = false;
+  bool _preciseScrubActive = false;
   bool _interactionCanceled = false;
-  double _scrubRemainder = 0;
-  double _lastTouchOffset = 0;
+  Offset _lastTouchOffset = Offset.zero;
 
   bool get _canAdjust => widget.canStep(1) || widget.canStep(-1);
 
@@ -609,13 +1153,6 @@ class _NumericStepperState extends State<_NumericStepper>
     CLNumericStepperDirection.down || CLNumericStepperDirection.right => -1,
   };
 
-  double _primaryOffset(Offset offset) =>
-      _axis == Axis.vertical ? offset.dy : offset.dx;
-
-  bool _isPrimaryMovement(Offset offset) => _axis == Axis.vertical
-      ? offset.dy.abs() >= offset.dx.abs()
-      : offset.dx.abs() >= offset.dy.abs();
-
   @override
   void initState() {
     super.initState();
@@ -626,14 +1163,16 @@ class _NumericStepperState extends State<_NumericStepper>
   void didUpdateWidget(_NumericStepper oldWidget) {
     super.didUpdateWidget(oldWidget);
     if ((oldWidget.focused && !widget.focused) || !_canAdjust) {
-      _cancelInteraction(markCanceled: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _cancelInteraction(notifyScrubEnd: true);
+      });
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
-      _cancelInteraction(markCanceled: true);
+      _cancelInteraction(notifyScrubEnd: true);
     }
   }
 
@@ -651,26 +1190,39 @@ class _NumericStepperState extends State<_NumericStepper>
     _repeatTimer = null;
   }
 
-  void _cancelInteraction({bool markCanceled = false}) {
+  void _cancelInteraction({
+    bool markCanceled = false,
+    bool notifyScrubEnd = false,
+  }) {
+    final hadScrub = _touchScrubActive || _preciseScrubActive;
     _stopRepeatTimers();
     _pressedDirection = null;
+    _pressedKind = null;
     _didRepeat = false;
     _touchLongPressActive = false;
-    _touchDragActive = false;
-    _preciseDragActive = false;
+    _touchScrubActive = false;
+    _preciseScrubActive = false;
     _interactionCanceled = markCanceled;
-    _scrubRemainder = 0;
-    _lastTouchOffset = 0;
+    _lastTouchOffset = Offset.zero;
+    if (hadScrub && notifyScrubEnd) widget.onScrubEnd();
   }
 
   void _finishInteraction() {
-    _cancelInteraction();
+    _cancelInteraction(notifyScrubEnd: true);
     _interactionCanceled = false;
   }
 
   void _scheduleRepeat(Duration delay) {
     _repeatDelayTimer?.cancel();
     _repeatDelayTimer = Timer(delay, _startRepeating);
+  }
+
+  void _requestFocusFor(PointerDeviceKind? kind) {
+    if (kind == PointerDeviceKind.touch) {
+      widget.onRequestOperationFocus();
+    } else {
+      widget.onRequestEditingFocus();
+    }
   }
 
   void _startRepeating() {
@@ -680,14 +1232,14 @@ class _NumericStepperState extends State<_NumericStepper>
 
     _didRepeat = true;
     if (!widget.canStep(direction)) return;
-    widget.onRequestFocus();
-    if (!widget.onStep(direction) || !widget.canStep(direction)) return;
+    _requestFocusFor(_pressedKind);
+    if (!widget.onPointerStep(direction) || !widget.canStep(direction)) return;
 
     _repeatTimer = Timer.periodic(_repeatInterval, (_) {
       if (!mounted ||
           _interactionCanceled ||
           !widget.canStep(direction) ||
-          !widget.onStep(direction)) {
+          !widget.onPointerStep(direction)) {
         _repeatTimer?.cancel();
         _repeatTimer = null;
       }
@@ -699,6 +1251,7 @@ class _NumericStepperState extends State<_NumericStepper>
     _stopRepeatTimers();
     _interactionCanceled = false;
     _pressedDirection = direction;
+    _pressedKind = event.kind;
     _didRepeat = false;
     if (event.kind != PointerDeviceKind.touch) {
       _scheduleRepeat(_repeatDelay);
@@ -709,24 +1262,25 @@ class _NumericStepperState extends State<_NumericStepper>
     final repeated = _didRepeat;
     _stopRepeatTimers();
     _pressedDirection = null;
+    _pressedKind = null;
     _didRepeat = false;
 
     if (!_interactionCanceled && !repeated && widget.canStep(direction)) {
-      widget.onRequestFocus();
-      widget.onStep(direction);
+      widget.onRequestEditingFocus();
+      widget.onPointerStep(direction);
     }
     _interactionCanceled = false;
   }
 
   void _handleButtonCancel() {
-    if (_touchLongPressActive || _preciseDragActive) return;
+    if (_touchLongPressActive || _preciseScrubActive) return;
     _cancelInteraction(markCanceled: true);
   }
 
   void _handleButtonExit(int direction) {
     if (_pressedDirection == direction &&
         !_touchLongPressActive &&
-        !_preciseDragActive) {
+        !_preciseScrubActive) {
       _cancelInteraction(markCanceled: true);
     }
   }
@@ -750,14 +1304,13 @@ class _NumericStepperState extends State<_NumericStepper>
       return null;
     }
 
-    const left = 0.0;
     if (localPosition.dy < 0 || localPosition.dy >= widget.height) return null;
-    if (localPosition.dx >= left &&
-        localPosition.dx < left + _NumericStepper.arrowHeight) {
+    if (localPosition.dx >= 0 &&
+        localPosition.dx < _NumericStepper.arrowHeight) {
       return _leadingDirection;
     }
-    if (localPosition.dx >= left + _NumericStepper.arrowHeight &&
-        localPosition.dx < left + 2 * _NumericStepper.arrowHeight) {
+    if (localPosition.dx >= _NumericStepper.arrowHeight &&
+        localPosition.dx < 2 * _NumericStepper.arrowHeight) {
       return -_leadingDirection;
     }
     return null;
@@ -767,17 +1320,15 @@ class _NumericStepperState extends State<_NumericStepper>
     if (!_canAdjust) return;
     _stopRepeatTimers();
     _pressedDirection = null;
+    _pressedKind = PointerDeviceKind.touch;
     _didRepeat = false;
     _touchLongPressActive = true;
-    _touchDragActive = false;
-    _preciseDragActive = false;
+    _touchScrubActive = false;
+    _preciseScrubActive = false;
     _interactionCanceled = false;
-    _scrubRemainder = 0;
-    _lastTouchOffset = 0;
+    _lastTouchOffset = Offset.zero;
 
-    widget.onRequestFocus();
-    unawaited(HapticFeedback.selectionClick());
-
+    widget.onRequestOperationFocus();
     final direction = _directionAt(details.localPosition);
     if (direction != null && widget.canStep(direction)) {
       _pressedDirection = direction;
@@ -789,163 +1340,57 @@ class _NumericStepperState extends State<_NumericStepper>
     if (!_touchLongPressActive || _interactionCanceled) return;
     final offset = details.localOffsetFromOrigin;
 
-    if (!_touchDragActive) {
-      final primary = _primaryOffset(offset).abs();
-      final secondary = _axis == Axis.vertical
-          ? offset.dx.abs()
-          : offset.dy.abs();
-      if (secondary >= _pixelsPerStep && secondary > primary) {
-        _stopRepeatTimers();
-        _pressedDirection = null;
-        _interactionCanceled = true;
+    if (!_touchScrubActive) {
+      if (offset.distance < _NumericScrubMetrics.touchActivationDistance) {
         return;
       }
-      if (primary < _pixelsPerStep || !_isPrimaryMovement(offset)) return;
-
-      _touchDragActive = true;
       _stopRepeatTimers();
       _pressedDirection = null;
-      _scrubRemainder = 0;
-      _lastTouchOffset = 0;
+      _touchScrubActive = widget.onScrubStart(PointerDeviceKind.touch);
+      if (!_touchScrubActive) return;
     }
 
-    final primaryOffset = _primaryOffset(offset);
-    final delta = primaryOffset - _lastTouchOffset;
-    _lastTouchOffset = primaryOffset;
-    _applyScrubDelta(delta);
+    final delta = offset - _lastTouchOffset;
+    _lastTouchOffset = offset;
+    widget.onScrubUpdate(delta);
   }
 
   void _handlePreciseDragStart(DragStartDetails details) {
     if (!_canAdjust) return;
     _stopRepeatTimers();
     _pressedDirection = null;
+    _pressedKind = null;
     _didRepeat = false;
     _touchLongPressActive = false;
-    _touchDragActive = false;
-    _preciseDragActive = true;
+    _touchScrubActive = false;
     _interactionCanceled = false;
-    _scrubRemainder = 0;
-    widget.onRequestFocus();
+    _preciseScrubActive = widget.onScrubStart(
+      details.kind ?? PointerDeviceKind.unknown,
+    );
   }
 
   void _handlePreciseDragUpdate(DragUpdateDetails details) {
-    if (!_preciseDragActive || _interactionCanceled) return;
-    _applyScrubDelta(details.primaryDelta ?? 0);
-  }
-
-  void _handlePreciseDragEnd(DragEndDetails details) {
-    _finishInteraction();
-  }
-
-  void _handleTouchLongPressEnd(LongPressEndDetails details) {
-    _finishInteraction();
-  }
-
-  void _handleTouchLongPressCancel() {
-    if (_touchLongPressActive) _finishInteraction();
-  }
-
-  void _applyScrubDelta(double pointerDelta) {
-    _scrubRemainder -= pointerDelta * _leadingDirection;
-    final steps = (_scrubRemainder / _pixelsPerStep).truncate();
-    if (steps == 0) return;
-
-    if (!widget.onStep(steps)) {
-      _scrubRemainder = 0;
-      return;
+    if (_preciseScrubActive && !_interactionCanceled) {
+      widget.onScrubUpdate(details.delta);
     }
-
-    _scrubRemainder -= steps * _pixelsPerStep;
-    if (!widget.canStep(steps.sign)) {
-      _scrubRemainder = 0;
-    }
-  }
-
-  Map<Type, GestureRecognizerFactory> _gestureFactories(
-    DeviceGestureSettings? gestureSettings,
-  ) {
-    if (!_canAdjust) return const <Type, GestureRecognizerFactory>{};
-
-    return <Type, GestureRecognizerFactory>{
-      if (_axis == Axis.vertical)
-        _VerticalScrubGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<
-              _VerticalScrubGestureRecognizer
-            >(
-              () => _VerticalScrubGestureRecognizer(
-                debugOwner: this,
-                supportedDevices: _precisePointerKinds,
-              ),
-              (recognizer) {
-                recognizer
-                  ..gestureSettings = gestureSettings
-                  ..dragStartBehavior = DragStartBehavior.down
-                  ..onlyAcceptDragOnThreshold = true
-                  ..onStart = _handlePreciseDragStart
-                  ..onUpdate = _handlePreciseDragUpdate
-                  ..onEnd = _handlePreciseDragEnd
-                  ..onCancel = _finishInteraction;
-              },
-            )
-      else
-        _HorizontalScrubGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<
-              _HorizontalScrubGestureRecognizer
-            >(
-              () => _HorizontalScrubGestureRecognizer(
-                debugOwner: this,
-                supportedDevices: _precisePointerKinds,
-              ),
-              (recognizer) {
-                recognizer
-                  ..gestureSettings = gestureSettings
-                  ..dragStartBehavior = DragStartBehavior.down
-                  ..onlyAcceptDragOnThreshold = true
-                  ..onStart = _handlePreciseDragStart
-                  ..onUpdate = _handlePreciseDragUpdate
-                  ..onEnd = _handlePreciseDragEnd
-                  ..onCancel = _finishInteraction;
-              },
-            ),
-      LongPressGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-            () => LongPressGestureRecognizer(
-              duration: _touchLongPressDelay,
-              postAcceptSlopTolerance: null,
-              supportedDevices: const <PointerDeviceKind>{
-                PointerDeviceKind.touch,
-              },
-              allowedButtonsFilter: _primaryButtonOnly,
-              debugOwner: this,
-            ),
-            (recognizer) {
-              recognizer
-                ..gestureSettings = gestureSettings
-                ..onLongPressStart = _handleTouchLongPressStart
-                ..onLongPressMoveUpdate = _handleTouchLongPressMove
-                ..onLongPressEnd = _handleTouchLongPressEnd
-                ..onLongPressCancel = _handleTouchLongPressCancel;
-            },
-          ),
-    };
   }
 
   @override
   Widget build(BuildContext context) {
     final canAdjust = _canAdjust;
-    final gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
-
     return ExcludeSemantics(
       child: MouseRegion(
         cursor: canAdjust
-            ? (_axis == Axis.vertical
-                  ? SystemMouseCursors.resizeUpDown
-                  : SystemMouseCursors.resizeLeftRight)
+            ? SystemMouseCursors.resizeLeftRight
             : MouseCursor.defer,
-        child: RawGestureDetector(
-          behavior: HitTestBehavior.opaque,
-          excludeFromSemantics: true,
-          gestures: _gestureFactories(gestureSettings),
+        child: _NumericScrubGestureDetector(
+          enabled: canAdjust,
+          onPreciseStart: _handlePreciseDragStart,
+          onPreciseUpdate: _handlePreciseDragUpdate,
+          onPreciseEnd: (_) => _finishInteraction(),
+          onTouchStart: _handleTouchLongPressStart,
+          onTouchMove: _handleTouchLongPressMove,
+          onTouchEnd: (_) => _finishInteraction(),
           child: SizedBox(
             width: _NumericStepper.width,
             height: widget.height,
@@ -997,61 +1442,89 @@ class _NumericStepperState extends State<_NumericStepper>
   }
 }
 
-bool _primaryButtonOnly(int buttons) => buttons == kPrimaryButton;
+class _NumericScrubGestureDetector extends StatelessWidget {
+  const _NumericScrubGestureDetector({
+    required this.enabled,
+    required this.onPreciseStart,
+    required this.onPreciseUpdate,
+    required this.onPreciseEnd,
+    required this.onTouchStart,
+    required this.onTouchMove,
+    required this.onTouchEnd,
+    required this.child,
+  });
 
-class _VerticalScrubGestureRecognizer extends VerticalDragGestureRecognizer {
-  Offset _distance = Offset.zero;
-  bool _trackingSequence = false;
+  final bool enabled;
+  final GestureDragStartCallback onPreciseStart;
+  final GestureDragUpdateCallback onPreciseUpdate;
+  final ValueChanged<Object?> onPreciseEnd;
+  final GestureLongPressStartCallback onTouchStart;
+  final GestureLongPressMoveUpdateCallback onTouchMove;
+  final ValueChanged<Object?> onTouchEnd;
+  final Widget child;
 
-  _VerticalScrubGestureRecognizer({super.debugOwner, super.supportedDevices})
-    : super(allowedButtonsFilter: _primaryButtonOnly);
-
-  @override
-  void addAllowedPointer(PointerDownEvent event) {
-    if (!_trackingSequence) {
-      _distance = Offset.zero;
-      _trackingSequence = true;
-    }
-    super.addAllowedPointer(event);
-  }
-
-  @override
-  void handleEvent(PointerEvent event) {
-    if (event is PointerMoveEvent) {
-      _distance += event.localDelta;
-    }
-    super.handleEvent(event);
-  }
-
-  @override
-  bool hasSufficientGlobalDistanceToAccept(
-    PointerDeviceKind pointerDeviceKind,
-    double? deviceTouchSlop,
+  Map<Type, GestureRecognizerFactory> _gestureFactories(
+    DeviceGestureSettings? gestureSettings,
   ) {
-    final hitSlop = switch (pointerDeviceKind) {
-      PointerDeviceKind.stylus ||
-      PointerDeviceKind.invertedStylus => kPrecisePointerHitSlop,
-      _ => computeHitSlop(pointerDeviceKind, gestureSettings),
+    if (!enabled) return const <Type, GestureRecognizerFactory>{};
+    return <Type, GestureRecognizerFactory>{
+      _PreciseScrubGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<_PreciseScrubGestureRecognizer>(
+            () => _PreciseScrubGestureRecognizer(
+              debugOwner: this,
+              supportedDevices: _preciseScrubPointerKinds,
+            ),
+            (recognizer) {
+              recognizer
+                ..gestureSettings = gestureSettings
+                ..dragStartBehavior = DragStartBehavior.down
+                ..onlyAcceptDragOnThreshold = true
+                ..onStart = onPreciseStart
+                ..onUpdate = onPreciseUpdate
+                ..onEnd = onPreciseEnd
+                ..onCancel = () => onPreciseEnd(null);
+            },
+          ),
+      LongPressGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+            () => LongPressGestureRecognizer(
+              duration: _NumericStepperState._touchLongPressDelay,
+              postAcceptSlopTolerance: null,
+              supportedDevices: const <PointerDeviceKind>{
+                PointerDeviceKind.touch,
+              },
+              allowedButtonsFilter: _primaryButtonOnly,
+              debugOwner: this,
+            ),
+            (recognizer) {
+              recognizer
+                ..gestureSettings = gestureSettings
+                ..onLongPressStart = onTouchStart
+                ..onLongPressMoveUpdate = onTouchMove
+                ..onLongPressEnd = onTouchEnd
+                ..onLongPressCancel = () => onTouchEnd(null);
+            },
+          ),
     };
-    return _distance.dy.abs() > hitSlop &&
-        _distance.dy.abs() >= _distance.dx.abs();
   }
 
   @override
-  void didStopTrackingLastPointer(int pointer) {
-    super.didStopTrackingLastPointer(pointer);
-    _trackingSequence = false;
-    _distance = Offset.zero;
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      gestures: _gestureFactories(MediaQuery.maybeGestureSettingsOf(context)),
+      child: child,
+    );
   }
 }
 
-class _HorizontalScrubGestureRecognizer
-    extends HorizontalDragGestureRecognizer {
+class _PreciseScrubGestureRecognizer extends PanGestureRecognizer {
+  _PreciseScrubGestureRecognizer({super.debugOwner, super.supportedDevices})
+    : super(allowedButtonsFilter: _primaryButtonOnly);
+
   Offset _distance = Offset.zero;
   bool _trackingSequence = false;
-
-  _HorizontalScrubGestureRecognizer({super.debugOwner, super.supportedDevices})
-    : super(allowedButtonsFilter: _primaryButtonOnly);
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
@@ -1072,21 +1545,129 @@ class _HorizontalScrubGestureRecognizer
   bool hasSufficientGlobalDistanceToAccept(
     PointerDeviceKind pointerDeviceKind,
     double? deviceTouchSlop,
-  ) {
-    final hitSlop = switch (pointerDeviceKind) {
-      PointerDeviceKind.stylus ||
-      PointerDeviceKind.invertedStylus => kPrecisePointerHitSlop,
-      _ => computeHitSlop(pointerDeviceKind, gestureSettings),
-    };
-    return _distance.dx.abs() > hitSlop &&
-        _distance.dx.abs() >= _distance.dy.abs();
-  }
+  ) => _distance.distance >= _NumericScrubMetrics.preciseActivationDistance;
 
   @override
   void didStopTrackingLastPointer(int pointer) {
     super.didStopTrackingLastPointer(pointer);
     _trackingSequence = false;
     _distance = Offset.zero;
+  }
+}
+
+class _NumericScrubRulerPainter extends CustomPainter {
+  const _NumericScrubRulerPainter({
+    required this.color,
+    required this.progress,
+    required this.spacing,
+  });
+
+  final Color color;
+  final double progress;
+  final double spacing;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final center = size.width / 2;
+    final halfWidth = math.max(1.0, center);
+    final lineHeight = size.height * 0.55;
+    final top = (size.height - lineHeight) / 2;
+    final bottom = top + lineHeight;
+    final phase = progress * spacing;
+    final lineCount = (size.width / spacing).ceil() + 2;
+
+    final paint = Paint()
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round;
+    for (var index = -lineCount; index <= lineCount; index++) {
+      final x = center + phase + index * spacing;
+      if (x < -spacing || x > size.width + spacing) continue;
+      final distance = ((x - center).abs() / halfWidth).clamp(0.0, 1.0);
+      final opacity = math.pow(1 - distance, 1.65).toDouble() * 0.72;
+      if (opacity <= 0.01) continue;
+      paint.color = color.withValues(alpha: color.a * opacity);
+      canvas.drawLine(Offset(x, top), Offset(x, bottom), paint);
+    }
+
+    paint
+      ..strokeWidth = 1.25
+      ..color = color.withValues(alpha: color.a * 0.96);
+    canvas.drawLine(Offset(center, top), Offset(center, bottom), paint);
+  }
+
+  @override
+  bool shouldRepaint(_NumericScrubRulerPainter oldDelegate) =>
+      color != oldDelegate.color ||
+      progress != oldDelegate.progress ||
+      spacing != oldDelegate.spacing;
+}
+
+class _NumericScrubValueOverlay extends StatelessWidget {
+  const _NumericScrubValueOverlay({
+    super.key,
+    required this.value,
+    required this.formattedValue,
+    required this.suffix,
+    required this.maxWidth,
+    required this.theme,
+  });
+
+  final double value;
+  final String formattedValue;
+  final Widget? suffix;
+  final double maxWidth;
+  final CLThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueStyle = theme.typography.monoStrong.copyWith(
+      color: const Color(0xFFFFFFFF),
+      fontSize: 30,
+      height: 1.12,
+    );
+    final suffixStyle = theme.typography.mono.copyWith(
+      color: const Color(0xCFFFFFFF),
+      fontSize: 18,
+      height: 1.12,
+    );
+
+    return RepaintBoundary(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: 80, maxWidth: maxWidth),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              CLAnimatedNumber(
+                value,
+                formatter: (_) => formattedValue,
+                style: valueStyle,
+                alignment: Alignment.center,
+              ),
+              if (suffix case final suffix?) ...[
+                const SizedBox(width: 3),
+                IgnorePointer(
+                  child: IconTheme.merge(
+                    data: const IconThemeData(
+                      color: Color(0xCFFFFFFF),
+                      size: 18,
+                    ),
+                    child: DefaultTextStyle.merge(
+                      style: suffixStyle,
+                      child: suffix,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

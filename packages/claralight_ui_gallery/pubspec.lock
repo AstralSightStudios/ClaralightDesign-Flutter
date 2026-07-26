@@ -157,11 +157,12 @@ packages:
   progressive_blur:
     dependency: transitive
     description:
-      name: progressive_blur
-      sha256: "3a8845133b9c67dbd6b49eb14000c2a05d142d6d9ad7281f2d2eb63fba181d37"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.2"
+      path: "."
+      ref: "2db04b7a16d1c7960bb260855b8b61f0703c0520"
+      resolved-ref: "2db04b7a16d1c7960bb260855b8b61f0703c0520"
+      url: "https://github.com/leset0ng/progressive_blur.git"
+    source: git
+    version: "0.0.3"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -241,4 +242,4 @@ packages:
     version: "15.2.0"
 sdks:
   dart: ">=3.11.5 <4.0.0"
-  flutter: ">=3.30.0"
+  flutter: ">=3.35.0"

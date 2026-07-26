@@ -1,17 +1,33 @@
 import 'dart:ui' show SemanticsAction, SemanticsValidationResult;
 
 import 'package:claralight_ui/claralight_ui.dart';
+import 'package:claralight_ui/src/overlays/anchored_overlay.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  Widget host(Widget child) {
+  Widget host(
+    Widget child, {
+    Alignment alignment = Alignment.center,
+    bool disableAnimations = false,
+  }) {
     return MaterialApp(
-      home: Scaffold(
-        body: Center(child: SizedBox(width: 240, child: child)),
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(disableAnimations: disableAnimations),
+          child: Scaffold(
+            body: Align(
+              alignment: alignment,
+              child: SizedBox(width: 240, child: child),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -19,6 +35,11 @@ void main() {
   final stepUp = find.byKey(const Key('cl-text-field-step-up'));
   final stepDown = find.byKey(const Key('cl-text-field-step-down'));
   final dragZone = find.byKey(const Key('cl-text-field-stepper-drag-zone'));
+  final prefixZone = find.byKey(const Key('cl-text-field-prefix-scrub-zone'));
+  final scrubRuler = find.byKey(const Key('cl-text-field-scrub-ruler'));
+  final scrubOverlay = find.byKey(
+    const Key('cl-text-field-scrub-value-overlay'),
+  );
 
   BorderSide fieldBorder(WidgetTester tester) {
     final container = tester.widget<AnimatedContainer>(
@@ -249,7 +270,7 @@ void main() {
     expect(controller.text, '6');
   });
 
-  testWidgets('numeric drag zone preserves geometry and resize cursor', (
+  testWidgets('numeric scrub zones preserve geometry and use an EW cursor', (
     tester,
   ) async {
     final controller = TextEditingController(text: '4');
@@ -260,6 +281,7 @@ void main() {
         CLTextField(
           controller: controller,
           keyboardType: TextInputType.number,
+          prefix: const Text('X'),
           step: 1,
           size: CLControlSize.small,
         ),
@@ -267,17 +289,22 @@ void main() {
     );
 
     final controlRect = tester.getRect(find.byType(CLTextField));
-    final zoneRect = tester.getRect(dragZone);
+    final trailingRect = tester.getRect(dragZone);
+    final prefixRect = tester.getRect(prefixZone);
     final upRect = tester.getRect(stepUp);
 
-    expect(zoneRect.width, 24);
-    expect(zoneRect.left, upRect.left);
-    expect(zoneRect.right, controlRect.right - 1);
+    expect(trailingRect.width, 24);
+    expect(trailingRect.left, upRect.left);
+    expect(trailingRect.right, closeTo(controlRect.right, 1.01));
+    expect(prefixRect.left, closeTo(controlRect.left, 1.01));
+    expect(prefixRect.width, greaterThan(tester.getSize(find.text('X')).width));
     expect(
       tester
           .widgetList<MouseRegion>(find.byType(MouseRegion))
-          .where((region) => region.cursor == SystemMouseCursors.resizeUpDown),
-      hasLength(1),
+          .where(
+            (region) => region.cursor == SystemMouseCursors.resizeLeftRight,
+          ),
+      hasLength(2),
     );
 
     controller.text = 'invalid';
@@ -285,12 +312,34 @@ void main() {
     expect(
       tester
           .widgetList<MouseRegion>(find.byType(MouseRegion))
-          .where((region) => region.cursor == SystemMouseCursors.resizeUpDown),
+          .where(
+            (region) => region.cursor == SystemMouseCursors.resizeLeftRight,
+          ),
       isEmpty,
+    );
+
+    controller.text = '4';
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          step: 1,
+        ),
+      ),
+    );
+    expect(prefixZone, findsNothing);
+    expect(
+      tester
+          .widgetList<MouseRegion>(find.byType(MouseRegion))
+          .where(
+            (region) => region.cursor == SystemMouseCursors.resizeLeftRight,
+          ),
+      hasLength(1),
     );
   });
 
-  testWidgets('mouse scrub is confined to the drag zone and coalesces steps', (
+  testWidgets('mouse scrub only starts in prefix and arrow regions', (
     tester,
   ) async {
     final controller = TextEditingController(text: '10');
@@ -305,6 +354,8 @@ void main() {
           controller: controller,
           focusNode: focusNode,
           keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          suffix: const Text('px'),
           step: 2,
           onChanged: changes.add,
         ),
@@ -313,37 +364,47 @@ void main() {
 
     final controlRect = tester.getRect(find.byType(CLTextField));
     final outside = await tester.startGesture(
-      Offset(controlRect.center.dx, controlRect.center.dy),
+      controlRect.center,
       kind: PointerDeviceKind.mouse,
     );
-    await outside.moveBy(const Offset(0, -24));
+    await outside.moveBy(const Offset(24, 0));
     await outside.up();
     await tester.pump();
     expect(controller.text, '10');
+    expect(scrubRuler, findsNothing);
 
-    final zoneRect = tester.getRect(dragZone);
     final scrub = await tester.startGesture(
-      Offset(zoneRect.right - 2, zoneRect.center.dy),
+      tester.getCenter(dragZone),
       kind: PointerDeviceKind.mouse,
     );
-    await scrub.moveBy(const Offset(0, -4));
+    await scrub.moveBy(const Offset(4, 0));
+    await tester.pump();
     await tester.pump();
     expect(controller.text, '10');
+    expect(scrubRuler, findsOneWidget);
+    expect(scrubOverlay, findsOneWidget);
+    expect(find.byType(CLAnimatedNumber), findsOneWidget);
+    expect(
+      find.descendant(of: scrubOverlay, matching: find.text('px')),
+      findsOneWidget,
+    );
 
-    await scrub.moveBy(const Offset(0, -4));
+    await scrub.moveBy(const Offset(4, 0));
     await tester.pump();
     expect(controller.text, '12');
 
-    await scrub.moveBy(const Offset(0, -17));
+    await scrub.moveBy(const Offset(17, 0));
     await tester.pump();
     expect(controller.text, '16');
     expect(changes, ['12', '16']);
     expect(focusNode.hasFocus, isTrue);
 
     await scrub.up();
+    await tester.pumpAndSettle();
+    expect(scrubOverlay, findsNothing);
   });
 
-  testWidgets('horizontal pointer movement does not scrub or click', (
+  testWidgets('prefix scrub moves right to increase and left to decrease', (
     tester,
   ) async {
     final controller = TextEditingController(text: '4');
@@ -354,24 +415,236 @@ void main() {
         CLTextField(
           controller: controller,
           keyboardType: TextInputType.number,
+          prefix: const Text('X'),
           step: 1,
         ),
       ),
     );
 
-    final zoneRect = tester.getRect(dragZone);
     final mouse = await tester.startGesture(
-      Offset(zoneRect.right - 2, zoneRect.center.dy),
+      tester.getCenter(prefixZone),
       kind: PointerDeviceKind.mouse,
     );
-    await mouse.moveBy(const Offset(20, 4));
-    await mouse.up();
+    await mouse.moveBy(const Offset(8, 0));
     await tester.pump();
+    expect(controller.text, '5');
+    expect(scrubRuler, findsOneWidget);
 
-    expect(controller.text, '4');
+    await mouse.moveBy(const Offset(-16, 0));
+    await tester.pump();
+    expect(controller.text, '3');
+
+    await mouse.up();
   });
 
-  testWidgets('scrub resets overshoot at bounds for immediate reversal', (
+  testWidgets('vertical bands select strict 2/4/8/16/32px spacing', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, -4));
+    await tester.pump();
+
+    await mouse.moveBy(const Offset(0, -16));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+
+    await mouse.moveBy(const Offset(0, -40));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await mouse.moveBy(const Offset(2, 0));
+    await tester.pump();
+    expect(controller.text, '2');
+
+    await mouse.moveBy(const Offset(0, 80));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await mouse.moveBy(const Offset(16, 0));
+    await tester.pump();
+    expect(controller.text, '3');
+
+    await mouse.moveBy(const Offset(0, 40));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await mouse.moveBy(const Offset(32, 0));
+    await tester.pump();
+    expect(controller.text, '4');
+    expect(
+      find.byKey(const Key('cl-text-field-scrub-multiplier')),
+      findsNothing,
+    );
+
+    await mouse.up();
+  });
+
+  testWidgets('ruler spacing and step threshold interpolate together', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, -4));
+    await mouse.moveBy(const Offset(0, -16));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    expect(controller.text, '0');
+    await mouse.moveBy(const Offset(1, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+
+    await mouse.up();
+  });
+
+  testWidgets('40px vertical bands use 4px return hysteresis', (tester) async {
+    final controller = TextEditingController(text: '0');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, -4));
+    await mouse.moveBy(const Offset(0, -16));
+    await mouse.moveBy(const Offset(0, 3));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+
+    await mouse.moveBy(const Offset(0, 1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    expect(controller.text, '2');
+
+    await mouse.up();
+  });
+
+  testWidgets('one pointer update commits and haptics atomically', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    final changes = <String>[];
+    final stepped = <String>[];
+    final platformCalls = <MethodCall>[];
+    addTearDown(controller.dispose);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        platformCalls.add(call);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+          onChanged: changes.add,
+          onStepped: stepped.add,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, 4));
+    await tester.pump();
+    await mouse.moveBy(const Offset(24, 0));
+    await tester.pump();
+
+    expect(controller.text, '3');
+    expect(changes, ['3']);
+    expect(stepped, ['3']);
+    expect(
+      platformCalls.where(
+        (call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.selectionClick',
+      ),
+      hasLength(1),
+    );
+
+    await mouse.up();
+    await tester.pumpAndSettle();
+    await tester.tap(stepUp);
+    await tester.pump();
+    expect(controller.text, '4');
+    expect(
+      platformCalls.where(
+        (call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.selectionClick',
+      ),
+      hasLength(2),
+    );
+  });
+
+  testWidgets('scrub discards bound overshoot for immediate reversal', (
     tester,
   ) async {
     final controller = TextEditingController(text: '9');
@@ -383,6 +656,7 @@ void main() {
         CLTextField(
           controller: controller,
           keyboardType: TextInputType.number,
+          prefix: const Text('X'),
           step: 1,
           max: 10,
           onChanged: changes.add,
@@ -390,16 +664,20 @@ void main() {
       ),
     );
 
-    final zoneRect = tester.getRect(dragZone);
     final mouse = await tester.startGesture(
-      zoneRect.center,
+      tester.getCenter(prefixZone),
       kind: PointerDeviceKind.mouse,
     );
-    await mouse.moveBy(const Offset(0, -24));
+    await mouse.moveBy(const Offset(0, 4));
+    await mouse.moveBy(const Offset(24, 0));
     await tester.pump();
     expect(controller.text, '10');
 
-    await mouse.moveBy(const Offset(0, 8));
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    expect(controller.text, '10');
+
+    await mouse.moveBy(const Offset(-8, 0));
     await tester.pump();
     expect(controller.text, '9');
     expect(changes, ['10', '9']);
@@ -407,7 +685,7 @@ void main() {
     await mouse.up();
   });
 
-  testWidgets('stylus scrub uses precise slop and the 8px step threshold', (
+  testWidgets('stylus activates at 4px and still steps every 8px at 1x', (
     tester,
   ) async {
     final controller = TextEditingController(text: '4');
@@ -427,11 +705,17 @@ void main() {
       tester.getCenter(dragZone),
       kind: PointerDeviceKind.stylus,
     );
-    await stylus.moveBy(const Offset(0, -7));
+    await stylus.moveBy(const Offset(3, 0));
     await tester.pump();
+    expect(scrubRuler, findsNothing);
     expect(controller.text, '4');
 
-    await stylus.moveBy(const Offset(0, -1));
+    await stylus.moveBy(const Offset(1, 0));
+    await tester.pump();
+    expect(scrubRuler, findsOneWidget);
+    expect(controller.text, '4');
+
+    await stylus.moveBy(const Offset(4, 0));
     await tester.pump();
     expect(controller.text, '5');
     await stylus.up();
@@ -460,6 +744,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 160));
 
     expect(controller.text, '0');
+    expect(scrubOverlay, findsNothing);
   });
 
   testWidgets('trackpad pan zoom does not scrub numeric values', (
@@ -480,15 +765,16 @@ void main() {
 
     await tester.drag(
       dragZone,
-      const Offset(0, -40),
+      const Offset(40, 0),
       kind: PointerDeviceKind.trackpad,
     );
     await tester.pump();
 
     expect(controller.text, '4');
+    expect(scrubRuler, findsNothing);
   });
 
-  testWidgets('mouse hold repeats at 500ms and switches cleanly to scrub', (
+  testWidgets('mouse hold repeats then hands off cleanly to 2D scrub', (
     tester,
   ) async {
     final controller = TextEditingController(text: '0');
@@ -513,28 +799,25 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 499));
     expect(controller.text, '0');
-    expect(focusNode.hasFocus, isFalse);
+    expect(scrubRuler, findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(controller.text, '1');
     expect(focusNode.hasFocus, isTrue);
-
     await tester.pump(const Duration(milliseconds: 80));
     expect(controller.text, '2');
 
-    await mouse.moveBy(const Offset(0, -8));
+    await mouse.moveBy(const Offset(8, 0));
     await tester.pump();
     expect(controller.text, '3');
+    expect(scrubRuler, findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 160));
     expect(controller.text, '3');
-
     await mouse.up();
-    await tester.pump();
-    expect(controller.text, '3');
   });
 
-  testWidgets('touch long press activates at 300ms and scrubs with haptic', (
+  testWidgets('touch long press waits for 8px movement before scrubbing', (
     tester,
   ) async {
     final controller = TextEditingController(text: '1');
@@ -567,13 +850,19 @@ void main() {
       ),
     );
 
-    final zoneRect = tester.getRect(dragZone);
     final touch = await tester.startGesture(
-      Offset(zoneRect.right - 2, zoneRect.center.dy),
+      tester.getCenter(dragZone),
       kind: PointerDeviceKind.touch,
     );
     await tester.pump(const Duration(milliseconds: 299));
     expect(focusNode.hasFocus, isFalse);
+    expect(fieldBorder(tester).color.a, 0);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(focusNode.hasFocus, isFalse);
+    expect(fieldBorder(tester).color, CLThemeData().colors.accent);
+    expect(controller.text, '1');
+    expect(scrubRuler, findsNothing);
     expect(
       platformCalls.where(
         (call) =>
@@ -583,8 +872,15 @@ void main() {
       isEmpty,
     );
 
-    await tester.pump(const Duration(milliseconds: 1));
-    expect(focusNode.hasFocus, isTrue);
+    await touch.moveBy(const Offset(7, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+    expect(scrubRuler, findsNothing);
+
+    await touch.moveBy(const Offset(1, 0));
+    await tester.pump();
+    expect(controller.text, '2');
+    expect(scrubRuler, findsOneWidget);
     expect(
       platformCalls.where(
         (call) =>
@@ -593,16 +889,11 @@ void main() {
       ),
       hasLength(1),
     );
-    expect(controller.text, '1');
-
-    await touch.moveBy(const Offset(0, -8));
-    await tester.pump();
-    expect(controller.text, '2');
 
     await touch.up();
   });
 
-  testWidgets('touch long press released before repeat does not step', (
+  testWidgets('touch hold repeats without visual then hands off to scrub', (
     tester,
   ) async {
     final controller = TextEditingController(text: '0');
@@ -625,19 +916,248 @@ void main() {
       tester.getCenter(stepUp),
       kind: PointerDeviceKind.touch,
     );
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(focusNode.hasFocus, isTrue);
-    expect(controller.text, '0');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(focusNode.hasFocus, isFalse);
+    expect(scrubRuler, findsNothing);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(controller.text, '1');
+    expect(scrubRuler, findsNothing);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(controller.text, '2');
+
+    await touch.moveBy(const Offset(8, 0));
+    await tester.pump();
+    expect(controller.text, '3');
+    expect(scrubRuler, findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 160));
+    expect(controller.text, '3');
 
     await touch.up();
-    await tester.pump();
-    expect(controller.text, '0');
   });
 
-  testWidgets('touch hold repeats after 500ms without a release step', (
+  testWidgets(
+    'scrub direction stays right-to-increase for every arrow layout',
+    (tester) async {
+      final controller = TextEditingController(text: '4');
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        host(
+          CLTextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            step: 1,
+            stepperDirection: CLNumericStepperDirection.down,
+          ),
+        ),
+      );
+
+      final mouse = await tester.startGesture(
+        tester.getCenter(dragZone),
+        kind: PointerDeviceKind.mouse,
+      );
+      await mouse.moveBy(const Offset(8, 0));
+      await tester.pump();
+      expect(controller.text, '5');
+      await mouse.up();
+    },
+  );
+
+  testWidgets(
+    'value overlay flips around the field and keeps compact geometry',
+    (tester) async {
+      final controller = TextEditingController(text: '12');
+      addTearDown(controller.dispose);
+
+      Widget field() => CLTextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        prefix: const Text('X'),
+        suffix: const Text('px'),
+        step: 1,
+      );
+
+      await tester.pumpWidget(host(field(), alignment: Alignment.topCenter));
+      var mouse = await tester.startGesture(
+        tester.getCenter(prefixZone),
+        kind: PointerDeviceKind.mouse,
+      );
+      await mouse.moveBy(const Offset(4, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 140));
+      var fieldRect = tester.getRect(find.byType(CLTextField));
+      var overlayRect = tester.getRect(scrubOverlay);
+      expect(overlayRect.top, greaterThanOrEqualTo(fieldRect.bottom + 7));
+      expect(overlayRect.width, greaterThanOrEqualTo(80));
+      await mouse.up();
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(host(field(), alignment: Alignment.bottomCenter));
+      mouse = await tester.startGesture(
+        tester.getCenter(prefixZone),
+        kind: PointerDeviceKind.mouse,
+      );
+      await mouse.moveBy(const Offset(4, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 140));
+      fieldRect = tester.getRect(find.byType(CLTextField));
+      overlayRect = tester.getRect(scrubOverlay);
+      expect(overlayRect.bottom, lessThanOrEqualTo(fieldRect.top - 7));
+      await mouse.up();
+    },
+  );
+
+  testWidgets('value popover tracks a scrub field inside a scroller', (
     tester,
   ) async {
-    final controller = TextEditingController(text: '0');
+    final controller = TextEditingController(text: '12');
+    final scrollController = ScrollController();
+    addTearDown(controller.dispose);
+    addTearDown(scrollController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            controller: scrollController,
+            child: SizedBox(
+              height: 1200,
+              child: Align(
+                alignment: const Alignment(0, 0.35),
+                child: SizedBox(
+                  width: 240,
+                  child: CLTextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    prefix: const Text('W'),
+                    suffix: const Text('px'),
+                    step: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    scrollController.jumpTo(400);
+    await tester.pump();
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    await tester.pump();
+
+    final fieldRect = tester.getRect(find.byType(CLTextField));
+    final prefixRect = tester.getRect(prefixZone);
+    final overlayRect = tester.getRect(scrubOverlay);
+    final rulerCenter = (prefixRect.right + fieldRect.right) / 2;
+    expect(overlayRect.bottom, lessThan(fieldRect.top));
+    expect(fieldRect.top - overlayRect.bottom, lessThan(80));
+    expect(overlayRect.center.dx, closeTo(rulerCenter, 1));
+
+    await mouse.up();
+  });
+
+  testWidgets('overlay uses the numeric formatter and safely moves suffix', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '1');
+    final suffixKey = GlobalKey();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          suffix: Text('kg', key: suffixKey),
+          step: 0.25,
+          format: (value) => value.toStringAsFixed(2),
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    await tester.pump();
+
+    final number = tester.widget<CLAnimatedNumber>(
+      find.byType(CLAnimatedNumber),
+    );
+    expect(number.formatter!(1), '1.00');
+    expect(find.byKey(suffixKey), findsOneWidget);
+    expect(
+      find.descendant(of: scrubOverlay, matching: find.byKey(suffixKey)),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(
+        of: find.byKey(suffixKey),
+        matching: find.byType(IgnorePointer),
+      ),
+      findsWidgets,
+    );
+
+    await mouse.up();
+  });
+
+  testWidgets('reduced motion removes scaling and snaps ruler spacing', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '1');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          step: 1,
+        ),
+        disableAnimations: true,
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, 4));
+    await tester.pump();
+    var popover = tester.widget<CLAnchoredOverlay>(
+      find.byKey(const Key('cl-text-field-scrub-popover')),
+    );
+    expect(popover.opacity, 0);
+    expect(popover.scale, 1);
+
+    await tester.pump(const Duration(milliseconds: 62));
+    popover = tester.widget<CLAnchoredOverlay>(
+      find.byKey(const Key('cl-text-field-scrub-popover')),
+    );
+    expect(popover.opacity, inExclusiveRange(0, 1));
+    expect(popover.scale, 1);
+
+    await mouse.moveBy(const Offset(0, -24));
+    await mouse.moveBy(const Offset(4, 0));
+    await tester.pump();
+    expect(controller.text, '2');
+
+    await mouse.up();
+  });
+
+  testWidgets('value overlay reuses the complete arrow popover material', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '1');
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -649,24 +1169,72 @@ void main() {
         ),
       ),
     );
-
-    final touch = await tester.startGesture(
-      tester.getCenter(stepUp),
-      kind: PointerDeviceKind.touch,
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
     );
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(controller.text, '0');
-    await tester.pump(const Duration(milliseconds: 199));
-    expect(controller.text, '0');
-
-    await tester.pump(const Duration(milliseconds: 1));
-    expect(controller.text, '1');
-    await tester.pump(const Duration(milliseconds: 80));
-    expect(controller.text, '2');
-
-    await touch.up();
+    await mouse.moveBy(const Offset(4, 0));
     await tester.pump();
+    await tester.pump();
+
+    final theme = CLThemeData();
+    final popover = tester.widget<CLAnchoredOverlay>(
+      find.byKey(const Key('cl-text-field-scrub-popover')),
+    );
+    expect(popover.position, CLPopoverPosition.top);
+    expect(popover.showArrow, isTrue);
+    expect(popover.padding, const EdgeInsets.fromLTRB(16, 10, 16, 8));
+    expect(popover.borderRadius, theme.radii.panel);
+    expect(popover.outlineColor, theme.colors.outlineStrong);
+    expect(popover.shadowBlur, 24);
+    expect(popover.shadowOffset, const Offset(0, 10));
+    expect(scrubOverlay, findsOneWidget);
+    await mouse.up();
+  });
+
+  testWidgets('macOS pointer steps use the native alignment haptic channel', (
+    tester,
+  ) async {
+    const channel = MethodChannel('dev.claralight.ui/haptics');
+    final calls = <MethodCall>[];
+    final controller = TextEditingController(text: '1');
+    addTearDown(controller.dispose);
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          step: 1,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(dragZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(0, 4));
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+
     expect(controller.text, '2');
+    expect(calls, contains(isMethodCall('selectionClick', arguments: null)));
+    debugDefaultTargetPlatformOverride = null;
+    await mouse.up();
   });
 
   testWidgets('wheel steps once, preserves focus, and filters signals', (

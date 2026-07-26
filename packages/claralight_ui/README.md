@@ -5,8 +5,8 @@ matching the ClaraLight Figma source (the Facetory demo app).
 
 Translucent white-alpha control fills stacked over deep layered surfaces,
 smooth superellipse corners everywhere, sparing accent color, springy
-press physics. Pure Dart — it works identically on every platform with
-zero native code.
+press physics. Rendering stays pure Dart across platforms; a bundled SwiftPM
+macOS plugin adds native trackpad haptics without host-app setup.
 
 ## Quick start
 
@@ -189,7 +189,9 @@ Three free-for-commercial-use families ship with the package (see
 - **Controls** — `CLToggle`, `CLSegmentedControl`, `CLSlider`,
   `CLChipTabs`
 - **Inputs** — `CLTextField` (`mono:` and external `error:` states; numeric
-  steppers support buttons, trailing-strip drag, wheel, and Up/Down adjustment),
+  steppers support buttons, wheel, Up/Down, and Figma-style horizontal scrubbing
+  from the prefix or arrow strip; vertical movement selects 2/4/8/16/32px tick
+  spacing in stable 40px bands, with native per-frame macOS trackpad feedback),
   `CLSearchField`, `CLSelect`, `CLStepper`, `CLColorPicker`
 - **Containers** — `CLPanel`, `CLSectionHeader`, `CLSheet`, `CLDialog`,
   `CLToolbar`, `CLOverflowToolbar`, `CLSideBar`

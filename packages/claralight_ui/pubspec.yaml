@@ -27,6 +27,11 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  plugin:
+    platforms:
+      macos:
+        pluginClass: ClaralightUiPlugin
+
   # Claralight bundles its design fonts. See fonts/FONTS.md for sources
   # and licenses. All three are free for commercial use.
   fonts:
