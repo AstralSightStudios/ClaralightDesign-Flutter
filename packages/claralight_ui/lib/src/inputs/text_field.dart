@@ -42,6 +42,9 @@ class CLTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final bool enabled;
 
+  /// Prevents editing without applying disabled-state colors.
+  final bool readOnly;
+
   /// Whether to render the field with error-state colors.
   ///
   /// Numeric validation errors are combined with this external state.
@@ -92,6 +95,7 @@ class CLTextField extends StatefulWidget {
     this.onStepped,
     this.keyboardType,
     this.enabled = true,
+    this.readOnly = false,
     this.error = false,
     this.obscureText = false,
     this.textAlign = TextAlign.start,
@@ -185,7 +189,7 @@ class _CLTextFieldState extends State<CLTextField> {
   bool get _isNumeric =>
       widget.keyboardType?.index == TextInputType.number.index;
 
-  bool get _showsStepper => _isNumeric && widget.step > 0;
+  bool get _showsStepper => _isNumeric && widget.step > 0 && !widget.readOnly;
 
   double? get _number {
     final value = double.tryParse(_controller.text.trim());
@@ -377,6 +381,8 @@ class _CLTextFieldState extends State<CLTextField> {
       cursorColor: _showsError ? colors.danger : colors.accent,
       keyboardType: widget.keyboardType,
       enabled: widget.enabled,
+      readOnly: widget.readOnly,
+      enableInteractiveSelection: !widget.readOnly,
       obscureText: widget.obscureText,
       textAlign: widget.textAlign,
       onChanged: widget.onChanged,
@@ -390,7 +396,9 @@ class _CLTextFieldState extends State<CLTextField> {
 
     final control = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: widget.enabled ? _focusNode.requestFocus : null,
+      onTap: widget.enabled && !widget.readOnly
+          ? _focusNode.requestFocus
+          : null,
       child: Focus(
         canRequestFocus: false,
         onKeyEvent: _handleKeyEvent,
