@@ -207,7 +207,7 @@ class CLScrollable extends StatefulWidget {
   /// Optional controller for the vertical axis.
   final ScrollController? verticalController;
 
-  /// Circular clip applied to the viewport and its edge effects.
+  /// Smooth superellipse clip applied to the viewport and its edge effects.
   final BorderRadius borderRadius;
 
   /// Creates a Claralight scrollable viewport.

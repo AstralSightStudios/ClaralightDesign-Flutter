@@ -32,13 +32,9 @@ ShapeDecoration clSmoothDecoration({
 
 /// The corner clip that pairs with [clSmoothShape] decorations.
 ///
-/// Impeller drops [ClipRSuperellipse] inside save-layer subtrees
-/// (BackdropFilter / ShaderMask ancestors — Flutter 3.44, observed on
-/// macOS), leaving square corners, so this clips with a circular-arc
-/// [ClipRRect] instead. The arc stays strictly inside the superellipse
-/// fill of the same radius, so clipped content never bleeds past the
-/// painted surface. Fold back into [ClipRSuperellipse] once the engine
-/// clips reliably.
+/// A shape-border path keeps clipping identical to painted smooth surfaces,
+/// including per-corner radii, without relying on the engine's
+/// [ClipRSuperellipse] save-layer behavior.
 class CLSmoothClip extends StatelessWidget {
   const CLSmoothClip({super.key, required this.borderRadius, this.child});
 
@@ -46,6 +42,8 @@ class CLSmoothClip extends StatelessWidget {
   final Widget? child;
 
   @override
-  Widget build(BuildContext context) =>
-      ClipRRect(borderRadius: borderRadius, child: child);
+  Widget build(BuildContext context) => ClipPath(
+    clipper: ShapeBorderClipper(shape: clSmoothShape(borderRadius)),
+    child: child,
+  );
 }

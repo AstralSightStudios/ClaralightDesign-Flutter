@@ -58,7 +58,7 @@ class CLList extends StatefulWidget {
   /// Maximum Gaussian sigma contributed by each physical edge.
   final EdgeInsetsGeometry blurSigma;
 
-  /// Circular clip applied to the list and its edge effects.
+  /// Smooth superellipse clip applied to the list and its edge effects.
   final BorderRadius borderRadius;
 
   /// Cache extent passed through to the underlying [ListView].
