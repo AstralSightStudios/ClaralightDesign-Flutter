@@ -24,8 +24,11 @@ void main() {
     return (shape as RoundedSuperellipseBorder).side;
   }
 
-  test('CLButton exposes large as its default configured size', () {
-    expect(const CLButton(label: 'Continue').size, CLControlSize.large);
+  test('CLButton exposes its default configuration', () {
+    const button = CLButton(label: 'Continue');
+
+    expect(button.size, CLControlSize.large);
+    expect(button.variant, CLButtonVariant.secondary);
   });
 
   testWidgets('CLButton renders the flat Claralight base', (
@@ -33,8 +36,11 @@ void main() {
   ) async {
     await tester.pumpWidget(host(CLButton(label: '继续', onPressed: () {})));
 
-    expect(find.byType(CLSurface), findsOneWidget);
-    expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isTrue);
+    final surface = tester.widget<CLSurface>(find.byType(CLSurface));
+    expect(surface.frosted, isTrue);
+    expect(surface.fill, CLThemeData().colors.floatingControl);
+    expect(surface.frostSigma, 36);
+    expect(surface.shadow, isNull);
 
     final box = tester.getSize(find.byType(CLSurface));
     expect(box.height, 44);
@@ -88,9 +94,59 @@ void main() {
     final label = tester.widget<Text>(find.text('100%'));
     expect(label.style?.fontFamily, 'Test Mono');
     expect(label.style?.fontSize, 15);
-    expect(label.style?.color, CLThemeData().colors.onAccent);
+    expect(label.style?.color, CLThemeData().colors.onFloatingControl);
     expect(tester.widget<Icon>(find.byKey(trailingKey)).size, 14);
     expect(find.bySemanticsLabel('Canvas zoom 100%'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  test('CLButton validates custom label contracts', () {
+    expect(() => CLButton(), throwsAssertionError);
+    expect(
+      () => CLButton(
+        label: 'Label',
+        labelWidget: const SizedBox(),
+        semanticLabel: 'Label',
+      ),
+      throwsAssertionError,
+    );
+    expect(() => CLButton(labelWidget: const SizedBox()), throwsAssertionError);
+  });
+
+  testWidgets('CLButton renders arbitrary label content with inherited style', (
+    WidgetTester tester,
+  ) async {
+    late TextStyle inheritedTextStyle;
+    late IconThemeData inheritedIconTheme;
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      host(
+        CLButton(
+          labelWidget: Builder(
+            builder: (context) {
+              inheritedTextStyle = DefaultTextStyle.of(context).style;
+              inheritedIconTheme = IconTheme.of(context);
+              return const SizedBox(
+                key: ValueKey('custom-button-label'),
+                width: 32,
+                height: 16,
+              );
+            },
+          ),
+          semanticLabel: 'Dynamic value',
+          labelStyle: const TextStyle(fontFamily: 'Test Mono', fontSize: 15),
+          onPressed: () {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('custom-button-label')), findsOneWidget);
+    expect(inheritedTextStyle.fontFamily, 'Test Mono');
+    expect(inheritedTextStyle.fontSize, 15);
+    expect(inheritedTextStyle.color, CLThemeData().colors.onFloatingControl);
+    expect(inheritedIconTheme.color, CLThemeData().colors.onFloatingControl);
+    expect(find.bySemanticsLabel('Dynamic value'), findsOneWidget);
     semantics.dispose();
   });
 
@@ -124,7 +180,12 @@ void main() {
     await tester.pumpWidget(
       host(
         CLButton(
-          label: '363%',
+          labelWidget: CLAnimatedNumber(
+            363,
+            key: const ValueKey('inline-number'),
+            formatter: (value) => '${value.round()}%',
+          ),
+          semanticLabel: 'Canvas zoom 363%',
           width: 88,
           size: CLControlSize.medium,
           iconSize: 14,
@@ -140,7 +201,9 @@ void main() {
       ),
     );
 
-    final labelRect = tester.getRect(find.text('363%'));
+    final labelRect = tester.getRect(
+      find.byKey(const ValueKey('inline-number')),
+    );
     final iconRect = tester.getRect(find.byKey(trailingKey));
     final buttonRect = tester.getRect(find.byType(CLButton));
     expect(labelRect.right, lessThan(iconRect.left));
@@ -247,22 +310,21 @@ void main() {
     }
 
     expect(await fillFor(CLButtonVariant.primary), theme.colors.accent);
-    expect(await fillFor(CLButtonVariant.secondary), theme.colors.control);
     expect(
-      await fillFor(CLButtonVariant.floating),
+      await fillFor(CLButtonVariant.secondary),
       theme.colors.floatingControl,
     );
     expect(await fillFor(CLButtonVariant.danger), theme.colors.danger);
   });
 
-  testWidgets('CLButton floating uses the Figma glass treatment', (
+  testWidgets('CLButton secondary uses the default glass treatment', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       host(
         CLButton(
           label: '继续',
-          variant: CLButtonVariant.floating,
+          variant: CLButtonVariant.secondary,
           onPressed: () {},
         ),
       ),
@@ -270,7 +332,7 @@ void main() {
 
     final surface = tester.widget<CLSurface>(find.byType(CLSurface));
     expect(surface.frosted, isTrue);
-    expect(surface.frostSigma, 10);
+    expect(surface.frostSigma, 36);
     expect(surface.shadow, isNull);
     expect(
       tester.widget<Text>(find.text('继续')).style?.color,
@@ -304,7 +366,6 @@ void main() {
       (CLButtonVariant.secondary, true),
       (CLButtonVariant.danger, true),
       (CLButtonVariant.ghost, false),
-      (CLButtonVariant.floating, true),
     ]) {
       await tester.pumpWidget(
         host(CLButton(label: '继续', variant: variant, onPressed: () {})),
@@ -348,7 +409,6 @@ void main() {
     for (final (variant, frosted) in [
       (CLButtonVariant.primary, true),
       (CLButtonVariant.secondary, true),
-      (CLButtonVariant.floating, true),
       (CLButtonVariant.danger, true),
       (CLButtonVariant.ghost, false),
     ]) {
@@ -370,7 +430,7 @@ void main() {
 
     for (final (variant, foreground) in [
       (CLButtonVariant.primary, theme.colors.onAccent),
-      (CLButtonVariant.floating, theme.colors.onFloatingControl),
+      (CLButtonVariant.secondary, theme.colors.onFloatingControl),
       (CLButtonVariant.danger, theme.colors.onDanger),
     ]) {
       await tester.pumpWidget(
@@ -408,13 +468,11 @@ void main() {
     expect(surface.fill, tint);
   });
 
-  testWidgets('CLButton disabled floating keeps its glass fill', (
+  testWidgets('CLButton disabled secondary keeps its glass fill', (
     WidgetTester tester,
   ) async {
     final theme = CLThemeData();
-    await tester.pumpWidget(
-      host(const CLButton(label: '继续', variant: CLButtonVariant.floating)),
-    );
+    await tester.pumpWidget(host(const CLButton(label: '继续')));
 
     expect(
       tester.widget<CLSurface>(find.byType(CLSurface)).fill,
@@ -422,14 +480,17 @@ void main() {
     );
   });
 
-  testWidgets('CLButton disabled dims the fill and blocks taps', (
+  testWidgets('CLButton disabled primary retains its accent fill', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(host(const CLButton(label: '继续')));
+    await tester.pumpWidget(
+      host(const CLButton(label: '继续', variant: CLButtonVariant.primary)),
+    );
 
     final theme = CLThemeData();
     final surface = tester.widget<CLSurface>(find.byType(CLSurface));
-    expect(surface.fill!.a, lessThan(theme.colors.accent.a));
+    expect(surface.fill, theme.colors.accent);
+    expect(surface.shadow, isNull);
 
     final semantics = tester.widget<Semantics>(
       find

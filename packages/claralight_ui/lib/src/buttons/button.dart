@@ -12,14 +12,11 @@ enum CLButtonVariant {
   /// Accent-filled call to action (the blue upload button in the mockups).
   primary,
 
-  /// Neutral control-fill button (toolbar and inspector buttons).
+  /// Default neutral glass control for buttons on any background.
   secondary,
 
   /// No fill until hovered; for rows of quiet actions.
   ghost,
-
-  /// Dark glass action floating over arbitrary canvas content.
-  floating,
 
   /// Destructive action with the semantic danger color.
   danger,
@@ -27,8 +24,8 @@ enum CLButtonVariant {
 
 /// A Claralight capsule button.
 ///
-/// Opaque layered fill per variant; press interaction is the springy
-/// Claralight scale + jelly drag.
+/// Frosted layered fill per non-ghost variant; press interaction is the
+/// springy Claralight scale + jelly drag.
 class CLButton extends StatefulWidget {
   /// Plain-text label. Exactly one of [label] and [labelWidget] is required.
   final String? label;
@@ -54,8 +51,9 @@ class CLButton extends StatefulWidget {
   /// Disable for compact label-and-icon readouts that should flow inline.
   final bool centerLabel;
 
-  /// Configured variant. When omitted, the button defaults to [CLButtonVariant.primary]
-  /// outside a toolbar and [CLButtonVariant.ghost] inside one.
+  /// Configured variant. When omitted, the button defaults to
+  /// [CLButtonVariant.secondary] outside a toolbar and
+  /// [CLButtonVariant.ghost] inside one.
   final CLButtonVariant variant;
   final bool _usesDefaultVariant;
 
@@ -111,7 +109,7 @@ class CLButton extends StatefulWidget {
        ),
        assert(iconSize == null || iconSize > 0),
        assert(horizontalPadding == null || horizontalPadding >= 0),
-       variant = variant ?? CLButtonVariant.primary,
+       variant = variant ?? CLButtonVariant.secondary,
        _usesDefaultVariant = variant == null,
        _sizeOverride = size;
 
@@ -203,9 +201,7 @@ class _CLButtonState extends State<CLButton> {
                   pressedHover: _hovered && _enabled,
                 ),
                 frosted: effectiveVariant != CLButtonVariant.ghost,
-                frostSigma: effectiveVariant == CLButtonVariant.floating
-                    ? 10
-                    : 47.9,
+                frostSigma: 36,
                 borderRadius: radius,
                 padding: EdgeInsets.symmetric(horizontal: _hPadding),
                 child: LayoutBuilder(
@@ -321,25 +317,26 @@ class _CLButtonState extends State<CLButton> {
     final tint = widget.tint;
     var fill = switch (variant) {
       CLButtonVariant.primary => tint ?? colors.accent,
-      CLButtonVariant.secondary =>
-        tint ?? (pressedHover ? colors.controlHighlight : colors.control),
+      CLButtonVariant.secondary => tint ?? colors.floatingControl,
       CLButtonVariant.ghost =>
         tint ??
             (pressedHover ? colors.controlHighlight : const Color(0x00000000)),
-      CLButtonVariant.floating => tint ?? colors.floatingControl,
       CLButtonVariant.danger => tint ?? colors.danger,
     };
     if (pressedHover &&
         (variant == CLButtonVariant.primary ||
-            variant == CLButtonVariant.floating ||
+            variant == CLButtonVariant.secondary ||
             variant == CLButtonVariant.danger)) {
       fill = Color.lerp(fill, const Color(0xFFFFFFFF), 0.08)!;
     }
-    if (!_enabled && variant != CLButtonVariant.floating) {
-      // Semantic actions drop their variant color when disabled. Floating
-      // controls retain their glass layer so transient canvas gestures do not
-      // make the surrounding toolbar flash to a different surface.
-      fill = colors.control;
+    if (!_enabled) {
+      // Default controls retain their glass layer while disabled; semantic
+      // actions retain their identity except destructive actions, which drop
+      // their color to avoid suggesting a destructive operation is available.
+      fill = switch (variant) {
+        CLButtonVariant.secondary || CLButtonVariant.primary => fill,
+        _ => colors.control,
+      };
     }
     return fill;
   }
@@ -348,9 +345,8 @@ class _CLButtonState extends State<CLButton> {
     final colors = theme.colors;
     final color = switch (variant) {
       CLButtonVariant.primary => colors.onAccent,
-      CLButtonVariant.secondary => colors.textPrimary,
+      CLButtonVariant.secondary => colors.onFloatingControl,
       CLButtonVariant.ghost => colors.textPrimary,
-      CLButtonVariant.floating => colors.onFloatingControl,
       CLButtonVariant.danger => colors.onDanger,
     };
     return _enabled ? color : colors.textDisabled;

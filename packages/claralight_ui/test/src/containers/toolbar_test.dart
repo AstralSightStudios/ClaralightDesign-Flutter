@@ -159,7 +159,9 @@ void main() {
         .widgetList<CLSurface>(find.byType(CLSurface))
         .toList();
     expect(surfaces, hasLength(2));
-    expect(surfaces.first.fill, isNull);
+    expect(surfaces.first.fill, CLThemeData().colors.floatingControl);
+    expect(surfaces.first.frosted, isTrue);
+    expect(surfaces.first.frostSigma, 36);
     expect(surfaces.first.outlined, isFalse);
     expect(surfaces.first.shadow, isNull);
     final outline = tester.widget<DecoratedBox>(
@@ -249,7 +251,7 @@ void main() {
         expect(outline(key), BorderSide.none);
       }
       for (final key in [explicitButtonKey, explicitIconKey]) {
-        expect(surface(key).fill, theme.colors.control);
+        expect(surface(key).fill, theme.colors.floatingControl);
         expect(surface(key).frosted, isTrue);
         expect(outline(key), BorderSide(color: theme.colors.outline));
       }

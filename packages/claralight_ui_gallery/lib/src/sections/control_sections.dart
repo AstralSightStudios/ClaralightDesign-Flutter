@@ -104,8 +104,7 @@ class _IconButtonsSectionState extends State<_IconButtonsSection> {
               CLIconButton(
                 icon: Icons.title_rounded,
                 size: CLControlSize.medium,
-                variant: CLIconButtonVariant.floating,
-                semanticLabel: '文字工具（浮层）',
+                semanticLabel: '文字工具（默认玻璃）',
                 onPressed: () {},
               ),
               const SizedBox(width: 8),

@@ -25,11 +25,11 @@ void main() {
     return (shape as RoundedSuperellipseBorder).side;
   }
 
-  test('CLIconButton exposes large as its default configured size', () {
-    expect(
-      const CLIconButton(icon: Icons.add, onPressed: null).size,
-      CLControlSize.large,
-    );
+  test('CLIconButton exposes its default configuration', () {
+    const button = CLIconButton(icon: Icons.add, onPressed: null);
+
+    expect(button.size, CLControlSize.large);
+    expect(button.variant, CLIconButtonVariant.secondary);
   });
 
   testWidgets('CLIconButton renders frosted circle with size steps and taps', (
@@ -41,8 +41,20 @@ void main() {
       host(CLIconButton(icon: Icons.add, onPressed: () => tapped = true)),
     );
 
+    final defaultSurface = tester.widget<CLSurface>(find.byType(CLSurface));
     expect(tester.getSize(find.byType(CLSurface)), const Size(44, 44));
-    expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isTrue);
+    expect(defaultSurface.frosted, isTrue);
+    expect(defaultSurface.fill, CLThemeData().colors.floatingControl);
+    expect(defaultSurface.frostSigma, 36);
+    expect(defaultSurface.shadow, isNull);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.add)).color,
+      CLThemeData().colors.onFloatingControl,
+    );
+    expect(
+      outlineSide(tester),
+      BorderSide(color: CLThemeData().colors.outline),
+    );
 
     await tester.tap(find.byType(CLIconButton));
     await tester.pumpAndSettle();
@@ -50,7 +62,7 @@ void main() {
 
     for (final (size, extent, iconSize) in [
       (CLControlSize.small, 28.0, 16.0),
-      (CLControlSize.medium, 36.0, 19.0),
+      (CLControlSize.medium, 36.0, 18.0),
       (CLControlSize.large, 44.0, 22.0),
     ]) {
       await tester.pumpWidget(
@@ -69,7 +81,7 @@ void main() {
     }
   });
 
-  testWidgets('CLIconButton supports the exact Figma floating and bare sizes', (
+  testWidgets('CLIconButton supports the exact default glass and bare sizes', (
     WidgetTester tester,
   ) async {
     final theme = CLThemeData();
@@ -79,7 +91,6 @@ void main() {
         CLIconButton(
           icon: Icons.title_rounded,
           size: CLControlSize.medium,
-          variant: CLIconButtonVariant.floating,
           onPressed: () {},
         ),
       ),
@@ -90,7 +101,7 @@ void main() {
     expect(tester.getSize(find.byType(CLSurface)), const Size.square(36));
     expect(surface.fill, theme.colors.floatingControl);
     expect(surface.frosted, isTrue);
-    expect(surface.frostSigma, 10);
+    expect(surface.frostSigma, 36);
     expect(surface.shadow, isNull);
     expect(icon.size, 18);
     expect(icon.color, theme.colors.onFloatingControl);
@@ -139,7 +150,7 @@ void main() {
     }
   });
 
-  testWidgets('CLIconButton selected state uses the raised control fill', (
+  testWidgets('CLIconButton selected state raises the default glass fill', (
     WidgetTester tester,
   ) async {
     final theme = CLThemeData();
@@ -148,7 +159,13 @@ void main() {
       host(CLIconButton(icon: Icons.add, selected: true, onPressed: () {})),
     );
     final surface = tester.widget<CLSurface>(find.byType(CLSurface));
-    expect(surface.fill, theme.colors.controlHighlight);
+    expect(
+      surface.fill,
+      Color.alphaBlend(
+        theme.colors.controlHighlight,
+        theme.colors.floatingControl,
+      ),
+    );
   });
 
   testWidgets('CLIconButton fill override wins', (WidgetTester tester) async {
@@ -169,7 +186,7 @@ void main() {
     for (final (variant, fill, foreground) in [
       (CLIconButtonVariant.primary, theme.colors.accent, theme.colors.onAccent),
       (
-        CLIconButtonVariant.floating,
+        CLIconButtonVariant.secondary,
         theme.colors.floatingControl,
         theme.colors.onFloatingControl,
       ),
@@ -194,7 +211,6 @@ void main() {
       (CLIconButtonVariant.secondary, true),
       (CLIconButtonVariant.danger, true),
       (CLIconButtonVariant.ghost, false),
-      (CLIconButtonVariant.floating, true),
     ]) {
       await tester.pumpWidget(
         host(CLIconButton(icon: Icons.add, variant: variant, onPressed: () {})),
@@ -242,7 +258,7 @@ void main() {
 
     for (final (variant, fill) in [
       (CLIconButtonVariant.primary, theme.colors.accent),
-      (CLIconButtonVariant.floating, theme.colors.floatingControl),
+      (CLIconButtonVariant.secondary, theme.colors.floatingControl),
       (CLIconButtonVariant.danger, theme.colors.danger),
     ]) {
       await tester.pumpWidget(
@@ -293,40 +309,7 @@ void main() {
     expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isFalse);
   });
 
-  testWidgets('CLIconButton disabled blocks taps and drops semantic color', (
-    WidgetTester tester,
-  ) async {
-    final theme = CLThemeData();
-
-    for (final variant in [
-      CLIconButtonVariant.primary,
-      CLIconButtonVariant.danger,
-    ]) {
-      await tester.pumpWidget(
-        host(CLIconButton(icon: Icons.add, variant: variant, onPressed: null)),
-      );
-
-      final semantics = tester.widget<Semantics>(
-        find
-            .descendant(
-              of: find.byType(CLIconButton),
-              matching: find.byType(Semantics),
-            )
-            .first,
-      );
-      expect(semantics.properties.enabled, isFalse);
-      expect(
-        tester.widget<CLSurface>(find.byType(CLSurface)).fill,
-        theme.colors.control,
-      );
-      expect(
-        tester.widget<Icon>(find.byIcon(Icons.add)).color,
-        theme.colors.textDisabled,
-      );
-    }
-  });
-
-  testWidgets('CLIconButton disabled floating keeps its glass layer', (
+  testWidgets('CLIconButton disabled primary retains its accent fill', (
     WidgetTester tester,
   ) async {
     final theme = CLThemeData();
@@ -334,10 +317,61 @@ void main() {
       host(
         const CLIconButton(
           icon: Icons.add,
-          variant: CLIconButtonVariant.floating,
+          variant: CLIconButtonVariant.primary,
           onPressed: null,
         ),
       ),
+    );
+
+    final semantics = tester.widget<Semantics>(
+      find
+          .descendant(
+            of: find.byType(CLIconButton),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    expect(semantics.properties.enabled, isFalse);
+    expect(
+      tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+      theme.colors.accent,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.add)).color,
+      theme.colors.textDisabled,
+    );
+  });
+
+  testWidgets('CLIconButton disabled danger drops its semantic color', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+    await tester.pumpWidget(
+      host(
+        const CLIconButton(
+          icon: Icons.add,
+          variant: CLIconButtonVariant.danger,
+          onPressed: null,
+        ),
+      ),
+    );
+
+    expect(
+      tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+      theme.colors.control,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.add)).color,
+      theme.colors.textDisabled,
+    );
+  });
+
+  testWidgets('CLIconButton disabled secondary keeps its glass layer', (
+    WidgetTester tester,
+  ) async {
+    final theme = CLThemeData();
+    await tester.pumpWidget(
+      host(const CLIconButton(icon: Icons.add, onPressed: null)),
     );
 
     final surface = tester.widget<CLSurface>(find.byType(CLSurface));

@@ -21,14 +21,11 @@ enum CLIconButtonVariant {
   /// Accent-filled primary action.
   primary,
 
-  /// Neutral control fill, used by toolbars and inspectors.
+  /// Default neutral glass control for buttons on any background.
   secondary,
 
   /// Transparent until hovered, for quiet contextual actions.
   ghost,
-
-  /// Dark glass control floating over arbitrary canvas content.
-  floating,
 
   /// Destructive action with the semantic danger color.
   danger,
@@ -117,7 +114,7 @@ class _CLIconButtonState extends State<CLIconButton> {
       widget.iconSize ??
       switch ((size, variant)) {
         (CLControlSize.small, _) => 16,
-        (CLControlSize.medium, CLIconButtonVariant.floating) => 18,
+        (CLControlSize.medium, CLIconButtonVariant.secondary) => 18,
         (CLControlSize.medium, _) => 19,
         (CLControlSize.large, _) => 22,
       };
@@ -143,13 +140,18 @@ class _CLIconButtonState extends State<CLIconButton> {
         : widget.variant;
     final usesVariantColors =
         effectiveVariant == CLIconButtonVariant.primary ||
-        effectiveVariant == CLIconButtonVariant.floating ||
+        effectiveVariant == CLIconButtonVariant.secondary ||
         effectiveVariant == CLIconButtonVariant.danger;
     final outlined =
         widget.outlined ?? effectiveVariant != CLIconButtonVariant.ghost;
     var fill = widget.selected
         ? (widget.selectedFill ??
-              (usesVariantColors
+              (effectiveVariant == CLIconButtonVariant.secondary
+                  ? Color.alphaBlend(
+                      theme.colors.controlHighlight,
+                      theme.colors.floatingControl,
+                    )
+                  : usesVariantColors
                   ? _fillColor(theme, effectiveVariant, isHovered: false)
                   : inToolbar
                   ? isHovered
@@ -158,10 +160,14 @@ class _CLIconButtonState extends State<CLIconButton> {
                   : theme.colors.controlHighlight))
         : (widget.fill ??
               _fillColor(theme, effectiveVariant, isHovered: isHovered));
-    if (!_enabled && effectiveVariant != CLIconButtonVariant.floating) {
-      fill = usesVariantColors && widget.fill == null
-          ? theme.colors.control
-          : fill.withValues(alpha: fill.a * 0.45);
+    if (!_enabled) {
+      fill = switch (effectiveVariant) {
+        CLIconButtonVariant.primary || CLIconButtonVariant.secondary => fill,
+        _ =>
+          usesVariantColors && widget.fill == null
+              ? theme.colors.control
+              : fill.withValues(alpha: fill.a * 0.45),
+      };
     }
 
     final iconColor = !_enabled
@@ -204,9 +210,7 @@ class _CLIconButtonState extends State<CLIconButton> {
                 borderRadius: radius,
                 frosted:
                     effectiveVariant != CLIconButtonVariant.ghost && fill.a > 0,
-                frostSigma: effectiveVariant == CLIconButtonVariant.floating
-                    ? 10
-                    : 36,
+                frostSigma: 36,
                 child: Center(
                   child: Icon(
                     widget.icon,
@@ -234,13 +238,11 @@ class _CLIconButtonState extends State<CLIconButton> {
             ? Color.lerp(colors.accent, const Color(0xFFFFFFFF), 0.08)!
             : colors.accent,
       CLIconButtonVariant.secondary =>
-        isHovered ? colors.controlHighlight : colors.control,
-      CLIconButtonVariant.ghost =>
-        isHovered ? colors.controlHighlight : const Color(0x00000000),
-      CLIconButtonVariant.floating =>
         isHovered
             ? Color.lerp(colors.floatingControl, const Color(0xFFFFFFFF), 0.08)!
             : colors.floatingControl,
+      CLIconButtonVariant.ghost =>
+        isHovered ? colors.controlHighlight : const Color(0x00000000),
       CLIconButtonVariant.danger =>
         isHovered
             ? Color.lerp(colors.danger, const Color(0xFFFFFFFF), 0.08)!
@@ -251,10 +253,9 @@ class _CLIconButtonState extends State<CLIconButton> {
   Color _foregroundColor(CLThemeData theme, CLIconButtonVariant variant) {
     return switch (variant) {
       CLIconButtonVariant.primary => theme.colors.onAccent,
-      CLIconButtonVariant.floating => theme.colors.onFloatingControl,
-      CLIconButtonVariant.danger => theme.colors.onDanger,
-      CLIconButtonVariant.secondary ||
+      CLIconButtonVariant.secondary => theme.colors.onFloatingControl,
       CLIconButtonVariant.ghost => theme.colors.textSecondary,
+      CLIconButtonVariant.danger => theme.colors.onDanger,
     };
   }
 }

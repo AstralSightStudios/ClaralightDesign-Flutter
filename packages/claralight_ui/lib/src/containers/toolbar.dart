@@ -9,7 +9,7 @@ import 'toolbar_scope.dart';
 /// A Claralight toolbar capsule — the floating tool clusters at the top of
 /// the desktop mockup.
 ///
-/// Groups its children inside a single control-fill capsule, with optional
+/// Groups its children inside a single default-glass capsule, with optional
 /// hairline dividers between them. Icon buttons inside use a transparent,
 /// non-frosted resting treatment so the capsule remains the only background.
 class CLToolbar extends StatefulWidget {
@@ -38,12 +38,10 @@ class CLToolbar extends StatefulWidget {
   /// Gap between children.
   final double spacing;
 
-  /// Overrides the control-level fill. Dark floating pills over the editor
-  /// canvas use `CLTheme.of(context).colors.floatingControl` instead.
+  /// Overrides the default glass fill.
   final Color? fill;
 
-  /// Whether the capsule draws its hairline outline. Floating pills over
-  /// imagery can drop it for a quieter treatment.
+  /// Whether the capsule draws its hairline outline.
   final bool outlined;
 
   const CLToolbar({
@@ -140,7 +138,7 @@ class _CLToolbarState extends State<CLToolbar> {
         ),
         child: CLSurface(
           level: CLSurfaceLevel.control,
-          fill: widget.fill,
+          fill: widget.fill ?? theme.colors.floatingControl,
           frosted: true,
           borderRadius: radius,
           padding: EdgeInsets.symmetric(horizontal: widget.padding),
