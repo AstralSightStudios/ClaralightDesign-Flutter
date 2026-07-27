@@ -858,62 +858,6 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       ..setEntry(3, 1, skewY);
   }
 
-  static Matrix4 _computeHomography(
-    Size childSize,
-    Offset p1,
-    Offset p2,
-    Offset p3,
-    Offset p4,
-  ) {
-    final w = childSize.width;
-    final h = childSize.height;
-    if (w <= 0 || h <= 0) return Matrix4.identity();
-
-    final x1 = p1.dx, y1 = p1.dy;
-    final x2 = p2.dx, y2 = p2.dy;
-    final x3 = p3.dx, y3 = p3.dy;
-    final x4 = p4.dx, y4 = p4.dy;
-
-    final m03 = x1;
-    final m13 = y1;
-
-    final c = x4 - x2 - x3 + x1;
-    final f = y4 - y2 - y3 + y1;
-
-    final a = (x2 - x4) * w;
-    final b = (x3 - x4) * h;
-    final d = (y2 - y4) * w;
-    final e = (y3 - y4) * h;
-
-    final det = a * e - b * d;
-
-    double m30 = 0.0;
-    double m31 = 0.0;
-
-    if (det.abs() > 1e-6) {
-      m30 = (c * e - b * f) / det;
-      m31 = (a * f - c * d) / det;
-    }
-
-    final m00 = (x2 - x1 + m30 * w * x2) / w;
-    final m10 = (y2 - y1 + m30 * w * y2) / w;
-    final m01 = (x3 - x1 + m31 * h * x3) / h;
-    final m11 = (y3 - y1 + m31 * h * y3) / h;
-
-    final matrix = Matrix4.identity();
-    matrix.storage[0] = m00;
-    matrix.storage[1] = m10;
-    matrix.storage[3] = m30;
-    matrix.storage[4] = m01;
-    matrix.storage[5] = m11;
-    matrix.storage[7] = m31;
-    matrix.storage[12] = m03;
-    matrix.storage[13] = m13;
-    matrix.storage[15] = 1.0;
-
-    return matrix;
-  }
-
   Widget _buildMeasuredList({required double maxHeight}) {
     return SizedBox(
       width: widget.menuWidth,
