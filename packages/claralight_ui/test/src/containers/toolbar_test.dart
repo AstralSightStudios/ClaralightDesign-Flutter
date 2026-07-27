@@ -398,6 +398,88 @@ void main() {
     expect(iconSurface().fill, theme.colors.control);
   });
 
+  testWidgets('dividers sit directly between toolbar buttons', (tester) async {
+    const firstKey = Key('first');
+    const secondKey = Key('second');
+    await tester.pumpWidget(
+      host(
+        CLToolbar(
+          height: 44,
+          dividers: true,
+          children: [
+            CLIconButton(
+              key: firstKey,
+              icon: Icons.add,
+              size: CLControlSize.medium,
+              onPressed: () {},
+            ),
+            CLIconButton(
+              key: secondKey,
+              icon: Icons.remove,
+              size: CLControlSize.medium,
+              onPressed: () {},
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final divider = find.byWidgetPredicate(
+      (widget) =>
+          widget is SizedBox && widget.width == 1 && widget.height == 22,
+    );
+    expect(divider, findsOneWidget);
+    expect(
+      tester.getRect(divider).left,
+      tester.getRect(find.byKey(firstKey)).right,
+    );
+    expect(
+      tester.getRect(divider).right,
+      tester.getRect(find.byKey(secondKey)).left,
+    );
+  });
+
+  testWidgets('disabled tools do not hide dividers', (tester) async {
+    const disabledKey = Key('disabled-tool');
+    const enabledKey = Key('enabled-tool');
+    await tester.pumpWidget(
+      host(
+        CLToolbar(
+          dividers: true,
+          children: [
+            const CLIconButton(
+              key: disabledKey,
+              icon: Icons.add,
+              onPressed: null,
+            ),
+            CLIconButton(key: enabledKey, icon: Icons.remove, onPressed: () {}),
+          ],
+        ),
+      ),
+    );
+
+    final dividers = find.descendant(
+      of: find.byType(CLToolbar),
+      matching: find.byType(AnimatedOpacity),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.byKey(disabledKey)));
+    await tester.pump();
+    expect(
+      tester.widgetList<AnimatedOpacity>(dividers).map((item) => item.opacity),
+      everyElement(1),
+    );
+
+    await mouse.moveTo(tester.getCenter(find.byKey(enabledKey)));
+    await tester.pump();
+    expect(
+      tester.widgetList<AnimatedOpacity>(dividers).map((item) => item.opacity),
+      everyElement(0),
+    );
+  });
+
   testWidgets('all dividers hide while any tool is hovered or pressed', (
     tester,
   ) async {

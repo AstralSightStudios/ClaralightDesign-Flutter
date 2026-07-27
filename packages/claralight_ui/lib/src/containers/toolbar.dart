@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../buttons/button.dart';
+import '../buttons/icon_button.dart';
 import '../foundation/control_size.dart';
 import '../foundation/shape.dart';
 import '../surfaces/surface.dart';
@@ -35,7 +37,7 @@ class CLToolbar extends StatefulWidget {
   /// makes all four sides look even.
   final double padding;
 
-  /// Gap between children.
+  /// Gap between children when [dividers] is false.
   final double spacing;
 
   /// Overrides the default glass fill.
@@ -59,6 +61,12 @@ class CLToolbar extends StatefulWidget {
   @override
   State<CLToolbar> createState() => _CLToolbarState();
 }
+
+bool _isInteractiveTool(Widget child) => switch (child) {
+  CLButton(:final onPressed) => onPressed != null,
+  CLIconButton(:final onPressed) => onPressed != null,
+  _ => true,
+};
 
 class _CLToolbarState extends State<CLToolbar> {
   final Set<int> _hoveredTools = <int>{};
@@ -92,17 +100,14 @@ class _CLToolbarState extends State<CLToolbar> {
       if (i > 0) {
         if (widget.dividers) {
           items.add(
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: widget.spacing + 2),
-              child: AnimatedOpacity(
-                opacity: _hideDividers ? 0 : 1,
-                duration: const Duration(milliseconds: 90),
-                curve: Curves.easeOutCubic,
-                child: SizedBox(
-                  width: 1,
-                  height: widget.height * 0.5,
-                  child: ColoredBox(color: theme.colors.separator),
-                ),
+            AnimatedOpacity(
+              opacity: _hideDividers ? 0 : 1,
+              duration: const Duration(milliseconds: 90),
+              curve: Curves.easeOutCubic,
+              child: SizedBox(
+                width: 1,
+                height: widget.height * 0.5,
+                child: ColoredBox(color: theme.colors.separator),
               ),
             ),
           );
@@ -110,16 +115,18 @@ class _CLToolbarState extends State<CLToolbar> {
           items.add(SizedBox(width: widget.spacing));
         }
       }
+      final child = widget.children[i];
+      final interactive = _isInteractiveTool(child);
       items.add(
         MouseRegion(
-          onEnter: (_) => _setToolHovered(i, true),
-          onExit: (_) => _setToolHovered(i, false),
+          onEnter: interactive ? (_) => _setToolHovered(i, true) : null,
+          onExit: interactive ? (_) => _setToolHovered(i, false) : null,
           child: Listener(
             behavior: HitTestBehavior.translucent,
-            onPointerDown: _handlePointerDown,
-            onPointerUp: _handlePointerEnd,
-            onPointerCancel: _handlePointerEnd,
-            child: widget.children[i],
+            onPointerDown: interactive ? _handlePointerDown : null,
+            onPointerUp: interactive ? _handlePointerEnd : null,
+            onPointerCancel: interactive ? _handlePointerEnd : null,
+            child: child,
           ),
         ),
       );
