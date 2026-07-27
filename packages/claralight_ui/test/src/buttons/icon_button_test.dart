@@ -125,6 +125,22 @@ void main() {
     expect(icon.color, const Color(0xFF160A01));
   });
 
+  testWidgets('CLIconButton only floating casts a shadow', (
+    WidgetTester tester,
+  ) async {
+    for (final variant in CLIconButtonVariant.values) {
+      await tester.pumpWidget(
+        host(CLIconButton(icon: Icons.add, variant: variant, onPressed: () {})),
+      );
+
+      expect(
+        tester.widget<CLSurface>(find.byType(CLSurface)).shadow,
+        variant == CLIconButtonVariant.floating ? isNotNull : isNull,
+        reason: 'shadow of $variant',
+      );
+    }
+  });
+
   testWidgets('CLIconButton selected state uses the raised control fill', (
     WidgetTester tester,
   ) async {

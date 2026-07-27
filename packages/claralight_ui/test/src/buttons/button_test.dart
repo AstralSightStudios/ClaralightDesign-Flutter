@@ -192,6 +192,22 @@ void main() {
     );
   });
 
+  testWidgets('CLButton only floating casts a shadow', (
+    WidgetTester tester,
+  ) async {
+    for (final variant in CLButtonVariant.values) {
+      await tester.pumpWidget(
+        host(CLButton(label: '继续', variant: variant, onPressed: () {})),
+      );
+
+      expect(
+        tester.widget<CLSurface>(find.byType(CLSurface)).shadow,
+        variant == CLButtonVariant.floating ? isNotNull : isNull,
+        reason: 'shadow of $variant',
+      );
+    }
+  });
+
   testWidgets('CLButton outlines non-ghost variants by default', (
     WidgetTester tester,
   ) async {
