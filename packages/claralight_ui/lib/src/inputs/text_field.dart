@@ -59,6 +59,13 @@ class CLTextField extends StatefulWidget {
   final ValueChanged<String>? onCancel;
 
   final TextInputType? keyboardType;
+
+  /// Optional formatters applied to user-entered text.
+  final List<TextInputFormatter>? inputFormatters;
+
+  /// Whether this field should focus itself when first built.
+  final bool autofocus;
+
   final bool enabled;
 
   /// Prevents editing without applying disabled-state colors.
@@ -124,6 +131,8 @@ class CLTextField extends StatefulWidget {
     this.onCommit,
     this.onCancel,
     this.keyboardType,
+    this.inputFormatters,
+    this.autofocus = false,
     this.enabled = true,
     this.readOnly = false,
     this.error = false,
@@ -930,6 +939,8 @@ class _CLTextFieldState extends State<CLTextField>
       style: textStyle,
       cursorColor: _showsError ? colors.danger : colors.accent,
       keyboardType: widget.keyboardType,
+      inputFormatters: widget.inputFormatters,
+      autofocus: widget.autofocus,
       enabled: widget.enabled,
       readOnly: widget.readOnly,
       enableInteractiveSelection: !widget.readOnly,

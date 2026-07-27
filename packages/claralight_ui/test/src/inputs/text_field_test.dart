@@ -423,6 +423,36 @@ void main() {
     expect(cursorBackend.moves, isEmpty);
   });
 
+  testWidgets('forwards autofocus and input formatters', (tester) async {
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    final formatter = FilteringTextInputFormatter.digitsOnly;
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          focusNode: focusNode,
+          inputFormatters: [formatter],
+          autofocus: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final field = tester.widget<CupertinoTextField>(
+      find.byType(CupertinoTextField),
+    );
+    expect(field.inputFormatters, [formatter]);
+    expect(field.autofocus, isTrue);
+    expect(focusNode.hasFocus, isTrue);
+
+    await tester.enterText(find.byType(CupertinoTextField), '12ab34');
+    expect(controller.text, '1234');
+  });
+
   testWidgets('sizes use the standard control heights', (tester) async {
     for (final size in CLControlSize.values) {
       await tester.pumpWidget(host(CLTextField(size: size)));
