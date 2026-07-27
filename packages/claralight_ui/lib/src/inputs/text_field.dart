@@ -1069,12 +1069,14 @@ class _CLTextFieldState extends State<CLTextField>
               _commitNumericInteraction();
             }
           : null,
-      child: Listener(
-        onPointerSignal: _showsStepper ? _handlePointerSignal : null,
-        child: OverlayPortal(
-          controller: _scrubPortal,
-          overlayChildBuilder: _buildScrubOverlay,
-          child: control,
+      child: TextFieldTapRegion(
+        child: Listener(
+          onPointerSignal: _showsStepper ? _handlePointerSignal : null,
+          child: OverlayPortal(
+            controller: _scrubPortal,
+            overlayChildBuilder: _buildScrubOverlay,
+            child: control,
+          ),
         ),
       ),
     );

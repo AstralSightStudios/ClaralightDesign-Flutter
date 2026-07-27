@@ -1694,6 +1694,42 @@ void main() {
     await mouse.up();
   });
 
+  testWidgets('mouse hold repeats while the focused value is fully selected', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          focusNode: focusNode,
+          keyboardType: TextInputType.number,
+          step: 1,
+        ),
+      ),
+    );
+    focusNode.requestFocus();
+    controller.selection = const TextSelection(baseOffset: 0, extentOffset: 1);
+    await tester.pump();
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(stepUp),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    expect(focusNode.hasFocus, isTrue);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(controller.text, '1');
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(controller.text, '2');
+
+    await mouse.up();
+  });
+
   testWidgets('touch long press waits for 8px movement before scrubbing', (
     tester,
   ) async {
