@@ -37,7 +37,7 @@ void main() {
     expect(tester.widget<CLSurface>(find.byType(CLSurface)).frosted, isTrue);
 
     final box = tester.getSize(find.byType(CLSurface));
-    expect(box.height, 50);
+    expect(box.height, 44);
   });
 
   testWidgets('CLButton sizes follow the density steps', (
@@ -46,7 +46,7 @@ void main() {
     for (final (size, height) in [
       (CLControlSize.small, 28.0),
       (CLControlSize.medium, 36.0),
-      (CLControlSize.large, 50.0),
+      (CLControlSize.large, 44.0),
     ]) {
       await tester.pumpWidget(
         host(CLButton(label: '继续', size: size, onPressed: () {})),
@@ -57,6 +57,94 @@ void main() {
         reason: 'height of $size',
       );
     }
+  });
+
+  testWidgets('CLButton applies label style and semantic label overrides', (
+    WidgetTester tester,
+  ) async {
+    const trailingKey = Key('custom-trailing-icon');
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      host(
+        CLButton(
+          label: '100%',
+          semanticLabel: 'Canvas zoom 100%',
+          labelStyle: const TextStyle(
+            color: Color(0xFFFF0000),
+            fontFamily: 'Test Mono',
+            fontSize: 15,
+          ),
+          trailingIcon: const Icon(
+            Icons.arrow_drop_down,
+            key: trailingKey,
+            size: 14,
+          ),
+          onPressed: () {},
+        ),
+      ),
+    );
+
+    final label = tester.widget<Text>(find.text('100%'));
+    expect(label.style?.fontFamily, 'Test Mono');
+    expect(label.style?.fontSize, 15);
+    expect(label.style?.color, CLThemeData().colors.onAccent);
+    expect(tester.widget<Icon>(find.byKey(trailingKey)).size, 14);
+    expect(find.bySemanticsLabel('Canvas zoom 100%'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('CLButton supports an accessible icon-only composition', (
+    WidgetTester tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      host(
+        CLButton(
+          label: '',
+          semanticLabel: 'Application menu',
+          leadingIcon: const Icon(Icons.apps),
+          trailingIcon: const Icon(Icons.arrow_drop_down),
+          onPressed: () {},
+        ),
+      ),
+    );
+
+    expect(find.bySemanticsLabel('Application menu'), findsOneWidget);
+    expect(find.byType(Icon), findsNWidgets(2));
+    semantics.dispose();
+  });
+
+  testWidgets('CLButton inline content does not overlap at fixed width', (
+    WidgetTester tester,
+  ) async {
+    const trailingKey = Key('inline-trailing-icon');
+
+    await tester.pumpWidget(
+      host(
+        CLButton(
+          label: '363%',
+          width: 88,
+          size: CLControlSize.medium,
+          iconSize: 14,
+          horizontalPadding: 8,
+          centerLabel: false,
+          trailingIcon: const Icon(
+            Icons.keyboard_arrow_down,
+            key: trailingKey,
+            size: 14,
+          ),
+          onPressed: () {},
+        ),
+      ),
+    );
+
+    final labelRect = tester.getRect(find.text('363%'));
+    final iconRect = tester.getRect(find.byKey(trailingKey));
+    final buttonRect = tester.getRect(find.byType(CLButton));
+    expect(labelRect.right, lessThan(iconRect.left));
+    expect(iconRect.center.dy, closeTo(buttonRect.center.dy, 0.01));
   });
 
   testWidgets('CLButton hugs content by default and accepts fixed width', (

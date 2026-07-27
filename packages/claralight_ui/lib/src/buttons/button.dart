@@ -35,6 +35,16 @@ class CLButton extends StatefulWidget {
   final Widget? leadingIcon;
   final Widget? trailingIcon;
 
+  /// Accessibility label. Defaults to [label].
+  final String? semanticLabel;
+
+  /// Overrides label typography while preserving the variant foreground color.
+  final TextStyle? labelStyle;
+
+  /// Keeps the label on the visual centerline in fixed-width buttons.
+  /// Disable for compact label-and-icon readouts that should flow inline.
+  final bool centerLabel;
+
   /// Configured variant. When omitted, the button defaults to [CLButtonVariant.primary]
   /// outside a toolbar and [CLButtonVariant.ghost] inside one.
   final CLButtonVariant variant;
@@ -43,6 +53,12 @@ class CLButton extends StatefulWidget {
   /// Configured size, defaulting to large outside a toolbar.
   CLControlSize get size => _sizeOverride ?? CLControlSize.large;
   final CLControlSize? _sizeOverride;
+
+  /// Overrides the leading and trailing icon slots.
+  final double? iconSize;
+
+  /// Overrides horizontal content padding.
+  final double? horizontalPadding;
 
   /// Optional fixed width. Null hugs the content.
   final double? width;
@@ -64,13 +80,20 @@ class CLButton extends StatefulWidget {
     this.onPressed,
     this.leadingIcon,
     this.trailingIcon,
+    this.semanticLabel,
+    this.labelStyle,
+    this.centerLabel = true,
     CLButtonVariant? variant,
     CLControlSize? size,
+    this.iconSize,
+    this.horizontalPadding,
     this.width,
     this.tint,
     this.outlined,
     this.outlineColor,
-  }) : variant = variant ?? CLButtonVariant.primary,
+  }) : assert(iconSize == null || iconSize > 0),
+       assert(horizontalPadding == null || horizontalPadding >= 0),
+       variant = variant ?? CLButtonVariant.primary,
        _usesDefaultVariant = variant == null,
        _sizeOverride = size;
 
@@ -86,23 +109,22 @@ class _CLButtonState extends State<CLButton> {
       CLToolbarScope.maybeOf(context)?.size ??
       CLControlSize.large;
 
-  // Figma's touch CTAs are intentionally taller than the shared large
-  // control density: 50px with a 24px icon slot.
-  double get _height => switch (_size) {
-    CLControlSize.small || CLControlSize.medium => _size.controlHeight,
-    CLControlSize.large => 50,
-  };
+  double get _height => _size.controlHeight;
 
-  double get _hPadding => switch (_size) {
-    CLControlSize.small => 12,
-    CLControlSize.medium || CLControlSize.large => 16,
-  };
+  double get _hPadding =>
+      widget.horizontalPadding ??
+      switch (_size) {
+        CLControlSize.small => 12,
+        CLControlSize.medium || CLControlSize.large => 16,
+      };
 
-  double get _iconSize => switch (_size) {
-    CLControlSize.small => 15,
-    CLControlSize.medium => 18,
-    CLControlSize.large => 24,
-  };
+  double get _iconSize =>
+      widget.iconSize ??
+      switch (_size) {
+        CLControlSize.small => 15,
+        CLControlSize.medium => 18,
+        CLControlSize.large => 24,
+      };
 
   bool get _enabled => widget.onPressed != null;
 
@@ -117,21 +139,21 @@ class _CLButtonState extends State<CLButton> {
         widget.outlined ?? effectiveVariant != CLButtonVariant.ghost;
     final radius = BorderRadius.circular(theme.radii.capsule);
     final foreground = _foregroundColor(theme, effectiveVariant);
+    final baseTextStyle = _size == CLControlSize.large
+        ? theme.typography.title
+              .withCLWeight(FontWeight.w500)
+              .copyWith(fontSize: 17, height: 22 / 17, letterSpacing: -0.43)
+        : theme.typography.label;
     final textStyle =
-        (_size == CLControlSize.large
-                ? theme.typography.title
-                      .withCLWeight(FontWeight.w500)
-                      .copyWith(
-                        fontSize: 17,
-                        height: 22 / 17,
-                        letterSpacing: -0.43,
-                      )
-                : theme.typography.label)
+        (widget.labelStyle == null
+                ? baseTextStyle
+                : baseTextStyle.merge(widget.labelStyle))
             .copyWith(color: foreground);
     return Semantics(
       button: true,
       enabled: _enabled,
-      label: widget.label,
+      label: widget.semanticLabel ?? widget.label,
+      excludeSemantics: widget.semanticLabel != null,
       child: MouseRegion(
         cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
         onEnter: (_) => setState(() => _hovered = true),
@@ -174,7 +196,7 @@ class _CLButtonState extends State<CLButton> {
                         widget.width != null || constraints.hasTightWidth;
                     return Align(
                       widthFactor: fillsAvailableWidth ? null : 1,
-                      child: fillsAvailableWidth
+                      child: fillsAvailableWidth && widget.centerLabel
                           ? _fullWidthContent(textStyle, foreground)
                           : _huggingContent(textStyle, foreground),
                     );
@@ -195,18 +217,21 @@ class _CLButtonState extends State<CLButton> {
       children: [
         if (widget.leadingIcon != null) ...[
           _iconSlot(widget.leadingIcon!, foreground),
-          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
+          if (widget.label.isNotEmpty)
+            SizedBox(width: _size == CLControlSize.small ? 6 : 8),
         ],
-        Flexible(
-          child: Text(
-            widget.label,
-            softWrap: false,
-            overflow: TextOverflow.fade,
-            style: textStyle,
+        if (widget.label.isNotEmpty)
+          Flexible(
+            child: Text(
+              widget.label,
+              softWrap: false,
+              overflow: TextOverflow.fade,
+              style: textStyle,
+            ),
           ),
-        ),
         if (widget.trailingIcon != null) ...[
-          SizedBox(width: _size == CLControlSize.small ? 6 : 8),
+          if (widget.label.isNotEmpty)
+            SizedBox(width: _size == CLControlSize.small ? 6 : 8),
           _iconSlot(widget.trailingIcon!, foreground),
         ],
       ],
@@ -231,14 +256,16 @@ class _CLButtonState extends State<CLButton> {
         if (widget.leadingIcon != null)
           PositionedDirectional(
             start: 0,
-            top: (_height - _iconSize) / 2,
-            child: _iconSlot(widget.leadingIcon!, foreground),
+            top: 0,
+            bottom: 0,
+            child: Center(child: _iconSlot(widget.leadingIcon!, foreground)),
           ),
         if (widget.trailingIcon != null)
           PositionedDirectional(
             end: 0,
-            top: (_height - _iconSize) / 2,
-            child: _iconSlot(widget.trailingIcon!, foreground),
+            top: 0,
+            bottom: 0,
+            child: Center(child: _iconSlot(widget.trailingIcon!, foreground)),
           ),
       ],
     );
