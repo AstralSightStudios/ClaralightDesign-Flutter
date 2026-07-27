@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' show SemanticsAction, SemanticsValidationResult;
 
 import 'package:claralight_ui/claralight_ui.dart';
 import 'package:claralight_ui/src/inputs/numeric_scrub_cursor.dart';
@@ -8,6 +7,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -710,6 +710,40 @@ void main() {
     );
   });
 
+  testWidgets('active hover cursor matches the numeric scrub hit regions', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '4');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+        ),
+      ),
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(prefixZone));
+    await tester.pump();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.resizeLeftRight,
+    );
+
+    await mouse.moveTo(tester.getCenter(stepUp));
+    await tester.pump();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.resizeLeftRight,
+    );
+    await mouse.removePointer();
+  });
+
   testWidgets('mouse scrub only starts in prefix and arrow regions', (
     tester,
   ) async {
@@ -1023,12 +1057,12 @@ void main() {
     await mouse.up();
   });
 
-  testWidgets('one pointer update commits and haptics atomically', (
+  testWidgets('pointer changes continuously and commits once on release', (
     tester,
   ) async {
     final controller = TextEditingController(text: '0');
     final changes = <String>[];
-    final stepped = <String>[];
+    final commits = <String>[];
     final platformCalls = <MethodCall>[];
     addTearDown(controller.dispose);
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -1053,7 +1087,7 @@ void main() {
           prefix: const Text('X'),
           step: 1,
           onChanged: changes.add,
-          onStepped: stepped.add,
+          onCommit: commits.add,
         ),
       ),
     );
@@ -1069,7 +1103,7 @@ void main() {
 
     expect(controller.text, '3');
     expect(changes, ['3']);
-    expect(stepped, ['3']);
+    expect(commits, isEmpty);
     expect(
       platformCalls.where(
         (call) =>
@@ -1081,9 +1115,12 @@ void main() {
 
     await mouse.up();
     await tester.pumpAndSettle();
+    expect(commits, ['3']);
+
     await tester.tap(stepUp);
     await tester.pump();
     expect(controller.text, '4');
+    expect(commits, ['3', '4']);
     expect(
       platformCalls.where(
         (call) =>
@@ -1092,6 +1129,265 @@ void main() {
       ),
       hasLength(2),
     );
+  });
+
+  testWidgets('pointer cancel restores the start value without committing', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    final changes = <String>[];
+    final commits = <String>[];
+    final cancels = <String>[];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+          onChanged: changes.add,
+          onCommit: commits.add,
+          onCancel: cancels.add,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+
+    await mouse.cancel();
+    await tester.pump();
+
+    expect(changes, ['1']);
+    expect(commits, isEmpty);
+    expect(cancels, ['0']);
+    expect(controller.text, '0');
+  });
+
+  testWidgets('stepper scrub cancellation restores without committing', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    final commits = <String>[];
+    final cancels = <String>[];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          step: 1,
+          onCommit: commits.add,
+          onCancel: cancels.add,
+        ),
+      ),
+    );
+
+    final mouse = await tester.startGesture(
+      tester.getCenter(stepUp),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+
+    await mouse.cancel();
+    await tester.pump();
+
+    expect(controller.text, '0');
+    expect(commits, isEmpty);
+    expect(cancels, ['0']);
+  });
+
+  testWidgets('disposing an active numeric field cancels its interaction', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    final commits = <String>[];
+    final cancels = <String>[];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+          onCommit: commits.add,
+          onCancel: cancels.add,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+
+    await tester.pumpWidget(host(const SizedBox.shrink()));
+    await tester.pump();
+
+    expect(controller.text, '0');
+    expect(commits, isEmpty);
+    expect(cancels, ['0']);
+  });
+
+  testWidgets('disposing a net-zero text edit clears its preview', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '4');
+    final changes = <String>[];
+    final commits = <String>[];
+    final cancels = <String>[];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          onChanged: changes.add,
+          onCommit: commits.add,
+          onCancel: cancels.add,
+        ),
+      ),
+    );
+    await tester.tap(find.byType(CupertinoTextField));
+    await tester.enterText(find.byType(CupertinoTextField), '8');
+    await tester.enterText(find.byType(CupertinoTextField), '4');
+    await tester.pumpWidget(host(const SizedBox.shrink()));
+    await tester.pump();
+
+    expect(changes, ['8', '4']);
+    expect(commits, isEmpty);
+    expect(cancels, ['4']);
+  });
+
+  testWidgets('app suspension cancels an active numeric interaction once', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    final commits = <String>[];
+    final cancels = <String>[];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+          onCommit: commits.add,
+          onCancel: cancels.add,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    expect(controller.text, '1');
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    await mouse.cancel();
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+    expect(controller.text, '0');
+    expect(commits, isEmpty);
+    expect(cancels, ['0']);
+  });
+
+  testWidgets('net-zero scrub clears preview without committing', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '0');
+    final changes = <String>[];
+    final commits = <String>[];
+    final cancels = <String>[];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          prefix: const Text('X'),
+          step: 1,
+          onChanged: changes.add,
+          onCommit: commits.add,
+          onCancel: cancels.add,
+        ),
+      ),
+    );
+    final mouse = await tester.startGesture(
+      tester.getCenter(prefixZone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.moveBy(const Offset(8, 0));
+    await tester.pump();
+    await mouse.moveBy(const Offset(-8, 0));
+    await tester.pump();
+    await mouse.up();
+    await tester.pump();
+
+    expect(changes, ['1', '0']);
+    expect(commits, isEmpty);
+    expect(cancels, ['0']);
+    expect(controller.text, '0');
+  });
+
+  testWidgets('keyboard repeat commits once on key up', (tester) async {
+    final controller = TextEditingController(text: '0');
+    final focusNode = FocusNode();
+    final changes = <String>[];
+    final commits = <String>[];
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          focusNode: focusNode,
+          keyboardType: TextInputType.number,
+          step: 1,
+          onChanged: changes.add,
+          onCommit: commits.add,
+        ),
+      ),
+    );
+    focusNode.requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(changes, ['1', '2']);
+    expect(commits, isEmpty);
+
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(commits, ['2']);
   });
 
   testWidgets('scrub discards bound overshoot for immediate reversal', (
@@ -1838,6 +2134,7 @@ void main() {
   ) async {
     final controller = TextEditingController(text: '4');
     final focusNode = FocusNode();
+    final commits = <String>[];
     addTearDown(controller.dispose);
     addTearDown(focusNode.dispose);
 
@@ -1850,6 +2147,7 @@ void main() {
           step: 2,
           min: 0,
           max: 10,
+          onCommit: commits.add,
         ),
       ),
     );
@@ -1870,6 +2168,11 @@ void main() {
     expect(controller.text, '6');
     expect(focusNode.hasFocus, isFalse);
     expect(allowedPlatformDefault, isFalse);
+    expect(commits, isEmpty);
+    await tester.pump(const Duration(milliseconds: 119));
+    expect(commits, isEmpty);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(commits, ['6']);
 
     await tester.sendEventToBinding(
       PointerScrollEvent(
@@ -2063,6 +2366,46 @@ void main() {
       SemanticsValidationResult.none,
     );
     semantics.dispose();
+  });
+
+  testWidgets('text editing commits on blur and cancels on escape', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '4');
+    final focusNode = FocusNode();
+    final changes = <String>[];
+    final commits = <String>[];
+    final cancels = <String>[];
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: controller,
+          focusNode: focusNode,
+          keyboardType: TextInputType.number,
+          onChanged: changes.add,
+          onCommit: commits.add,
+          onCancel: cancels.add,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(CupertinoTextField));
+    await tester.enterText(find.byType(CupertinoTextField), '8');
+    focusNode.unfocus();
+    await tester.pump();
+    expect(commits, ['8']);
+
+    await tester.tap(find.byType(CupertinoTextField));
+    await tester.enterText(find.byType(CupertinoTextField), '12');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(controller.text, '8');
+    expect(commits, ['8']);
+    expect(cancels, ['8']);
+    expect(changes, ['8', '12']);
   });
 
   testWidgets('invalid numeric input uses a danger outline after blur', (

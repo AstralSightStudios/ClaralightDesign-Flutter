@@ -48,8 +48,15 @@ class CLTextField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
 
-  /// Called when buttons, dragging, scrolling, or arrow keys change a number.
-  final ValueChanged<String>? onStepped;
+  /// Called once when a completed user interaction changes the value.
+  ///
+  /// A scrub, held step button, keyboard repeat, or wheel sequence is one
+  /// interaction. Direct text editing commits on submit or focus loss.
+  final ValueChanged<String>? onCommit;
+
+  /// Called when an in-progress interaction is canceled. The value is the
+  /// text restored by the field.
+  final ValueChanged<String>? onCancel;
 
   final TextInputType? keyboardType;
   final bool enabled;
@@ -114,7 +121,8 @@ class CLTextField extends StatefulWidget {
     this.suffix,
     this.onChanged,
     this.onSubmitted,
-    this.onStepped,
+    this.onCommit,
+    this.onCancel,
     this.keyboardType,
     this.enabled = true,
     this.readOnly = false,
@@ -165,6 +173,7 @@ class _CLTextFieldState extends State<CLTextField>
   bool _ownsFocusNode = false;
   bool _showValidationError = false;
   bool _operationFocusRequested = false;
+  bool _lifecycleSuspended = false;
   bool _disableAnimations = false;
   bool _scrubGestureActive = false;
   bool _scrubVisualMounted = false;
@@ -175,6 +184,12 @@ class _CLTextFieldState extends State<CLTextField>
   double _scrubMultiplier = 1;
   double _rulerSpacingFrom = _NumericScrubMetrics.baseSpacing;
   double _rulerSpacingTarget = _NumericScrubMetrics.baseSpacing;
+  String? _textEditingStartText;
+  String? _numericInteractionStartText;
+  bool _textEditingChanged = false;
+  bool _numericInteractionChanged = false;
+  LogicalKeyboardKey? _activeStepKey;
+  Timer? _scrollCommitTimer;
 
   @override
   void initState() {
@@ -250,8 +265,21 @@ class _CLTextFieldState extends State<CLTextField>
   }
 
   void _onFocusChanged() {
-    if (!_focusNode.hasFocus) {
-      if (_isNumeric) _showValidationError = true;
+    if (_focusNode.hasFocus) {
+      if (_textEditingStartText == null) {
+        _textEditingStartText = _controller.text;
+        _textEditingChanged = false;
+      }
+    } else {
+      if (_numericInteractionStartText != null) {
+        _cancelNumericInteraction();
+      }
+      if (_isNumeric && !_isValidNumber) {
+        _showValidationError = true;
+        _cancelTextEditing();
+      } else {
+        _commitTextEditing();
+      }
       _closeScrub(immediate: true);
     }
     if (mounted) setState(() {});
@@ -266,21 +294,39 @@ class _CLTextFieldState extends State<CLTextField>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) {
-      _closeScrub(immediate: true);
+    if (state == AppLifecycleState.resumed) {
+      _lifecycleSuspended = false;
+      return;
     }
+    if (_lifecycleSuspended) return;
+    _lifecycleSuspended = true;
+    _scrollCommitTimer?.cancel();
+    _scrollCommitTimer = null;
+    final canceledNumericInteraction = _numericInteractionStartText != null;
+    _cancelNumericInteraction();
+    if (!canceledNumericInteraction) _cancelTextEditing();
+    _closeScrub(immediate: true);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scrollCommitTimer?.cancel();
+    _controller.removeListener(_onTextChanged);
+    _focusNode.removeListener(_onFocusChanged);
+    if (_numericInteractionStartText != null) {
+      _cancelNumericInteraction();
+    } else if (_textEditingStartText != null &&
+        (_textEditingChanged || _textEditingStartText != _controller.text)) {
+      _cancelTextEditing();
+    } else {
+      _textEditingStartText = null;
+    }
     _scrubCursorSession.finish();
     _scrubReveal.dispose();
     _rulerSpacingTransition.dispose();
     _operationFocusNode.removeListener(_onOperationFocusChanged);
     _operationFocusNode.dispose();
-    _controller.removeListener(_onTextChanged);
-    _focusNode.removeListener(_onFocusChanged);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -353,9 +399,73 @@ class _CLTextFieldState extends State<CLTextField>
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
     );
+    _numericInteractionChanged = true;
     widget.onChanged?.call(text);
-    widget.onStepped?.call(text);
     return true;
+  }
+
+  void _beginNumericInteraction() {
+    if (_numericInteractionStartText == null) {
+      _numericInteractionStartText = _controller.text;
+      _numericInteractionChanged = false;
+    }
+  }
+
+  void _commitNumericInteraction() {
+    final start = _numericInteractionStartText;
+    final changed = _numericInteractionChanged;
+    _numericInteractionStartText = null;
+    _numericInteractionChanged = false;
+    _activeStepKey = null;
+    if (start == null) return;
+    if (start == _controller.text) {
+      if (changed) widget.onCancel?.call(start);
+      return;
+    }
+    _textEditingStartText = _controller.text;
+    _textEditingChanged = false;
+    widget.onCommit?.call(_controller.text);
+  }
+
+  void _cancelNumericInteraction() {
+    final start = _numericInteractionStartText;
+    _numericInteractionStartText = null;
+    _numericInteractionChanged = false;
+    _activeStepKey = null;
+    if (start == null) return;
+    _restoreText(start);
+    _textEditingStartText = start;
+    _textEditingChanged = false;
+    widget.onCancel?.call(start);
+  }
+
+  void _commitTextEditing() {
+    final start = _textEditingStartText;
+    final changed = _textEditingChanged;
+    _textEditingStartText = null;
+    _textEditingChanged = false;
+    if (start == null) return;
+    if (start == _controller.text) {
+      if (changed) widget.onCancel?.call(start);
+      return;
+    }
+    widget.onCommit?.call(_controller.text);
+  }
+
+  void _cancelTextEditing() {
+    final start = _textEditingStartText;
+    _textEditingStartText = null;
+    _textEditingChanged = false;
+    if (start == null) return;
+    _restoreText(start);
+    widget.onCancel?.call(start);
+  }
+
+  void _restoreText(String text) {
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
   }
 
   void _requestEditingFocus() {
@@ -369,6 +479,7 @@ class _CLTextFieldState extends State<CLTextField>
   }
 
   bool _handlePointerStep(int steps) {
+    _beginNumericInteraction();
     final changed = _bumpSteps(steps);
     if (changed) _emitPointerHaptic();
     return changed;
@@ -459,6 +570,7 @@ class _CLTextFieldState extends State<CLTextField>
   bool _beginScrub(PointerDeviceKind kind) {
     if (_scrubGestureActive || !_canAdjustNumber) return false;
 
+    _beginNumericInteraction();
     _scrubCursorSession.activate(
       enabled: widget.wrapNumericScrubCursor && kind == PointerDeviceKind.mouse,
     );
@@ -676,12 +788,18 @@ class _CLTextFieldState extends State<CLTextField>
         : rounded.toString();
   }
 
+  void _handleChanged(String value) {
+    if (_textEditingStartText != null) _textEditingChanged = true;
+    widget.onChanged?.call(value);
+  }
+
   void _handleSubmitted(String value) {
     if (_isNumeric && !_isValidNumber) {
       setState(() => _showValidationError = true);
       _focusNode.requestFocus();
       return;
     }
+    _commitTextEditing();
     widget.onSubmitted?.call(value);
   }
 
@@ -706,7 +824,38 @@ class _CLTextFieldState extends State<CLTextField>
   };
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_showsStepper || !widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      _scrollCommitTimer?.cancel();
+      _scrollCommitTimer = null;
+      if (_numericInteractionStartText != null) {
+        _cancelNumericInteraction();
+      } else {
+        _cancelTextEditing();
+      }
+      _focusNode.unfocus();
+      return KeyEventResult.handled;
+    }
+    if (!_showsStepper) return KeyEventResult.ignored;
+
+    final stepDirection = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowUp when _stepperAxis == Axis.vertical =>
+        _leadingStepDirection,
+      LogicalKeyboardKey.arrowDown when _stepperAxis == Axis.vertical =>
+        -_leadingStepDirection,
+      LogicalKeyboardKey.arrowLeft when _stepperAxis == Axis.horizontal =>
+        _leadingStepDirection,
+      LogicalKeyboardKey.arrowRight when _stepperAxis == Axis.horizontal =>
+        -_leadingStepDirection,
+      _ => null,
+    };
+    if (stepDirection == null) return KeyEventResult.ignored;
+
+    if (event is KeyUpEvent) {
+      if (_activeStepKey == event.logicalKey) _commitNumericInteraction();
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -715,28 +864,15 @@ class _CLTextFieldState extends State<CLTextField>
     if ((composing.isValid && !composing.isCollapsed) || _hasStepModifier) {
       return KeyEventResult.ignored;
     }
-
-    if (_stepperAxis == Axis.vertical &&
-        event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _bump(_leadingStepDirection);
-      return KeyEventResult.handled;
+    if (event is KeyDownEvent) {
+      if (_activeStepKey != null && _activeStepKey != event.logicalKey) {
+        _commitNumericInteraction();
+      }
+      _beginNumericInteraction();
+      _activeStepKey = event.logicalKey;
     }
-    if (_stepperAxis == Axis.vertical &&
-        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _bump(-_leadingStepDirection);
-      return KeyEventResult.handled;
-    }
-    if (_stepperAxis == Axis.horizontal &&
-        event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _bump(_leadingStepDirection);
-      return KeyEventResult.handled;
-    }
-    if (_stepperAxis == Axis.horizontal &&
-        event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      _bump(-_leadingStepDirection);
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
+    _bump(stepDirection);
+    return KeyEventResult.handled;
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
@@ -755,7 +891,13 @@ class _CLTextFieldState extends State<CLTextField>
       resolvedEvent,
     ) {
       final scrollEvent = resolvedEvent as PointerScrollEvent;
+      _beginNumericInteraction();
       if (_bump(direction.toDouble())) {
+        _scrollCommitTimer?.cancel();
+        _scrollCommitTimer = Timer(
+          const Duration(milliseconds: 120),
+          _commitNumericInteraction,
+        );
         scrollEvent.respond(allowPlatformDefault: false);
       }
     });
@@ -793,7 +935,7 @@ class _CLTextFieldState extends State<CLTextField>
       enableInteractiveSelection: !widget.readOnly,
       obscureText: widget.obscureText,
       textAlign: widget.textAlign,
-      onChanged: widget.onChanged,
+      onChanged: _handleChanged,
       onSubmitted: _handleSubmitted,
       decoration: null,
       padding: EdgeInsets.zero,
@@ -818,6 +960,9 @@ class _CLTextFieldState extends State<CLTextField>
                   onScrubStart: _beginScrub,
                   onScrubUpdate: _updateScrub,
                   onScrubEnd: _endScrub,
+                  onAdjustmentEnd: (canceled) => canceled
+                      ? _cancelNumericInteraction()
+                      : _commitNumericInteraction(),
                   child: Padding(
                     padding: EdgeInsets.only(left: horizontalPad, right: 10),
                     child: _stepperSlot(prefix, theme, unit: false),
@@ -899,8 +1044,20 @@ class _CLTextFieldState extends State<CLTextField>
           : null,
       increasedValue: increasedValue,
       decreasedValue: decreasedValue,
-      onIncrease: increasedValue != null ? () => _bump(1) : null,
-      onDecrease: decreasedValue != null ? () => _bump(-1) : null,
+      onIncrease: increasedValue != null
+          ? () {
+              _beginNumericInteraction();
+              _bump(1);
+              _commitNumericInteraction();
+            }
+          : null,
+      onDecrease: decreasedValue != null
+          ? () {
+              _beginNumericInteraction();
+              _bump(-1);
+              _commitNumericInteraction();
+            }
+          : null,
       child: Listener(
         onPointerSignal: _showsStepper ? _handlePointerSignal : null,
         child: OverlayPortal(
@@ -948,6 +1105,9 @@ class _CLTextFieldState extends State<CLTextField>
           onScrubStart: _beginScrub,
           onScrubUpdate: _updateScrub,
           onScrubEnd: _endScrub,
+          onAdjustmentEnd: (canceled) => canceled
+              ? _cancelNumericInteraction()
+              : _commitNumericInteraction(),
         ),
       ],
     );
@@ -1088,6 +1248,8 @@ const _preciseScrubPointerKinds = <PointerDeviceKind>{
 
 bool _primaryButtonOnly(int buttons) => buttons == kPrimaryButton;
 
+final Object _gestureArenaCanceled = Object();
+
 typedef _ScrubStartCallback = bool Function(PointerDeviceKind kind);
 typedef _NumericScrubUpdate = ({
   Offset delta,
@@ -1120,6 +1282,7 @@ class _NumericPrefixScrubRegion extends StatefulWidget {
     required this.onScrubStart,
     required this.onScrubUpdate,
     required this.onScrubEnd,
+    required this.onAdjustmentEnd,
     required this.child,
   });
 
@@ -1130,6 +1293,7 @@ class _NumericPrefixScrubRegion extends StatefulWidget {
   final _ScrubStartCallback onScrubStart;
   final ValueChanged<_NumericScrubUpdate> onScrubUpdate;
   final VoidCallback onScrubEnd;
+  final ValueChanged<bool> onAdjustmentEnd;
   final Widget child;
 
   @override
@@ -1161,8 +1325,13 @@ class _NumericPrefixScrubRegionState extends State<_NumericPrefixScrubRegion> {
     }
   }
 
-  void _handlePreciseEnd([Object? _]) {
-    if (_preciseScrubActive) widget.onScrubEnd();
+  void _handlePreciseEnd([Object? details]) {
+    if (_preciseScrubActive) {
+      widget.onScrubEnd();
+      widget.onAdjustmentEnd(
+        details == null || identical(details, _gestureArenaCanceled),
+      );
+    }
     _preciseScrubActive = false;
   }
 
@@ -1192,8 +1361,13 @@ class _NumericPrefixScrubRegionState extends State<_NumericPrefixScrubRegion> {
     );
   }
 
-  void _handleTouchEnd([Object? _]) {
-    if (_touchScrubActive) widget.onScrubEnd();
+  void _handleTouchEnd([Object? details]) {
+    if (_touchScrubActive) {
+      widget.onScrubEnd();
+      widget.onAdjustmentEnd(
+        details == null || identical(details, _gestureArenaCanceled),
+      );
+    }
     _touchLongPressActive = false;
     _touchScrubActive = false;
     _lastTouchOffset = Offset.zero;
@@ -1243,6 +1417,7 @@ class _NumericStepper extends StatefulWidget {
     required this.onScrubStart,
     required this.onScrubUpdate,
     required this.onScrubEnd,
+    required this.onAdjustmentEnd,
   });
 
   final double height;
@@ -1256,6 +1431,7 @@ class _NumericStepper extends StatefulWidget {
   final _ScrubStartCallback onScrubStart;
   final ValueChanged<_NumericScrubUpdate> onScrubUpdate;
   final VoidCallback onScrubEnd;
+  final ValueChanged<bool> onAdjustmentEnd;
 
   @override
   State<_NumericStepper> createState() => _NumericStepperState();
@@ -1304,7 +1480,12 @@ class _NumericStepperState extends State<_NumericStepper>
     super.didUpdateWidget(oldWidget);
     if ((oldWidget.focused && !widget.focused) || !_canAdjust) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _cancelInteraction(notifyScrubEnd: true);
+        if (mounted) {
+          _cancelInteraction(
+            notifyScrubEnd: true,
+            notifyAdjustmentCancel: true,
+          );
+        }
       });
     }
   }
@@ -1312,14 +1493,14 @@ class _NumericStepperState extends State<_NumericStepper>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
-      _cancelInteraction(notifyScrubEnd: true);
+      _cancelInteraction(notifyScrubEnd: true, notifyAdjustmentCancel: true);
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cancelInteraction();
+    _cancelInteraction(notifyScrubEnd: true, notifyAdjustmentCancel: true);
     super.dispose();
   }
 
@@ -1333,7 +1514,13 @@ class _NumericStepperState extends State<_NumericStepper>
   void _cancelInteraction({
     bool markCanceled = false,
     bool notifyScrubEnd = false,
+    bool notifyAdjustmentCancel = false,
   }) {
+    final hadInteraction =
+        _pressedDirection != null ||
+        _touchLongPressActive ||
+        _touchScrubActive ||
+        _preciseScrubActive;
     final hadScrub = _touchScrubActive || _preciseScrubActive;
     _stopRepeatTimers();
     _pressedDirection = null;
@@ -1345,11 +1532,39 @@ class _NumericStepperState extends State<_NumericStepper>
     _interactionCanceled = markCanceled;
     _lastTouchOffset = Offset.zero;
     if (hadScrub && notifyScrubEnd) widget.onScrubEnd();
+    if (hadInteraction && notifyAdjustmentCancel) {
+      widget.onAdjustmentEnd(true);
+    }
   }
 
   void _finishInteraction() {
+    final hadInteraction =
+        _pressedDirection != null ||
+        _touchLongPressActive ||
+        _touchScrubActive ||
+        _preciseScrubActive;
     _cancelInteraction(notifyScrubEnd: true);
+    if (hadInteraction) widget.onAdjustmentEnd(false);
     _interactionCanceled = false;
+  }
+
+  void _finishOrCancelInteraction(Object? details) {
+    final arenaCanceled = identical(details, _gestureArenaCanceled);
+    if (arenaCanceled &&
+        !_preciseScrubActive &&
+        !_touchLongPressActive &&
+        !_touchScrubActive) {
+      return;
+    }
+    if (details == null || arenaCanceled) {
+      _cancelInteraction(
+        markCanceled: true,
+        notifyScrubEnd: true,
+        notifyAdjustmentCancel: true,
+      );
+      return;
+    }
+    _finishInteraction();
   }
 
   void _scheduleRepeat(Duration delay) {
@@ -1409,19 +1624,30 @@ class _NumericStepperState extends State<_NumericStepper>
       widget.onRequestEditingFocus();
       widget.onPointerStep(direction);
     }
+    if (!_interactionCanceled) widget.onAdjustmentEnd(false);
     _interactionCanceled = false;
+  }
+
+  void _deferAdjustmentCancel() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _interactionCanceled && !_preciseScrubActive) {
+        widget.onAdjustmentEnd(true);
+      }
+    });
   }
 
   void _handleButtonCancel() {
     if (_touchLongPressActive || _preciseScrubActive) return;
-    _cancelInteraction(markCanceled: true);
+    _cancelInteraction(markCanceled: true, notifyScrubEnd: true);
+    _deferAdjustmentCancel();
   }
 
   void _handleButtonExit(int direction) {
     if (_pressedDirection == direction &&
         !_touchLongPressActive &&
         !_preciseScrubActive) {
-      _cancelInteraction(markCanceled: true);
+      _cancelInteraction(markCanceled: true, notifyScrubEnd: true);
+      _deferAdjustmentCancel();
     }
   }
 
@@ -1536,10 +1762,10 @@ class _NumericStepperState extends State<_NumericStepper>
           onPointerDown: widget.onScrubPointerDown,
           onPreciseStart: _handlePreciseDragStart,
           onPreciseUpdate: _handlePreciseDragUpdate,
-          onPreciseEnd: (_) => _finishInteraction(),
+          onPreciseEnd: _finishOrCancelInteraction,
           onTouchStart: _handleTouchLongPressStart,
           onTouchMove: _handleTouchLongPressMove,
-          onTouchEnd: (_) => _finishInteraction(),
+          onTouchEnd: _finishOrCancelInteraction,
           child: SizedBox(
             width: _NumericStepper.width,
             height: widget.height,
@@ -1633,7 +1859,7 @@ class _NumericScrubGestureDetector extends StatelessWidget {
                 ..onStart = onPreciseStart
                 ..onUpdate = onPreciseUpdate
                 ..onEnd = onPreciseEnd
-                ..onCancel = () => onPreciseEnd(null);
+                ..onCancel = () => onPreciseEnd(_gestureArenaCanceled);
             },
           ),
       LongPressGestureRecognizer:
@@ -1653,7 +1879,7 @@ class _NumericScrubGestureDetector extends StatelessWidget {
                 ..onLongPressStart = onTouchStart
                 ..onLongPressMoveUpdate = onTouchMove
                 ..onLongPressEnd = onTouchEnd
-                ..onLongPressCancel = () => onTouchEnd(null);
+                ..onLongPressCancel = () => onTouchEnd(_gestureArenaCanceled);
             },
           ),
     };
@@ -1669,6 +1895,7 @@ class _NumericScrubGestureDetector extends StatelessWidget {
               }
             }
           : null,
+      onPointerCancel: enabled ? (_) => onPreciseEnd(null) : null,
       child: RawGestureDetector(
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,
