@@ -30,15 +30,24 @@ enum CLButtonVariant {
 /// Opaque layered fill per variant; press interaction is the springy
 /// Claralight scale + jelly drag.
 class CLButton extends StatefulWidget {
-  final String label;
+  /// Plain-text label. Exactly one of [label] and [labelWidget] is required.
+  final String? label;
+
+  /// Arbitrary label content that inherits the button's text and icon colors.
+  ///
+  /// Custom content must provide [semanticLabel] so the button keeps an
+  /// accessible name.
+  final Widget? labelWidget;
+
   final VoidCallback? onPressed;
   final Widget? leadingIcon;
   final Widget? trailingIcon;
 
-  /// Accessibility label. Defaults to [label].
+  /// Accessibility label. Defaults to [label] for plain-text buttons.
   final String? semanticLabel;
 
   /// Overrides label typography while preserving the variant foreground color.
+  /// Custom [labelWidget] content receives this style through DefaultTextStyle.
   final TextStyle? labelStyle;
 
   /// Keeps the label on the visual centerline in fixed-width buttons.
@@ -76,7 +85,8 @@ class CLButton extends StatefulWidget {
 
   const CLButton({
     super.key,
-    required this.label,
+    this.label,
+    this.labelWidget,
     this.onPressed,
     this.leadingIcon,
     this.trailingIcon,
@@ -91,7 +101,15 @@ class CLButton extends StatefulWidget {
     this.tint,
     this.outlined,
     this.outlineColor,
-  }) : assert(iconSize == null || iconSize > 0),
+  }) : assert(
+         (label == null) != (labelWidget == null),
+         'Provide exactly one of label or labelWidget.',
+       ),
+       assert(
+         labelWidget == null || semanticLabel != null,
+         'semanticLabel is required with labelWidget.',
+       ),
+       assert(iconSize == null || iconSize > 0),
        assert(horizontalPadding == null || horizontalPadding >= 0),
        variant = variant ?? CLButtonVariant.primary,
        _usesDefaultVariant = variant == null,
@@ -127,6 +145,9 @@ class _CLButtonState extends State<CLButton> {
       };
 
   bool get _enabled => widget.onPressed != null;
+
+  bool get _hasVisualLabel =>
+      widget.labelWidget != null || (widget.label?.isNotEmpty ?? false);
 
   @override
   Widget build(BuildContext context) {
@@ -217,20 +238,13 @@ class _CLButtonState extends State<CLButton> {
       children: [
         if (widget.leadingIcon != null) ...[
           _iconSlot(widget.leadingIcon!, foreground),
-          if (widget.label.isNotEmpty)
+          if (_hasVisualLabel)
             SizedBox(width: _size == CLControlSize.small ? 6 : 8),
         ],
-        if (widget.label.isNotEmpty)
-          Flexible(
-            child: Text(
-              widget.label,
-              softWrap: false,
-              overflow: TextOverflow.fade,
-              style: textStyle,
-            ),
-          ),
+        if (_hasVisualLabel)
+          Flexible(child: _labelContent(textStyle, foreground)),
         if (widget.trailingIcon != null) ...[
-          if (widget.label.isNotEmpty)
+          if (_hasVisualLabel)
             SizedBox(width: _size == CLControlSize.small ? 6 : 8),
           _iconSlot(widget.trailingIcon!, foreground),
         ],
@@ -244,15 +258,7 @@ class _CLButtonState extends State<CLButton> {
     return Stack(
       alignment: Alignment.center,
       children: [
-        Center(
-          child: Text(
-            widget.label,
-            softWrap: false,
-            overflow: TextOverflow.fade,
-            textAlign: TextAlign.center,
-            style: textStyle,
-          ),
-        ),
+        Center(child: _labelContent(textStyle, foreground)),
         if (widget.leadingIcon != null)
           PositionedDirectional(
             start: 0,
@@ -268,6 +274,30 @@ class _CLButtonState extends State<CLButton> {
             child: Center(child: _iconSlot(widget.trailingIcon!, foreground)),
           ),
       ],
+    );
+  }
+
+  Widget _labelContent(TextStyle textStyle, Color foreground) {
+    final labelWidget = widget.labelWidget;
+    if (labelWidget == null) {
+      return Text(
+        widget.label!,
+        softWrap: false,
+        overflow: TextOverflow.fade,
+        textAlign: TextAlign.center,
+        style: textStyle,
+      );
+    }
+
+    return DefaultTextStyle.merge(
+      style: textStyle,
+      softWrap: false,
+      overflow: TextOverflow.fade,
+      maxLines: 1,
+      child: IconTheme.merge(
+        data: IconThemeData(color: foreground),
+        child: labelWidget,
+      ),
     );
   }
 
