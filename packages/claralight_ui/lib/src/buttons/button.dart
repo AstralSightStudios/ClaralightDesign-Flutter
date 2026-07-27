@@ -163,15 +163,6 @@ class _CLButtonState extends State<CLButton> {
                 frostSigma: effectiveVariant == CLButtonVariant.floating
                     ? 10
                     : 47.9,
-                shadow: effectiveVariant == CLButtonVariant.floating
-                    ? const [
-                        BoxShadow(
-                          color: Color(0x33000000),
-                          offset: Offset(0, 2),
-                          blurRadius: 10,
-                        ),
-                      ]
-                    : null,
                 borderRadius: radius,
                 padding: EdgeInsets.symmetric(horizontal: _hPadding),
                 child: LayoutBuilder(

@@ -91,9 +91,7 @@ void main() {
     expect(surface.fill, theme.colors.floatingControl);
     expect(surface.frosted, isTrue);
     expect(surface.frostSigma, 10);
-    expect(surface.shadow, const [
-      BoxShadow(color: Color(0x33000000), offset: Offset(0, 2), blurRadius: 10),
-    ]);
+    expect(surface.shadow, isNull);
     expect(icon.size, 18);
     expect(icon.color, theme.colors.onFloatingControl);
     expect(outlineSide(tester), BorderSide(color: theme.colors.outline));
@@ -125,7 +123,7 @@ void main() {
     expect(icon.color, const Color(0xFF160A01));
   });
 
-  testWidgets('CLIconButton only floating casts a shadow', (
+  testWidgets('CLIconButton variants do not cast shadows', (
     WidgetTester tester,
   ) async {
     for (final variant in CLIconButtonVariant.values) {
@@ -135,7 +133,7 @@ void main() {
 
       expect(
         tester.widget<CLSurface>(find.byType(CLSurface)).shadow,
-        variant == CLIconButtonVariant.floating ? isNotNull : isNull,
+        isNull,
         reason: 'shadow of $variant',
       );
     }
@@ -344,7 +342,7 @@ void main() {
 
     final surface = tester.widget<CLSurface>(find.byType(CLSurface));
     expect(surface.fill, theme.colors.floatingControl);
-    expect(surface.shadow, isNotNull);
+    expect(surface.shadow, isNull);
     expect(
       tester.widget<Icon>(find.byIcon(Icons.add)).color,
       theme.colors.textDisabled,

@@ -183,16 +183,14 @@ void main() {
     final surface = tester.widget<CLSurface>(find.byType(CLSurface));
     expect(surface.frosted, isTrue);
     expect(surface.frostSigma, 10);
-    expect(surface.shadow, const [
-      BoxShadow(color: Color(0x33000000), offset: Offset(0, 2), blurRadius: 10),
-    ]);
+    expect(surface.shadow, isNull);
     expect(
       tester.widget<Text>(find.text('继续')).style?.color,
       CLThemeData().colors.onFloatingControl,
     );
   });
 
-  testWidgets('CLButton only floating casts a shadow', (
+  testWidgets('CLButton variants do not cast shadows', (
     WidgetTester tester,
   ) async {
     for (final variant in CLButtonVariant.values) {
@@ -202,7 +200,7 @@ void main() {
 
       expect(
         tester.widget<CLSurface>(find.byType(CLSurface)).shadow,
-        variant == CLButtonVariant.floating ? isNotNull : isNull,
+        isNull,
         reason: 'shadow of $variant',
       );
     }

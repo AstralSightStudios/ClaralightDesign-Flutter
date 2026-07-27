@@ -207,15 +207,6 @@ class _CLIconButtonState extends State<CLIconButton> {
                 frostSigma: effectiveVariant == CLIconButtonVariant.floating
                     ? 10
                     : 36,
-                shadow: effectiveVariant == CLIconButtonVariant.floating
-                    ? const [
-                        BoxShadow(
-                          color: Color(0x33000000),
-                          offset: Offset(0, 2),
-                          blurRadius: 10,
-                        ),
-                      ]
-                    : null,
                 child: Center(
                   child: Icon(
                     widget.icon,
