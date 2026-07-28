@@ -388,127 +388,143 @@ void main() {
     expect(listRect.top, closeTo(fieldRect.bottom + 5, 0.01));
   });
 
-  testWidgets('ghost variant uses transparent background and right alignment by default', (
-    tester,
-  ) async {
-    await setViewport(tester);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CLSelect<int>(
-            variant: CLSelectVariant.ghost,
-            options: const [CLSelectOption(0, 'Ghost Label')],
-            value: 0,
-            onChanged: (_) {},
+  testWidgets(
+    'ghost variant uses transparent background and right alignment by default',
+    (tester) async {
+      await setViewport(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CLSelect<int>(
+              variant: CLSelectVariant.ghost,
+              options: const [CLSelectOption(0, 'Ghost Label')],
+              value: 0,
+              onChanged: (_) {},
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    final textWidget = tester.widget<Text>(find.text('Ghost Label'));
-    expect(textWidget.textAlign, TextAlign.right);
+      final textWidget = tester.widget<Text>(find.text('Ghost Label'));
+      expect(textWidget.textAlign, TextAlign.right);
 
-    final surfaceFinder = find.ancestor(
-      of: find.text('Ghost Label'),
-      matching: find.byType(CLSurface),
-    );
-    final surfaceRect = tester.getRect(surfaceFinder);
-    expect(surfaceRect.height, equals(CLControlSize.large.controlHeight));
-  });
+      final surfaceFinder = find.ancestor(
+        of: find.text('Ghost Label'),
+        matching: find.byType(CLSurface),
+      );
+      final surfaceRect = tester.getRect(surfaceFinder);
+      expect(surfaceRect.height, equals(CLControlSize.large.controlHeight));
+    },
+  );
 
-  testWidgets('selected option row highlights with accentBackground and accent text', (
-    tester,
-  ) async {
-    await setViewport(tester);
-    await tester.pumpWidget(
-      _testApp(options: _options(3), value: 1),
-    );
+  testWidgets(
+    'selected option row highlights with accentBackground and accent text',
+    (tester) async {
+      await setViewport(tester);
+      await tester.pumpWidget(_testApp(options: _options(3), value: 1));
 
-    await openSelect(tester);
+      await openSelect(tester);
 
-    final selectedLabel = find.descendant(
-      of: find.byType(CLList),
-      matching: find.text('Option 1'),
-    );
-    final selectedText = tester.widget<Text>(selectedLabel);
-    final theme = CLTheme.of(tester.element(selectedLabel));
-    expect(selectedText.style?.color, theme.colors.accent);
-  });
+      final selectedLabel = find.descendant(
+        of: find.byType(CLList),
+        matching: find.text('Option 1'),
+      );
+      final selectedText = tester.widget<Text>(selectedLabel);
+      final theme = CLTheme.of(tester.element(selectedLabel));
+      expect(selectedText.style?.color, theme.colors.accent);
+    },
+  );
 
-  testWidgets('panel expands wider than trigger when options contain long text', (
-    tester,
-  ) async {
-    await setViewport(tester);
-    await tester.pumpWidget(
-      _testApp(
-        options: const [
-          CLSelectOption(0, 'Short'),
-          CLSelectOption(1, 'A Very Long Option Label That Exceeds Trigger Width'),
-        ],
-        value: 0,
-      ),
-    );
+  testWidgets(
+    'panel expands wider than trigger when options contain long text',
+    (tester) async {
+      await setViewport(tester);
+      await tester.pumpWidget(
+        _testApp(
+          options: const [
+            CLSelectOption(0, 'Short'),
+            CLSelectOption(
+              1,
+              'A Very Long Option Label That Exceeds Trigger Width',
+            ),
+          ],
+          value: 0,
+        ),
+      );
 
-    final triggerRect = tester.getRect(find.byType(CLSelect<int>));
-    await openSelect(tester);
+      final triggerRect = tester.getRect(find.byType(CLSelect<int>));
+      await openSelect(tester);
 
-    final panelRect = tester.getRect(_panel());
-    expect(panelRect.width, greaterThan(triggerRect.width));
-  });
+      final panelRect = tester.getRect(_panel());
+      expect(panelRect.width, greaterThan(triggerRect.width));
+    },
+  );
 
-  testWidgets('trigger text updates immediately on tap and close animation settles cleanly', (
-    tester,
-  ) async {
-    await setViewport(tester);
-    int selectedValue = 0;
-    await tester.pumpWidget(
-      StatefulBuilder(
-        builder: (context, setState) {
-          return MaterialApp(
-            home: Scaffold(
-              body: Align(
-                alignment: Alignment.centerRight,
-                child: CLSelect<int>(
-                  variant: CLSelectVariant.ghost,
-                  options: const [
-                    CLSelectOption(0, '00:00'),
-                    CLSelectOption(1, '00:00:00 Extra Long Value'),
-                  ],
-                  value: selectedValue,
-                  onChanged: (v) => setState(() => selectedValue = v),
+  testWidgets(
+    'trigger text updates immediately on tap and close animation settles cleanly',
+    (tester) async {
+      await setViewport(tester);
+      int selectedValue = 0;
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            return MaterialApp(
+              home: Scaffold(
+                body: Align(
+                  alignment: Alignment.centerRight,
+                  child: CLSelect<int>(
+                    variant: CLSelectVariant.ghost,
+                    options: const [
+                      CLSelectOption(0, '00:00'),
+                      CLSelectOption(1, '00:00:00 Extra Long Value'),
+                    ],
+                    value: selectedValue,
+                    onChanged: (v) => setState(() => selectedValue = v),
+                  ),
                 ),
               ),
-            ),
-          );
-        },
-      ),
-    );
+            );
+          },
+        ),
+      );
 
-    final surfaceFinder = find.descendant(
-      of: find.byType(CLSelect<int>),
-      matching: find.byType(CLSurface),
-    ).first;
-    final initialTriggerRect = tester.getRect(surfaceFinder);
-    await openSelect(tester);
+      final surfaceFinder = find
+          .descendant(
+            of: find.byType(CLSelect<int>),
+            matching: find.byType(CLSurface),
+          )
+          .first;
+      final initialTriggerRect = tester.getRect(surfaceFinder);
+      await openSelect(tester);
 
-    final longOption = find.descendant(
-      of: find.byType(CLList),
-      matching: find.text('00:00:00 Extra Long Value'),
-    );
-    await tester.tap(longOption);
-    await tester.pump(); // Start close animation frame 1
+      final longOption = find.descendant(
+        of: find.byType(CLList),
+        matching: find.text('00:00:00 Extra Long Value'),
+      );
+      await tester.tap(longOption);
+      await tester.pump(); // Start close animation frame 1
 
-    // Trigger text & width update immediately on selection
-    final midClosingTriggerRect = tester.getRect(surfaceFinder);
-    expect(midClosingTriggerRect.width, greaterThan(initialTriggerRect.width));
-    expect(find.text('00:00:00 Extra Long Value'), findsNWidgets(2)); // Trigger + Overlay
+      // Trigger text & width update immediately on selection
+      final midClosingTriggerRect = tester.getRect(surfaceFinder);
+      expect(
+        midClosingTriggerRect.width,
+        greaterThan(initialTriggerRect.width),
+      );
+      expect(
+        find.text('00:00:00 Extra Long Value'),
+        findsNWidgets(2),
+      ); // Trigger + Overlay
 
-    // Finish close animation
-    await tester.pumpAndSettle();
-    final finalTriggerRect = tester.getRect(surfaceFinder);
-    expect(finalTriggerRect.width, greaterThan(initialTriggerRect.width));
-    expect(find.text('00:00:00 Extra Long Value'), findsOneWidget); // Trigger only
-  });
+      // Finish close animation
+      await tester.pumpAndSettle();
+      final finalTriggerRect = tester.getRect(surfaceFinder);
+      expect(finalTriggerRect.width, greaterThan(initialTriggerRect.width));
+      expect(
+        find.text('00:00:00 Extra Long Value'),
+        findsOneWidget,
+      ); // Trigger only
+    },
+  );
 
   testWidgets('standard variant morphs back to full trigger width on close', (
     tester,
@@ -551,10 +567,12 @@ void main() {
     await tester.pump(); // Start close animation
 
     // Target closing width for fixed/standard select must remain full 250px
-    final surfaceFinder = find.descendant(
-      of: find.byType(CLSelect<int>),
-      matching: find.byType(CLSurface),
-    ).first;
+    final surfaceFinder = find
+        .descendant(
+          of: find.byType(CLSelect<int>),
+          matching: find.byType(CLSurface),
+        )
+        .first;
     final closingTriggerRect = tester.getRect(surfaceFinder);
     expect(closingTriggerRect.width, equals(250.0));
 

@@ -110,8 +110,9 @@ class CLDialog extends StatelessWidget {
     );
   }
 
-  /// Presents a [CLDialog] centered over a scrim, popping in with the
-  /// 4-corner perspective trapezoid morph animation.
+  /// Presents a [CLDialog] centered over a scrim. The dialog uses the
+  /// 4-corner perspective trapezoid morph animation unless reduced motion is
+  /// enabled, in which case it remains centered and only fades.
   static Future<T?> show<T>(
     BuildContext context, {
     String? title,
@@ -131,6 +132,15 @@ class CLDialog extends StatelessWidget {
       }
     }
 
+    final platformAnimationsDisabled = WidgetsBinding
+        .instance
+        .platformDispatcher
+        .accessibilityFeatures
+        .disableAnimations;
+    final animationsDisabled =
+        (MediaQuery.maybeOf(context)?.disableAnimations ?? false) ||
+        platformAnimationsDisabled;
+
     return Navigator.of(context, rootNavigator: true).push<T>(
       _CLDialogRoute<T>(
         builder: (context) => CLDialog(
@@ -142,6 +152,7 @@ class CLDialog extends StatelessWidget {
         barrierDismissible: barrierDismissible,
         scrim: CLTheme.of(context).colors.scrim,
         triggerRect: resolvedTriggerRect,
+        animationsDisabled: animationsDisabled,
       ),
     );
   }
@@ -152,13 +163,24 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
   final bool _barrierDismissible;
   final Color scrim;
   final Rect? triggerRect;
+  bool _animationsDisabled;
+  AnimationStatus _reducedFadeDirection;
+  double _reducedFadeStartT = 0;
+  double _reducedScrimStartOpacity = 0;
+  double _reducedContentStartOpacity = 0;
+  late final _CLDialogAccessibilityObserver _accessibilityObserver;
 
   _CLDialogRoute({
     required this.builder,
     required bool barrierDismissible,
     required this.scrim,
+    required bool animationsDisabled,
     this.triggerRect,
-  }) : _barrierDismissible = barrierDismissible;
+  }) : _barrierDismissible = barrierDismissible,
+       _animationsDisabled = animationsDisabled,
+       _reducedFadeDirection = animationsDisabled
+           ? AnimationStatus.forward
+           : AnimationStatus.dismissed;
 
   @override
   Color? get barrierColor => null;
@@ -170,10 +192,130 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
   String? get barrierLabel => 'Dismiss';
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 380);
+  Duration get transitionDuration => _animationsDisabled
+      ? CLMotion.reducedFade
+      : const Duration(milliseconds: 380);
 
   @override
-  Duration get reverseTransitionDuration => CLMotion.standard;
+  Duration get reverseTransitionDuration =>
+      _animationsDisabled ? CLMotion.reducedFade : CLMotion.standard;
+
+  @override
+  AnimationController createAnimationController() {
+    final routeController = AnimationController(
+      duration: transitionDuration,
+      reverseDuration: reverseTransitionDuration,
+      debugLabel: debugLabel,
+      vsync: navigator!,
+      // Reduced motion deliberately retains a short opacity transition.
+      animationBehavior: AnimationBehavior.preserve,
+    );
+    routeController.addStatusListener(_handleTransitionStatus);
+    return routeController;
+  }
+
+  @override
+  void install() {
+    super.install();
+    _accessibilityObserver = _CLDialogAccessibilityObserver(
+      _handleAccessibilityFeaturesChanged,
+    );
+    WidgetsBinding.instance.addObserver(_accessibilityObserver);
+  }
+
+  void _handleAccessibilityFeaturesChanged() {
+    final platformAnimationsDisabled = WidgetsBinding
+        .instance
+        .platformDispatcher
+        .accessibilityFeatures
+        .disableAnimations;
+    if (platformAnimationsDisabled && _enableReducedMotion()) {
+      changedExternalState();
+    }
+  }
+
+  double _normalScrimOpacity(double t) =>
+      Curves.easeOut.transform((t / 0.4).clamp(0.0, 1.0));
+
+  double _normalContentOpacity(double t) =>
+      Curves.easeOut.transform((t / 0.35).clamp(0.0, 1.0));
+
+  double _reducedFadeProgress(double t) {
+    return switch (_reducedFadeDirection) {
+      AnimationStatus.forward =>
+        _reducedFadeStartT >= 1
+            ? 1
+            : ((t - _reducedFadeStartT) / (1 - _reducedFadeStartT)).clamp(
+                0.0,
+                1.0,
+              ),
+      AnimationStatus.reverse =>
+        _reducedFadeStartT <= 0
+            ? 1
+            : ((_reducedFadeStartT - t) / _reducedFadeStartT).clamp(0.0, 1.0),
+      AnimationStatus.completed || AnimationStatus.dismissed => 1,
+    };
+  }
+
+  double _reducedOpacity(double t, double startOpacity) {
+    final target = switch (_reducedFadeDirection) {
+      AnimationStatus.forward || AnimationStatus.completed => 1.0,
+      AnimationStatus.reverse || AnimationStatus.dismissed => 0.0,
+    };
+    final progress = CLMotion.easeOut.transform(_reducedFadeProgress(t));
+    return startOpacity + (target - startOpacity) * progress;
+  }
+
+  bool _enableReducedMotion() {
+    if (_animationsDisabled) return false;
+    final routeController = controller;
+    if (routeController == null) return false;
+    final t = routeController.value;
+    final scrimOpacity = _normalScrimOpacity(t);
+    final contentOpacity = _normalContentOpacity(t);
+    _animationsDisabled = true;
+    _beginReducedFade(
+      routeController.status,
+      t: t,
+      scrimOpacity: scrimOpacity,
+      contentOpacity: contentOpacity,
+    );
+    routeController
+      ..duration = CLMotion.reducedFade
+      ..reverseDuration = CLMotion.reducedFade;
+    switch (routeController.status) {
+      case AnimationStatus.forward:
+        routeController.animateTo(1, duration: CLMotion.reducedFade);
+        break;
+      case AnimationStatus.reverse:
+        routeController.animateBack(0, duration: CLMotion.reducedFade);
+        break;
+      case AnimationStatus.completed:
+      case AnimationStatus.dismissed:
+        break;
+    }
+    return true;
+  }
+
+  void _handleTransitionStatus(AnimationStatus status) {
+    if (!_animationsDisabled) return;
+    final t = controller?.value ?? 0;
+    _beginReducedFade(status, t: t);
+  }
+
+  void _beginReducedFade(
+    AnimationStatus direction, {
+    required double t,
+    double? scrimOpacity,
+    double? contentOpacity,
+  }) {
+    _reducedScrimStartOpacity =
+        scrimOpacity ?? _reducedOpacity(t, _reducedScrimStartOpacity);
+    _reducedContentStartOpacity =
+        contentOpacity ?? _reducedOpacity(t, _reducedContentStartOpacity);
+    _reducedFadeStartT = t;
+    _reducedFadeDirection = direction;
+  }
 
   @override
   Widget buildPage(
@@ -185,10 +327,23 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
       animation: animation,
       builder: (context, _) {
         final t = animation.value;
-        // Evaluate curves purely from animation value so forward/reverse mid-flight
-        // reversals are 100% continuous with ZERO curve-switching jumps.
-        final scrimOpacity = Curves.easeOut.transform((t / 0.4).clamp(0.0, 1.0));
-        final contentOpacity = Curves.easeOut.transform((t / 0.35).clamp(0.0, 1.0));
+        final inheritedAnimationsDisabled =
+            MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+        if (inheritedAnimationsDisabled && !_animationsDisabled) {
+          // Once requested, keep reduced motion for this route so geometry is
+          // never reintroduced halfway through a transition.
+          _enableReducedMotion();
+        }
+        final scrimOpacity = _animationsDisabled
+            ? _reducedOpacity(t, _reducedScrimStartOpacity)
+            : _normalScrimOpacity(t);
+        final contentOpacity = _animationsDisabled
+            ? _reducedOpacity(t, _reducedContentStartOpacity)
+            : _normalContentOpacity(t);
+        final dialog = Padding(
+          padding: MediaQuery.paddingOf(context),
+          child: Opacity(opacity: contentOpacity, child: builder(context)),
+        );
 
         return Stack(
           fit: StackFit.expand,
@@ -198,22 +353,35 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
               dismissible: _barrierDismissible,
               semanticsLabel: barrierLabel,
             ),
-            _CLDialogMorphWidget(
-              progress: t,
-              triggerRect: triggerRect,
-              child: Padding(
-                padding: MediaQuery.paddingOf(context),
-                child: Opacity(
-                  opacity: contentOpacity,
-                  child: builder(context),
-                ),
+            if (_animationsDisabled)
+              Center(child: dialog)
+            else
+              _CLDialogMorphWidget(
+                progress: t,
+                triggerRect: triggerRect,
+                child: dialog,
               ),
-            ),
           ],
         );
       },
     );
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_accessibilityObserver);
+    controller?.removeStatusListener(_handleTransitionStatus);
+    super.dispose();
+  }
+}
+
+class _CLDialogAccessibilityObserver with WidgetsBindingObserver {
+  _CLDialogAccessibilityObserver(this.onAccessibilityFeaturesChanged);
+
+  final VoidCallback onAccessibilityFeaturesChanged;
+
+  @override
+  void didChangeAccessibilityFeatures() => onAccessibilityFeaturesChanged();
 }
 
 class _CLDialogMorphWidget extends SingleChildRenderObjectWidget {
@@ -228,10 +396,7 @@ class _CLDialogMorphWidget extends SingleChildRenderObjectWidget {
 
   @override
   _RenderCLDialogMorph createRenderObject(BuildContext context) {
-    return _RenderCLDialogMorph(
-      progress: progress,
-      triggerRect: triggerRect,
-    );
+    return _RenderCLDialogMorph(progress: progress, triggerRect: triggerRect);
   }
 
   @override
@@ -254,9 +419,9 @@ class _RenderCLDialogMorph extends RenderProxyBox {
     required double progress,
     Rect? triggerRect,
     RenderBox? child,
-  })  : _progress = progress,
-        _triggerRect = triggerRect,
-        super(child);
+  }) : _progress = progress,
+       _triggerRect = triggerRect,
+       super(child);
 
   double get progress => _progress;
   set progress(double value) {
@@ -378,14 +543,9 @@ class _RenderCLDialogMorph extends RenderProxyBox {
     final matrix = Matrix4.translationValues(offset.dx, offset.dy, 0.0)
       ..multiply(transformMatrix);
 
-    context.pushTransform(
-      needsCompositing,
-      offset,
-      matrix,
-      (context, offset) {
-        context.paintChild(child!, Offset.zero);
-      },
-    );
+    context.pushTransform(needsCompositing, offset, matrix, (context, offset) {
+      context.paintChild(child!, Offset.zero);
+    });
   }
 
   @override

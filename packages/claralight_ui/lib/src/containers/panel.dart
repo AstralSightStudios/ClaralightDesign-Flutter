@@ -70,8 +70,9 @@ class CLSectionHeader extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: theme.typography.label
-                  .copyWith(color: theme.colors.textHint),
+              style: theme.typography.label.copyWith(
+                color: theme.colors.textHint,
+              ),
             ),
           ),
           ?trailing,

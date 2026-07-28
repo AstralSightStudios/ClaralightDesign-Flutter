@@ -85,6 +85,351 @@ void main() {
     expect(find.byKey(_dialogContentKey), findsOneWidget);
   });
 
+  testWidgets('reduced motion skips morph and keeps a short fade', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                child: const Text('Dialog body', key: _dialogContentKey),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+
+    final dialog = find.byType(CLDialog);
+    final route = ModalRoute.of(tester.element(dialog))!;
+    final opacity = find
+        .ancestor(of: dialog, matching: find.byType(Opacity))
+        .first;
+
+    expect(route.transitionDuration, CLMotion.reducedFade);
+    expect(route.reverseTransitionDuration, CLMotion.reducedFade);
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    expect(tester.widget<Opacity>(opacity).opacity, 0);
+
+    await tester.pump(const Duration(milliseconds: 62));
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    expect(tester.widget<Opacity>(opacity).opacity, greaterThan(0));
+    expect(tester.widget<Opacity>(opacity).opacity, lessThan(1));
+
+    await tester.pump(const Duration(milliseconds: 63));
+    expect(tester.widget<Opacity>(opacity).opacity, closeTo(1, 0.001));
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 62));
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    expect(tester.widget<Opacity>(opacity).opacity, greaterThan(0));
+    expect(tester.widget<Opacity>(opacity).opacity, lessThan(1));
+
+    await tester.pumpAndSettle();
+    expect(dialog, findsNothing);
+  });
+
+  testWidgets('enabling reduced motion snaps an in-flight morph', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final reducedMotion = ValueNotifier(false);
+    addTearDown(reducedMotion.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ValueListenableBuilder<bool>(
+          valueListenable: reducedMotion,
+          child: child,
+          builder: (context, disableAnimations, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(disableAnimations: disableAnimations),
+            child: child!,
+          ),
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                child: const Text('Dialog body', key: _dialogContentKey),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final dialog = find.byType(CLDialog);
+    final opacity = find
+        .ancestor(of: dialog, matching: find.byType(Opacity))
+        .first;
+    expect(
+      (tester.getRect(dialog).center - const Offset(400, 300)).distance,
+      greaterThan(20),
+    );
+    final handoffOpacity = tester.widget<Opacity>(opacity).opacity;
+
+    reducedMotion.value = true;
+    await tester.pump();
+
+    final route = ModalRoute.of(tester.element(dialog))!;
+    expect(route.transitionDuration, CLMotion.reducedFade);
+    expect(route.reverseTransitionDuration, CLMotion.reducedFade);
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    expect(
+      tester.widget<Opacity>(opacity).opacity,
+      closeTo(handoffOpacity, 0.001),
+    );
+
+    await tester.pump(const Duration(milliseconds: 62));
+    final midFadeOpacity = tester.widget<Opacity>(opacity).opacity;
+    expect(midFadeOpacity, greaterThan(handoffOpacity));
+    expect(midFadeOpacity, lessThan(1));
+
+    await tester.pump(const Duration(milliseconds: 63));
+    expect(tester.widget<Opacity>(opacity).opacity, closeTo(1, 0.001));
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+  });
+
+  testWidgets('enabling reduced motion snaps an in-flight dismissal', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final reducedMotion = ValueNotifier(false);
+    addTearDown(reducedMotion.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ValueListenableBuilder<bool>(
+          valueListenable: reducedMotion,
+          child: child,
+          builder: (context, disableAnimations, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(disableAnimations: disableAnimations),
+            child: child!,
+          ),
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                child: const Text('Dialog body', key: _dialogContentKey),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+
+    final dialog = find.byType(CLDialog);
+    final opacity = find
+        .ancestor(of: dialog, matching: find.byType(Opacity))
+        .first;
+    final handoffOpacity = tester.widget<Opacity>(opacity).opacity;
+    expect(handoffOpacity, greaterThan(0));
+
+    reducedMotion.value = true;
+    await tester.pump();
+
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    expect(
+      tester.widget<Opacity>(opacity).opacity,
+      closeTo(handoffOpacity, 0.001),
+    );
+
+    await tester.pump(const Duration(milliseconds: 62));
+    final midFadeOpacity = tester.widget<Opacity>(opacity).opacity;
+    expect(midFadeOpacity, greaterThan(0));
+    expect(midFadeOpacity, lessThan(handoffOpacity));
+
+    await tester.pumpAndSettle();
+    expect(dialog, findsNothing);
+  });
+
+  testWidgets('platform reduced motion overrides a fixed MediaQuery', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: false);
+    addTearDown(
+      tester.binding.platformDispatcher.clearAccessibilityFeaturesTestValue,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: false),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                child: const Text('Dialog body', key: _dialogContentKey),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final dialog = find.byType(CLDialog);
+    final opacity = find
+        .ancestor(of: dialog, matching: find.byType(Opacity))
+        .first;
+    final handoffOpacity = tester.widget<Opacity>(opacity).opacity;
+    expect(
+      (tester.getRect(dialog).center - const Offset(400, 300)).distance,
+      greaterThan(20),
+    );
+
+    tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    await tester.pump();
+
+    final route = ModalRoute.of(tester.element(dialog))!;
+    expect(route.transitionDuration, CLMotion.reducedFade);
+    expect(route.reverseTransitionDuration, CLMotion.reducedFade);
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    expect(
+      tester.widget<Opacity>(opacity).opacity,
+      closeTo(handoffOpacity, 0.001),
+    );
+
+    await tester.pump(const Duration(milliseconds: 62));
+    final midFadeOpacity = tester.widget<Opacity>(opacity).opacity;
+    expect(midFadeOpacity, greaterThan(handoffOpacity));
+    expect(midFadeOpacity, lessThan(1));
+
+    await tester.pump(const Duration(milliseconds: 63));
+    expect(tester.widget<Opacity>(opacity).opacity, closeTo(1, 0.001));
+  });
+
+  testWidgets('platform reduced motion rebuilds a settled dialog', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: false);
+    addTearDown(
+      tester.binding.platformDispatcher.clearAccessibilityFeaturesTestValue,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: false),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CLDialog.show<void>(
+                context,
+                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                child: const Text('Dialog body', key: _dialogContentKey),
+              ),
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 380));
+
+    final dialog = find.byType(CLDialog);
+    final opacity = find
+        .ancestor(of: dialog, matching: find.byType(Opacity))
+        .first;
+    expect(
+      find.ancestor(of: dialog, matching: find.byType(Center)),
+      findsNothing,
+    );
+
+    tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    await tester.pump();
+
+    final route = ModalRoute.of(tester.element(dialog))!;
+    expect(route.transitionDuration, CLMotion.reducedFade);
+    expect(route.reverseTransitionDuration, CLMotion.reducedFade);
+    expect(
+      find.ancestor(of: dialog, matching: find.byType(Center)),
+      findsOneWidget,
+    );
+    expect(tester.widget<Opacity>(opacity).opacity, 1);
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 62));
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    expect(tester.widget<Opacity>(opacity).opacity, greaterThan(0));
+    expect(tester.widget<Opacity>(opacity).opacity, lessThan(1));
+
+    await tester.pumpAndSettle();
+    expect(dialog, findsNothing);
+  });
+
   testWidgets('can be interrupted mid-flight by tapping barrier', (
     tester,
   ) async {
@@ -154,10 +499,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            padding: safePadding,
-            viewPadding: safePadding,
-          ),
+          data: MediaQuery.of(
+            context,
+          ).copyWith(padding: safePadding, viewPadding: safePadding),
           child: child!,
         ),
         home: Scaffold(
@@ -191,14 +535,8 @@ void main() {
     final listRect = tester.getRect(find.byType(CLList));
     expect(listRect.left, greaterThanOrEqualTo(safePadding.left + 8));
     expect(listRect.top, greaterThanOrEqualTo(safePadding.top + 8));
-    expect(
-      listRect.right,
-      lessThanOrEqualTo(400 - safePadding.right - 8),
-    );
-    expect(
-      listRect.bottom,
-      lessThanOrEqualTo(800 - safePadding.bottom - 8),
-    );
+    expect(listRect.right, lessThanOrEqualTo(400 - safePadding.right - 8));
+    expect(listRect.bottom, lessThanOrEqualTo(800 - safePadding.bottom - 8));
   });
 
   testWidgets('lays out two actions horizontally with equal widths', (

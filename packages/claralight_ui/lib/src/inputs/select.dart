@@ -80,10 +80,10 @@ class CLSelect<T> extends StatefulWidget {
     this.textAlign,
     this.alignSelectedOption = true,
     this.borderRadius,
-  })  : variant = variant ?? CLSelectVariant.standard,
-        _usesDefaultVariant = variant == null,
-        _sizeOverride = size,
-        assert(options.length > 0);
+  }) : variant = variant ?? CLSelectVariant.standard,
+       _usesDefaultVariant = variant == null,
+       _sizeOverride = size,
+       assert(options.length > 0);
 
   @override
   State<CLSelect<T>> createState() => _CLSelectState<T>();
@@ -141,8 +141,9 @@ class _CLSelectState<T> extends State<CLSelect<T>>
 
   Offset get _panelTravelDelta {
     final targetSize = _closing ? _targetClosingTriggerSize : _openTriggerSize;
-    final targetOrigin =
-        _closing ? _targetClosingTriggerOrigin : _openTriggerOrigin;
+    final targetOrigin = _closing
+        ? _targetClosingTriggerOrigin
+        : _openTriggerOrigin;
     return (_globalPanelOrigin + Offset(_panelWidth / 2, _panelHeight / 2)) -
         (targetOrigin + Offset(targetSize.width / 2, targetSize.height / 2));
   }
@@ -384,8 +385,9 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     final theme = CLTheme.of(context);
 
     double maxOptionWidth = 0;
-    final calloutStyle =
-        theme.typography.callout.copyWith(fontWeight: FontWeight.w500);
+    final calloutStyle = theme.typography.callout.copyWith(
+      fontWeight: FontWeight.w500,
+    );
     final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
     for (final option in widget.options) {
       final painter = TextPainter(
@@ -399,8 +401,11 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     }
 
     final minPanelWidth =
-        fieldBox.size.width + _panelHorizontalPadding * 2 + _panelOutlineWidth * 2;
-    final naturalPanelWidth = maxOptionWidth +
+        fieldBox.size.width +
+        _panelHorizontalPadding * 2 +
+        _panelOutlineWidth * 2;
+    final naturalPanelWidth =
+        maxOptionWidth +
         40 +
         _panelHorizontalPadding * 2 +
         _panelOutlineWidth * 2;
@@ -414,16 +419,17 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     final effectiveVariant = widget._usesDefaultVariant && inToolbar
         ? CLSelectVariant.ghost
         : widget.variant;
-    final effectiveTextAlign = widget.textAlign ??
+    final effectiveTextAlign =
+        widget.textAlign ??
         (effectiveVariant == CLSelectVariant.ghost
             ? TextAlign.right
             : TextAlign.left);
 
     final desiredPanelLeft = effectiveTextAlign == TextAlign.right
         ? (origin.dx + fieldBox.size.width) -
-            _panelWidth +
-            _panelHorizontalPadding +
-            _panelOutlineWidth
+              _panelWidth +
+              _panelHorizontalPadding +
+              _panelOutlineWidth
         : origin.dx - _panelHorizontalPadding - _panelOutlineWidth;
 
     final panelLeft = desiredPanelLeft.clamp(
@@ -551,7 +557,8 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     final effectiveVariant = widget._usesDefaultVariant && inToolbar
         ? CLSelectVariant.ghost
         : widget.variant;
-    final effectiveTextAlign = widget.textAlign ??
+    final effectiveTextAlign =
+        widget.textAlign ??
         (effectiveVariant == CLSelectVariant.ghost
             ? TextAlign.right
             : TextAlign.left);
@@ -574,14 +581,16 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       CLSelectVariant.standard =>
         _hovered && _enabled ? colors.controlHighlight : colors.control,
       CLSelectVariant.ghost =>
-        _hovered && _enabled ? colors.controlHighlight : const Color(0x00000000),
+        _hovered && _enabled
+            ? colors.controlHighlight
+            : const Color(0x00000000),
     };
 
     final triggerContent = Row(
       mainAxisSize:
           widget.width != null || effectiveVariant == CLSelectVariant.standard
-              ? MainAxisSize.max
-              : MainAxisSize.min,
+          ? MainAxisSize.max
+          : MainAxisSize.min,
       children: [
         if (widget.width != null ||
             effectiveVariant == CLSelectVariant.standard)
@@ -625,10 +634,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       width: widget.width,
       height: _height,
       child: effectiveVariant == CLSelectVariant.ghost && widget.width == null
-          ? Align(
-              alignment: Alignment.centerRight,
-              child: surface,
-            )
+          ? Align(alignment: Alignment.centerRight, child: surface)
           : surface,
     );
 
@@ -666,12 +672,14 @@ class _CLSelectState<T> extends State<CLSelect<T>>
   Offset get _currentPanelOffset {
     final tMorph = _morphProgress;
     final targetSize = _closing ? _targetClosingTriggerSize : _openTriggerSize;
-    final targetOrigin =
-        _closing ? _targetClosingTriggerOrigin : _openTriggerOrigin;
+    final targetOrigin = _closing
+        ? _targetClosingTriggerOrigin
+        : _openTriggerOrigin;
     final width = ui.lerpDouble(targetSize.width, _panelWidth, tMorph)!;
     final height = ui.lerpDouble(targetSize.height, _panelHeight, tMorph)!;
     final startCenter = Offset(targetSize.width / 2, targetSize.height / 2);
-    final endCenter = (_globalPanelOrigin - targetOrigin) +
+    final endCenter =
+        (_globalPanelOrigin - targetOrigin) +
         Offset(_panelWidth / 2, _panelHeight / 2);
     final center = _travelCenter(startCenter, endCenter);
     return center - Offset(width / 2, height / 2);
@@ -882,8 +890,8 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
 
     final rowBg = widget.checked
         ? (_hovered
-            ? Color.alphaBlend(colors.control, colors.accentBackground)
-            : colors.accentBackground)
+              ? Color.alphaBlend(colors.control, colors.accentBackground)
+              : colors.accentBackground)
         : (_hovered ? colors.control : const Color(0x00000000));
     final textColor = widget.checked ? colors.accent : colors.textPrimary;
     final checkColor = widget.checked ? colors.accent : colors.textPrimary;
@@ -912,8 +920,9 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
                   textAlign: TextAlign.start,
                   style: theme.typography.callout.copyWith(
                     color: textColor,
-                    fontWeight:
-                        widget.checked ? FontWeight.w500 : FontWeight.normal,
+                    fontWeight: widget.checked
+                        ? FontWeight.w500
+                        : FontWeight.normal,
                   ),
                 ),
               ),

@@ -34,10 +34,7 @@ class CLBanner extends StatelessWidget {
     final colors = theme.colors;
 
     final (foreground, background) = switch (tone) {
-      CLBannerTone.info => (
-        colors.textSecondary,
-        colors.control,
-      ),
+      CLBannerTone.info => (colors.textSecondary, colors.control),
       CLBannerTone.warning => (colors.warning, colors.warningBackground),
       CLBannerTone.danger => (colors.danger, colors.dangerBackground),
       CLBannerTone.success => (

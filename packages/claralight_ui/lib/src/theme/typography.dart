@@ -37,16 +37,16 @@ class CLTypography {
   /// Maps a [FontWeight] onto MiSans VF's non-standard `wght` axis
   /// (Regular sits at 330, not 400; the axis spans 150–700).
   static double miSansWght(FontWeight weight) => switch (weight) {
-        FontWeight.w100 => 150,
-        FontWeight.w200 => 200,
-        FontWeight.w300 => 250,
-        FontWeight.w400 => 330,
-        FontWeight.w500 => 380,
-        FontWeight.w600 => 450,
-        FontWeight.w700 => 520,
-        FontWeight.w800 => 630,
-        _ => 700,
-      };
+    FontWeight.w100 => 150,
+    FontWeight.w200 => 200,
+    FontWeight.w300 => 250,
+    FontWeight.w400 => 330,
+    FontWeight.w500 => 380,
+    FontWeight.w600 => 450,
+    FontWeight.w700 => 520,
+    FontWeight.w800 => 630,
+    _ => 700,
+  };
 
   /// Font family used across the design language.
   final String fontFamily;
@@ -105,8 +105,12 @@ class CLTypography {
       'Roboto',
     ],
   }) {
-    TextStyle style(double size, FontWeight weight, double height,
-        [double letterSpacing = 0]) {
+    TextStyle style(
+      double size,
+      FontWeight weight,
+      double height, [
+      double letterSpacing = 0,
+    ]) {
       return TextStyle(
         fontFamily: fontFamily,
         fontFamilyFallback: fontFamilyFallback,
