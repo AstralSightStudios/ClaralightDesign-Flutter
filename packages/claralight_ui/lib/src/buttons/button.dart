@@ -335,7 +335,8 @@ class _CLButtonState extends State<CLButton> {
       // their color to avoid suggesting a destructive operation is available.
       fill = switch (variant) {
         CLButtonVariant.secondary || CLButtonVariant.primary => fill,
-        _ => colors.control,
+        CLButtonVariant.ghost => fill.withValues(alpha: fill.a * 0.45),
+        CLButtonVariant.danger => colors.control,
       };
     }
     return fill;

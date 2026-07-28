@@ -468,6 +468,19 @@ void main() {
     expect(surface.fill, tint);
   });
 
+  testWidgets('CLButton disabled ghost stays transparent', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      host(const CLButton(label: '继续', variant: CLButtonVariant.ghost)),
+    );
+
+    expect(
+      tester.widget<CLSurface>(find.byType(CLSurface)).fill,
+      const Color(0x00000000),
+    );
+  });
+
   testWidgets('CLButton disabled secondary keeps its glass fill', (
     WidgetTester tester,
   ) async {
