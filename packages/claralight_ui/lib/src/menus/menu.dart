@@ -95,7 +95,10 @@ class CLMenu extends StatefulWidget {
   /// Diameter of the default collapsed anchor button.
   final double buttonSize;
 
-  /// Width of the expanded menu panel.
+  /// Preferred width of the expanded menu panel.
+  ///
+  /// On open, the panel is clamped to the safe space available in its chosen
+  /// horizontal expansion direction.
   final double menuWidth;
 
   /// Corner radius of the expanded menu panel.
@@ -126,6 +129,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     damping: 28,
   );
   static const _closeMorphDuration = Duration(milliseconds: 160);
+  static const _screenMargin = 12.0;
   final _link = LayerLink();
   final _anchorKey = GlobalKey();
   final _listKey = GlobalKey();
@@ -160,6 +164,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   double _heightTo = 0;
   double _collapsedWidth = 44;
   double _collapsedHeight = 44;
+  double _expandedWidth = 44;
 
   CLMenuController get _controller => widget.controller ?? _internalController;
 
@@ -180,7 +185,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       Offset.lerp(start, end, _travel.value)!;
 
   Offset get _panelTravelDelta => Offset(
-    -_anchor.x * (widget.menuWidth - _collapsedWidth) / 2,
+    -_anchor.x * (_expandedWidth - _collapsedWidth) / 2,
     -_anchor.y * (_displayHeight - _collapsedHeight) / 2,
   );
 
@@ -191,6 +196,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _expandedWidth = widget.menuWidth;
     _internalController = CLMenuController();
     _travel = AnimationController.unbounded(vsync: this)
       ..addListener(_handleMotionTick);
@@ -294,6 +300,9 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(CLMenu oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!_open && !_closing && oldWidget.menuWidth != widget.menuWidth) {
+      _expandedWidth = widget.menuWidth;
+    }
     final oldController = oldWidget.controller ?? _internalController;
     if (!identical(oldController, _controller)) {
       oldController._detach(_handleControllerState);
@@ -355,11 +364,21 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _collapsedHeight = buttonRect.height;
 
     final growLeft = buttonRect.center.dx > overlaySize.width / 2;
+    final mediaPadding = MediaQuery.maybePaddingOf(context) ?? EdgeInsets.zero;
+    final safeLeft = mediaPadding.left + _screenMargin;
+    final safeRight = overlaySize.width - mediaPadding.right - _screenMargin;
+    final availableWidth = growLeft
+        ? buttonRect.right - safeLeft
+        : safeRight - buttonRect.left;
+    _expandedWidth = math.min(
+      widget.menuWidth,
+      math.max(_collapsedWidth, availableWidth),
+    );
     _spaceBelow = math.max(
-      overlaySize.height - buttonRect.top - 12,
+      overlaySize.height - buttonRect.top - _screenMargin,
       _collapsedHeight,
     );
-    _spaceAbove = math.max(buttonRect.bottom - 12, _collapsedHeight);
+    _spaceAbove = math.max(buttonRect.bottom - _screenMargin, _collapsedHeight);
     _measurementLimit = math.max(_spaceBelow, _spaceAbove);
     _anchor = Alignment(growLeft ? 1 : -1, -1);
 
@@ -717,7 +736,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   Offset get _panelTranslation {
     final tMorph = _morphProgress;
     final targetHeight = _displayHeight;
-    final width = ui.lerpDouble(_collapsedWidth, widget.menuWidth, tMorph)!;
+    final width = ui.lerpDouble(_collapsedWidth, _expandedWidth, tMorph)!;
     final height = ui.lerpDouble(_collapsedHeight, targetHeight, tMorph)!;
     final startCenter = Offset(
       -_anchor.x * _collapsedWidth / 2,
@@ -740,7 +759,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     }
 
     final targetHeight = _displayHeight;
-    final width = ui.lerpDouble(_collapsedWidth, widget.menuWidth, tMorph)!;
+    final width = ui.lerpDouble(_collapsedWidth, _expandedWidth, tMorph)!;
     final height = ui.lerpDouble(_collapsedHeight, targetHeight, tMorph)!;
     final radius = ui.lerpDouble(
       math.min(_collapsedWidth, _collapsedHeight) / 2,
@@ -823,7 +842,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                           opacity: opacity.clamp(0.0, 1.0).toDouble(),
                           child: Flow(
                             delegate: _CLMenuContentFlowDelegate(
-                              targetWidth: widget.menuWidth,
+                              targetWidth: _expandedWidth,
                               maxHeight: _growDown ? _spaceBelow : _spaceAbove,
                               alignment: _anchor,
                             ),
@@ -860,7 +879,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
   Widget _buildMeasuredList({required double maxHeight}) {
     return SizedBox(
-      width: widget.menuWidth,
+      width: _expandedWidth,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: _SizeReporter(

@@ -14,8 +14,9 @@
   actions. All adjustment paths share `step`, `min`, `max`, and `format`.
 
 * Added `CLOverflowToolbar<T>` and `CLOverflowToolbarItem<T>` for fixed-extent
-  responsive toolbars that preserve pinned tools and move low-priority tools
-  into a `CLMenu` without building hidden toolbar widgets.
+  responsive toolbars. Overflow menus now hug their longest current label, and
+  a controlled `selectedId` that overflows replaces the trailing visible tool
+  instead of highlighting More.
 * Added `CLControlSize.controlHeight` as the shared 28/36/44px control
   height contract. `CLButton`, `CLIconButton`, `CLTextField`, and `CLSelect`
   now use it; `CLButton.large` is 44px tall instead of 48px.

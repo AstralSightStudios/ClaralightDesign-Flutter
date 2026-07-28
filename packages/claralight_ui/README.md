@@ -50,6 +50,7 @@ items into a `CLMenu`:
 
 ```dart
 CLOverflowToolbar<int>(
+  selectedId: activeTool,
   items: [
     CLOverflowToolbarItem<int>(
       id: 0,
@@ -57,43 +58,59 @@ CLOverflowToolbar<int>(
       retention: CLToolbarItemRetention.pinned,
       toolbarBuilder: (_) => CLIconButton(
         icon: Icons.image_outlined,
-        onPressed: () {},
+        selected: activeTool == 0,
+        onPressed: () => setState(() => activeTool = 0),
       ),
     ),
     CLOverflowToolbarItem<int>(
       id: 1,
       extent: 36,
       retention: CLToolbarItemRetention.overflowable,
-      overflowPriority: 0,
+      overflowLabel: 'Effects',
+      overflowLeadingExtent: 28,
       toolbarBuilder: (_) => CLIconButton(
         icon: Icons.auto_awesome_outlined,
-        onPressed: () {},
+        selected: activeTool == 1,
+        onPressed: () => setState(() => activeTool = 1),
       ),
       overflowBuilder: (context, closeMenu) => CLListTile(
         label: 'Effects',
-        onTap: closeMenu,
+        leading: const Icon(Icons.auto_awesome_outlined),
+        onTap: () {
+          setState(() => activeTool = 1);
+          closeMenu();
+        },
       ),
     ),
   ],
-  overflowTriggerBuilder: (context, hiddenIds, toggle) => CLIconButton(
+  overflowTriggerBuilder: (context, toggle) => CLIconButton(
     icon: Icons.more_horiz,
-    selected: hiddenIds.isNotEmpty,
     onPressed: toggle,
   ),
 )
 ```
 
-Each item declares its main-axis `extent` explicitly. That lets visibility be
-decided before calling a toolbar builder, avoiding a one-frame overflow and
-avoiding hidden focus, hit-test, and semantics nodes. Item IDs remain in their
-original logical order in the menu; pinned items are never moved. If even the
-pinned items and More trigger cannot fit, the toolbar uses an explicit
-horizontal scroll fallback. The More trigger is keyboard focusable and opens
-with Enter or Space. Set `overflowEnabled: false` to disable pointer, keyboard,
-focus, and trigger semantics together; the trigger builder then receives a
-null callback. A custom `toolbarBuilder` must use the same `spacing` and
-`horizontalPadding` passed to `CLOverflowToolbar`; those values form the
-component's deterministic width-allocation contract.
+Each item declares its main-axis `extent` explicitly. Overflowable items also
+provide an `overflowLabel`; the menu measures only its current hidden labels and
+hugs the longest one. Add `overflowLeadingExtent: 28` for a standard medium
+`CLListTile` leading icon and gap. Labels are capped to the available safe-area
+width.
+
+That explicit geometry lets visibility be decided before calling a toolbar
+builder, avoiding a one-frame overflow and avoiding hidden focus, hit-test, and
+semantics nodes. Item IDs remain in their original logical order in the menu;
+pinned items are never moved. When `selectedId` would be hidden, it replaces the
+trailing visible overflowable item and occupies the final tool slot before
+More. The replaced item returns to the menu, so More remains a neutral menu
+entry instead of representing selection. If pinned items, the selected item,
+and More cannot fit, the toolbar uses an explicit horizontal scroll fallback.
+
+The More trigger is keyboard focusable and opens with Enter or Space. Set
+`overflowEnabled: false` to disable pointer, keyboard, focus, and trigger
+semantics together; the trigger builder then receives a null callback. A custom
+`toolbarBuilder` must use the same `spacing` and `horizontalPadding` passed to
+`CLOverflowToolbar`; those values form the component's deterministic
+width-allocation contract.
 
 ## Progressive scrolling
 

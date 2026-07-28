@@ -27,10 +27,11 @@ class _ToolbarSectionState extends State<_ToolbarSection> {
         CLOverflowToolbarItem<int>(
           id: index,
           extent: 36,
-          retention: index < 4
+          retention: index == 0
               ? CLToolbarItemRetention.pinned
               : CLToolbarItemRetention.overflowable,
-          overflowPriority: index,
+          overflowLabel: index == 0 ? null : tool.$2,
+          overflowLeadingExtent: index == 0 ? 0 : 28,
           toolbarBuilder: (context) => CLIconButton(
             key: Key('overflow-toolbar-tool-$index'),
             icon: tool.$1,
@@ -39,12 +40,12 @@ class _ToolbarSectionState extends State<_ToolbarSection> {
             selected: _activeTool == index,
             onPressed: () => setState(() => _activeTool = index),
           ),
-          overflowBuilder: index < 4
+          overflowBuilder: index == 0
               ? null
               : (context, closeMenu) => CLListTile(
+                  key: Key('overflow-menu-tool-$index'),
                   label: tool.$2,
                   leading: Icon(tool.$1),
-                  selected: _activeTool == index,
                   onTap: () {
                     setState(() => _activeTool = index);
                     closeMenu();
@@ -112,15 +113,15 @@ class _ToolbarSectionState extends State<_ToolbarSection> {
             width: _overflowWidth,
             child: CLOverflowToolbar<int>(
               items: overflowItems,
+              selectedId: _activeTool,
               overflowExtent: 36,
-              overflowTriggerBuilder: (context, hiddenIds, toggle) =>
-                  CLIconButton(
-                    icon: Icons.more_horiz_rounded,
-                    semanticLabel: '更多工具',
-                    size: CLControlSize.medium,
-                    selected: hiddenIds.isNotEmpty,
-                    onPressed: toggle,
-                  ),
+              overflowTriggerBuilder: (context, toggle) => CLIconButton(
+                key: const Key('overflow-toolbar-more'),
+                icon: Icons.more_horiz_rounded,
+                semanticLabel: '更多工具',
+                size: CLControlSize.medium,
+                onPressed: toggle,
+              ),
             ),
           ),
         ],

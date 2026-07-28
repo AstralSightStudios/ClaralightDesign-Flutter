@@ -17,7 +17,7 @@ void main() {
     expect(toolbar.horizontalPadding, 3);
     expect(toolbar.overflowExtent, 44);
     expect(toolbar.overflowEnabled, isTrue);
-    expect(toolbar.menuWidth, 260);
+    expect(toolbar.selectedId, isNull);
     expect(toolbar.menuPadding, const EdgeInsets.all(10));
     expect(toolbar.toolbarBuilder, isNull);
     expect(toolbar.onOverflowChanged, isNull);
@@ -46,10 +46,8 @@ void main() {
     expect(reports, [<int>{}]);
   });
 
-  testWidgets('lowest priority items hide first and trigger receives IDs', (
-    tester,
-  ) async {
-    Set<int>? triggerHidden;
+  testWidgets('lowest priority items hide first', (tester) async {
+    final reports = <Set<int>>[];
     final items = _items(
       count: 4,
       extent: 40,
@@ -62,14 +60,13 @@ void main() {
         width: 162,
         items: items,
         overflowExtent: 30,
-        overflowTriggerBuilder: (context, hiddenIds, toggle) {
-          triggerHidden = hiddenIds;
-          return _trigger(context, hiddenIds, toggle);
-        },
+        onOverflowChanged: reports.add,
       ),
     );
 
-    expect(triggerHidden, {1});
+    expect(reports, [
+      <int>{1},
+    ]);
     expect(find.byKey(const Key('tool-0')), findsOneWidget);
     expect(find.byKey(const Key('tool-1')), findsNothing);
     expect(find.byKey(const Key('tool-2')), findsOneWidget);
@@ -190,6 +187,174 @@ void main() {
     final second = tester.getRect(find.byKey(const Key('menu-3')));
     expect(first.top, lessThan(second.top));
     expect(find.byKey(const Key('menu-2')), findsNothing);
+  });
+
+  testWidgets('menu width follows its longest hidden label', (tester) async {
+    const longestLabel = 'Longer';
+    await tester.pumpWidget(
+      _host(
+        width: 80,
+        items: [
+          _item(0, retention: CLToolbarItemRetention.pinned),
+          _item(1, overflowLabel: 'A'),
+          _item(2, overflowLabel: longestLabel, overflowLeadingExtent: 28),
+        ],
+      ),
+    );
+    await _openMenu(tester);
+
+    final listContext = tester.element(find.byType(CLList));
+    final style = CLTheme.of(
+      listContext,
+    ).typography.callout.withCLWeight(FontWeight.w400);
+    final painter = TextPainter(
+      text: TextSpan(text: longestLabel, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(listContext),
+    )..layout();
+
+    expect(
+      tester.getSize(find.byType(CLList)).width,
+      closeTo(painter.width + 28 + 16 + 20, 0.01),
+    );
+    expect(tester.getSize(find.byType(CLList)).width, lessThan(260));
+  });
+
+  testWidgets('long overflow menu stays inside the safe viewport', (
+    tester,
+  ) async {
+    final longLabel = List.filled(40, 'Wide').join(' ');
+    await tester.pumpWidget(
+      _host(
+        width: 80,
+        items: [
+          _item(0, retention: CLToolbarItemRetention.pinned),
+          _item(1, overflowLabel: longLabel),
+        ],
+      ),
+    );
+    await _openMenu(tester);
+
+    final listRect = tester.getRect(find.byType(CLList));
+    expect(listRect.left, greaterThanOrEqualTo(0));
+    expect(listRect.right, lessThanOrEqualTo(800));
+    expect(listRect.width, lessThan(800 - 24));
+  });
+
+  testWidgets('selected menu item replaces the trailing toolbar item', (
+    tester,
+  ) async {
+    var selectedId = 1;
+    late StateSetter update;
+    final reports = <Set<int>>[];
+    late final List<CLOverflowToolbarItem<int>> items;
+    items = [
+      _item(0, retention: CLToolbarItemRetention.pinned),
+      _item(1, priority: 1),
+      _item(2, priority: 1),
+      _item(
+        3,
+        priority: 1,
+        overflowBuilder: (context, closeMenu) => TextButton(
+          key: const Key('menu-3'),
+          onPressed: () {
+            update(() => selectedId = 3);
+            closeMenu();
+          },
+          child: const Text('Menu 3'),
+        ),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(
+            width: 120,
+            items: items,
+            selectedId: selectedId,
+            onOverflowChanged: reports.add,
+          );
+        },
+      ),
+    );
+
+    expect(find.byKey(const Key('tool-0')), findsOneWidget);
+    expect(find.byKey(const Key('tool-1')), findsOneWidget);
+    expect(find.byKey(const Key('tool-2')), findsNothing);
+    expect(find.byKey(const Key('tool-3')), findsNothing);
+    expect(reports, [
+      <int>{2, 3},
+    ]);
+
+    await _openMenu(tester);
+    await tester.tap(find.byKey(const Key('menu-3')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('tool-0')), findsOneWidget);
+    expect(find.byKey(const Key('tool-1')), findsNothing);
+    expect(find.byKey(const Key('tool-2')), findsNothing);
+    expect(find.byKey(const Key('tool-3')), findsOneWidget);
+    expect(
+      tester.getCenter(find.byKey(const Key('tool-3'))).dx,
+      lessThan(tester.getCenter(find.byKey(_moreKey)).dx),
+    );
+    expect(reports, [
+      <int>{2, 3},
+      <int>{1, 2},
+    ]);
+
+    await _openMenu(tester);
+    expect(find.byKey(const Key('menu-1')), findsOneWidget);
+    expect(find.byKey(const Key('menu-2')), findsOneWidget);
+    expect(find.byKey(const Key('menu-3')), findsNothing);
+  });
+
+  testWidgets('selected promotion stays bounded across a slot boundary', (
+    tester,
+  ) async {
+    var width = 260.0;
+    late StateSetter update;
+    final items = _items(
+      count: 7,
+      extent: 36,
+      pinnedIds: const {0},
+      priorities: const {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+    );
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return _host(
+            width: width,
+            items: items,
+            selectedId: 6,
+            overflowExtent: 36,
+          );
+        },
+      ),
+    );
+
+    await _openMenu(tester);
+    expect(find.byType(CLList), findsOneWidget);
+
+    update(() => width = 226);
+    await tester.pump();
+    for (var frame = 0; frame < 4; frame++) {
+      expect(tester.takeException(), isNull);
+      final hostRect = tester.getRect(find.byKey(const Key('overflow-host')));
+      final moreRect = tester.getRect(find.byKey(_moreKey));
+      expect(hostRect.contains(moreRect.center), isTrue);
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('tool-6')), findsOneWidget);
+    expect(find.byKey(const Key('tool-3')), findsNothing);
+    expect(find.byType(CLList), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('More opens from keyboard focus with Enter and Space', (
@@ -972,7 +1137,6 @@ void main() {
     var width = 120.0;
     late StateSetter update;
     final toggles = <VoidCallback?>[];
-    final hiddenSets = <Set<int>>[];
     final items = _items(
       count: 3,
       extent: 40,
@@ -989,10 +1153,9 @@ void main() {
             items: items,
             overflowExtent: 30,
             overflowEnabled: false,
-            overflowTriggerBuilder: (context, hiddenIds, toggle) {
+            overflowTriggerBuilder: (context, toggle) {
               toggles.add(toggle);
-              hiddenSets.add(hiddenIds);
-              return _trigger(context, hiddenIds, toggle);
+              return _trigger(context, toggle);
             },
           );
         },
@@ -1004,7 +1167,6 @@ void main() {
     expect(find.byType(CLMenu), findsNothing);
     expect(find.byKey(_moreKey), findsOneWidget);
     expect(toggles, everyElement(isNull));
-    expect(hiddenSets, everyElement(<int>{1}));
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.byType(CLMenu), findsNothing);
     expect(toggles, everyElement(isNull));
@@ -1061,8 +1223,9 @@ Widget _host({
   required List<CLOverflowToolbarItem<int>> items,
   TextDirection textDirection = TextDirection.ltr,
   double overflowExtent = 30,
-  CLOverflowToolbarTriggerBuilder<int> overflowTriggerBuilder = _trigger,
+  CLOverflowToolbarTriggerBuilder overflowTriggerBuilder = _trigger,
   bool overflowEnabled = true,
+  int? selectedId,
   bool disableAnimations = false,
   double spacing = 2,
   double horizontalPadding = 3,
@@ -1090,6 +1253,7 @@ Widget _host({
                   horizontalPadding: horizontalPadding,
                   overflowExtent: overflowExtent,
                   overflowEnabled: overflowEnabled,
+                  selectedId: selectedId,
                   onOverflowChanged: onOverflowChanged,
                 ),
               ),
@@ -1150,15 +1314,10 @@ double _scaleXOf(WidgetTester tester, Finder child) {
       .firstWhere((scale) => scale != 1, orElse: () => 1);
 }
 
-Widget _trigger(
-  BuildContext context,
-  Set<int> hiddenIds,
-  VoidCallback? toggle,
-) {
+Widget _trigger(BuildContext context, VoidCallback? toggle) {
   return Semantics(
     label: 'More',
     button: true,
-    selected: hiddenIds.isNotEmpty,
     child: GestureDetector(
       key: _moreKey,
       behavior: HitTestBehavior.opaque,
@@ -1198,6 +1357,8 @@ CLOverflowToolbarItem<int> _item(
   double extent = 40,
   CLToolbarItemRetention retention = CLToolbarItemRetention.overflowable,
   int priority = 0,
+  String? overflowLabel,
+  double overflowLeadingExtent = 0,
   Map<int, int>? builds,
   WidgetBuilder? toolbarBuilder,
   CLOverflowToolbarOverflowBuilder? overflowBuilder,
@@ -1207,6 +1368,10 @@ CLOverflowToolbarItem<int> _item(
     extent: extent,
     retention: retention,
     overflowPriority: priority,
+    overflowLabel: retention == CLToolbarItemRetention.pinned
+        ? overflowLabel
+        : overflowLabel ?? 'Menu $id',
+    overflowLeadingExtent: overflowLeadingExtent,
     toolbarBuilder:
         toolbarBuilder ??
         (context) {

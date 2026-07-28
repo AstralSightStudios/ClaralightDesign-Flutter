@@ -234,6 +234,47 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   });
 
+  _galleryTestWidgets('overflow toolbar promotes the selected menu tool', (
+    WidgetTester tester,
+  ) async {
+    _useLargeView(tester);
+    await _pumpGalleryHost(tester, disableAnimations: true);
+
+    final more = find.byKey(const Key('overflow-toolbar-more'));
+    await tester.ensureVisible(more);
+    await tester.pump();
+
+    expect(tester.widget<CLIconButton>(more).selected, isFalse);
+    expect(find.byKey(const Key('overflow-toolbar-tool-4')), findsOneWidget);
+    expect(find.byKey(const Key('overflow-toolbar-tool-6')), findsNothing);
+
+    await tester.tap(more);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final exportRow = find.byKey(const Key('overflow-menu-tool-6'));
+    final overflowList = find.ancestor(
+      of: exportRow,
+      matching: find.byType(CLList),
+    );
+    expect(exportRow, findsOneWidget);
+    expect(tester.getSize(overflowList).width, lessThan(140));
+
+    await tester.tap(exportRow);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final selectedTool = find.byKey(const Key('overflow-toolbar-tool-6'));
+    expect(selectedTool, findsOneWidget);
+    expect(find.byKey(const Key('overflow-toolbar-tool-4')), findsNothing);
+    expect(
+      tester.getCenter(selectedTool).dx,
+      lessThan(tester.getCenter(more).dx),
+    );
+    expect(tester.widget<CLIconButton>(selectedTool).selected, isTrue);
+    expect(tester.widget<CLIconButton>(more).selected, isFalse);
+  });
+
   _galleryTestWidgets('tooltip position control updates the demo', (
     WidgetTester tester,
   ) async {

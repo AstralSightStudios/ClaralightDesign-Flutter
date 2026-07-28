@@ -119,6 +119,7 @@ class _CLToolbarState extends State<CLToolbar> {
       final interactive = _isInteractiveTool(child);
       items.add(
         MouseRegion(
+          key: child.key == null ? null : ValueKey<Key>(child.key!),
           onEnter: interactive ? (_) => _setToolHovered(i, true) : null,
           onExit: interactive ? (_) => _setToolHovered(i, false) : null,
           child: Listener(

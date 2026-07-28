@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../lists/list_tile.dart';
 import '../menus/menu.dart';
-import '../theme/motion.dart';
+import '../theme/theme.dart';
 import 'toolbar.dart';
 
 /// Controls whether a toolbar item may move into the overflow menu.
@@ -26,20 +29,15 @@ typedef CLOverflowToolbarOverflowBuilder =
 
 /// Builds the overflow trigger.
 ///
-/// [hiddenIds] is the immutable set of item IDs currently hosted in the menu.
-/// The trigger may use it to expose a selected or badge state. [toggle] is
-/// null when [CLOverflowToolbar.overflowEnabled] is false.
-typedef CLOverflowToolbarTriggerBuilder<T> =
-    Widget Function(
-      BuildContext context,
-      Set<T> hiddenIds,
-      VoidCallback? toggle,
-    );
+/// [toggle] is null when [CLOverflowToolbar.overflowEnabled] is false.
+typedef CLOverflowToolbarTriggerBuilder =
+    Widget Function(BuildContext context, VoidCallback? toggle);
 
 /// Builds the toolbar shell around [visibleChildren].
 ///
-/// The list is in the original logical item order. When overflow is active,
-/// the final child is the overflow trigger. The shell must use the toolbar's
+/// The list keeps the visible items' logical order. When a hidden selected
+/// item is promoted, it occupies the final tool slot. The overflow trigger,
+/// when present, remains the final child. The shell must use the toolbar's
 /// declared [CLOverflowToolbar.spacing] and
 /// [CLOverflowToolbar.horizontalPadding], because those values are the width
 /// allocation contract.
@@ -76,14 +74,25 @@ class CLOverflowToolbarItem<T> {
     required this.retention,
     required this.toolbarBuilder,
     this.overflowPriority = 0,
+    this.overflowLabel,
+    this.overflowLeadingExtent = 0,
     this.overflowBuilder,
   }) : assert(
          extent > 0 && extent < double.infinity,
          'CLOverflowToolbarItem.extent must be finite and greater than zero.',
        ),
        assert(
-         retention == CLToolbarItemRetention.pinned || overflowBuilder != null,
-         'Overflowable toolbar items require an overflowBuilder.',
+         overflowLeadingExtent >= 0 && overflowLeadingExtent < double.infinity,
+         'CLOverflowToolbarItem.overflowLeadingExtent must be finite and '
+         'non-negative.',
+       ),
+       assert(
+         retention == CLToolbarItemRetention.pinned ||
+             (overflowBuilder != null &&
+                 overflowLabel != null &&
+                 overflowLabel != ''),
+         'Overflowable toolbar items require an overflowLabel and '
+         'overflowBuilder.',
        );
 
   /// Stable identity used for keys, hidden-ID reporting, and duplicate checks.
@@ -101,6 +110,18 @@ class CLOverflowToolbarItem<T> {
   /// Builds the toolbar representation when this item is visible.
   final CLOverflowToolbarItemBuilder toolbarBuilder;
 
+  /// Single-line label used to size this item's overflow-menu row.
+  ///
+  /// Required for overflowable items. The row built by [overflowBuilder]
+  /// should render the same label with the standard [CLListTile] callout style.
+  final String? overflowLabel;
+
+  /// Width before [overflowLabel] inside the menu row, including its gap.
+  ///
+  /// For a medium [CLListTile] with a leading icon, use `28` (18px icon plus
+  /// the 10px label gap).
+  final double overflowLeadingExtent;
+
   /// Builds the menu row when this overflowable item is hidden.
   final CLOverflowToolbarOverflowBuilder? overflowBuilder;
 }
@@ -112,9 +133,8 @@ class CLOverflowToolbarItem<T> {
 /// toolbar builders are called. This avoids a one-frame flex overflow and,
 /// importantly, avoids creating hidden focus, hit-test, and semantics nodes.
 /// The default shell is [CLToolbar]; use [toolbarBuilder] when the visible
-/// children need a different shell. That builder receives children in the
-/// original logical order, followed by the overflow trigger when one is
-/// needed.
+/// children need a different shell. The shell receives logical-order items,
+/// except that a promoted selected item occupies the final slot before More.
 class CLOverflowToolbar<T> extends StatefulWidget {
   /// Creates an overflow-aware toolbar.
   CLOverflowToolbar({
@@ -126,7 +146,7 @@ class CLOverflowToolbar<T> extends StatefulWidget {
     this.horizontalPadding = 3,
     this.overflowExtent = 44,
     this.overflowEnabled = true,
-    this.menuWidth = 260,
+    this.selectedId,
     this.menuPadding = const EdgeInsets.all(10),
     this.onOverflowChanged,
   }) : assert(
@@ -135,7 +155,8 @@ class CLOverflowToolbar<T> extends StatefulWidget {
        ),
        assert(
          _haveRequiredOverflowBuilders(items),
-         'Overflowable CLOverflowToolbar items require an overflowBuilder.',
+         'Overflowable CLOverflowToolbar items require an overflowLabel and '
+         'overflowBuilder.',
        ),
        assert(
          spacing >= 0 && spacing < double.infinity,
@@ -148,18 +169,14 @@ class CLOverflowToolbar<T> extends StatefulWidget {
        assert(
          overflowExtent > 0 && overflowExtent < double.infinity,
          'CLOverflowToolbar.overflowExtent must be finite and greater than zero.',
-       ),
-       assert(
-         menuWidth > 0 && menuWidth < double.infinity,
-         'CLOverflowToolbar.menuWidth must be finite and greater than zero.',
        );
 
-  /// Items in their logical order. This order is retained by both the
-  /// toolbar and the overflow menu.
+  /// Items in logical order. The menu always retains this order; a selected
+  /// item promoted from the menu moves to the toolbar's final tool slot.
   final List<CLOverflowToolbarItem<T>> items;
 
   /// Builds the More/overflow trigger when at least one item is hidden.
-  final CLOverflowToolbarTriggerBuilder<T> overflowTriggerBuilder;
+  final CLOverflowToolbarTriggerBuilder overflowTriggerBuilder;
 
   /// Builds the toolbar shell. Defaults to [CLToolbar]. Custom shells must
   /// render the supplied children with exactly [spacing] between them and
@@ -183,10 +200,13 @@ class CLOverflowToolbar<T> extends StatefulWidget {
   /// visual and semantic state can share this same source of truth.
   final bool overflowEnabled;
 
-  /// Width of the expanded [CLMenu].
-  final double menuWidth;
+  /// The controlled selected item.
+  ///
+  /// When this item would otherwise be hidden, it replaces the trailing
+  /// visible overflowable item and is placed immediately before More.
+  final T? selectedId;
 
-  /// Padding passed to the expanded [CLMenu].
+  /// Insets around the expanded menu rows.
   final EdgeInsetsGeometry menuPadding;
 
   /// Reports the hidden IDs after the calculated allocation changes.
@@ -200,6 +220,9 @@ class CLOverflowToolbar<T> extends StatefulWidget {
 }
 
 class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
+  static const _menuRowHorizontalPadding = 16.0;
+  static const _menuScreenMargin = 12.0;
+
   CLMenuController _menuController = CLMenuController();
   final List<CLMenuController> _retiredMenuControllers = [];
   _CLOverflowToolbarAllocation<T>? _lastAllocation;
@@ -236,7 +259,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final menuWasOpen = _menuController.isOpen;
-        final allocation = _allocate(constraints.maxWidth);
+        final allocation = _allocate(context, constraints.maxWidth);
         _recordAllocation(allocation);
 
         return _CLOverflowMigrationSurface<T>(
@@ -247,7 +270,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
           horizontalPadding: widget.horizontalPadding,
           overflowExtent: widget.overflowExtent,
           overflowEnabled: widget.overflowEnabled,
-          menuWidth: widget.menuWidth,
+          menuWidth: allocation.menuWidth,
           menuPadding: widget.menuPadding,
           usesCustomShell: widget.toolbarBuilder != null,
           animate: !MediaQuery.disableAnimationsOf(context) && !menuWasOpen,
@@ -289,7 +312,6 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
     BuildContext context,
     _CLOverflowToolbarAllocation<T> allocation,
   ) {
-    final hiddenIds = allocation.hiddenIds;
     final menuChildren = <Widget>[];
     for (final index in allocation.hiddenIndices) {
       final item = widget.items[index];
@@ -305,7 +327,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
       anchor: const SizedBox.shrink(),
       controller: _menuController,
       buttonSize: widget.overflowExtent,
-      menuWidth: widget.menuWidth,
+      menuWidth: allocation.menuWidth,
       padding: widget.menuPadding,
       buttonBuilder: (context, toggle) {
         final enabledToggle = widget.overflowEnabled ? toggle : null;
@@ -327,11 +349,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
             width: widget.overflowExtent,
             child: Align(
               alignment: Alignment.center,
-              child: widget.overflowTriggerBuilder(
-                context,
-                hiddenIds,
-                enabledToggle,
-              ),
+              child: widget.overflowTriggerBuilder(context, enabledToggle),
             ),
           ),
         );
@@ -340,7 +358,10 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
     );
   }
 
-  _CLOverflowToolbarAllocation<T> _allocate(double maxWidth) {
+  _CLOverflowToolbarAllocation<T> _allocate(
+    BuildContext context,
+    double maxWidth,
+  ) {
     final allIndices = [
       for (var index = 0; index < widget.items.length; index++) index,
     ];
@@ -348,6 +369,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
 
     if (!maxWidth.isFinite || naturalWidth <= maxWidth) {
       return _makeAllocation(
+        context: context,
         visibleIndices: allIndices,
         hiddenIndices: const [],
         maxWidth: maxWidth,
@@ -375,6 +397,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
 
     if (removable.isEmpty) {
       return _makeAllocation(
+        context: context,
         visibleIndices: allIndices,
         hiddenIndices: const [],
         maxWidth: maxWidth,
@@ -394,6 +417,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
       final toolbarWidth = _widthFor(visibleIndices, includeOverflow: true);
       if (toolbarWidth <= maxWidth) {
         return _makeAllocation(
+          context: context,
           visibleIndices: visibleIndices,
           hiddenIndices: hiddenIndices,
           maxWidth: maxWidth,
@@ -410,6 +434,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
           index,
     ];
     return _makeAllocation(
+      context: context,
       visibleIndices: pinnedIndices,
       hiddenIndices: hiddenIndices,
       maxWidth: maxWidth,
@@ -420,6 +445,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
   }
 
   _CLOverflowToolbarAllocation<T> _makeAllocation({
+    required BuildContext context,
     required List<int> visibleIndices,
     required Iterable<int> hiddenIndices,
     required double maxWidth,
@@ -427,32 +453,120 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
     required bool hasOverflow,
     required bool useHorizontalScroll,
   }) {
+    final resolvedVisibleIndices = List<int>.of(visibleIndices);
+    final resolvedHiddenIndices = hiddenIndices.toSet();
+    var resolvedUseHorizontalScroll = useHorizontalScroll;
+    final selectedId = widget.selectedId;
+    final selectedIndex = selectedId == null
+        ? -1
+        : widget.items.indexWhere((item) => item.id == selectedId);
+
+    if (selectedIndex >= 0 && resolvedHiddenIndices.remove(selectedIndex)) {
+      final replacementPosition = resolvedVisibleIndices.lastIndexWhere(
+        (index) =>
+            widget.items[index].retention ==
+            CLToolbarItemRetention.overflowable,
+      );
+      if (replacementPosition >= 0) {
+        resolvedHiddenIndices.add(
+          resolvedVisibleIndices.removeAt(replacementPosition),
+        );
+      }
+      resolvedVisibleIndices.add(selectedIndex);
+
+      while (maxWidth.isFinite &&
+          _widthFor(
+                resolvedVisibleIndices,
+                includeOverflow: resolvedHiddenIndices.isNotEmpty,
+              ) >
+              maxWidth) {
+        final extraPosition = resolvedVisibleIndices.lastIndexWhere(
+          (index) =>
+              index != selectedIndex &&
+              widget.items[index].retention ==
+                  CLToolbarItemRetention.overflowable,
+        );
+        if (extraPosition < 0) {
+          resolvedUseHorizontalScroll = true;
+          break;
+        }
+        resolvedHiddenIndices.add(
+          resolvedVisibleIndices.removeAt(extraPosition),
+        );
+      }
+    }
+
+    final resolvedHasOverflow = hasOverflow && resolvedHiddenIndices.isNotEmpty;
     final hiddenIndexList = [
       for (var index = 0; index < widget.items.length; index++)
-        if (hiddenIndices.contains(index)) index,
+        if (resolvedHiddenIndices.contains(index)) index,
     ];
     final hiddenIds = <T>{
       for (final index in hiddenIndexList) widget.items[index].id,
     };
     final toolbarWidth = _widthFor(
-      visibleIndices,
-      includeOverflow: hasOverflow,
+      resolvedVisibleIndices,
+      includeOverflow: resolvedHasOverflow,
     );
+    if (maxWidth.isFinite && toolbarWidth > maxWidth) {
+      resolvedUseHorizontalScroll = true;
+    }
     return _CLOverflowToolbarAllocation<T>(
-      visibleIndices: List<int>.unmodifiable(visibleIndices),
+      visibleIndices: List<int>.unmodifiable(resolvedVisibleIndices),
       hiddenIndices: List<int>.unmodifiable(hiddenIndexList),
       hiddenIds: Set<T>.unmodifiable(hiddenIds),
       itemIds: List<T>.unmodifiable(widget.items.map((item) => item.id)),
       maxWidth: maxWidth,
       naturalWidth: naturalWidth,
       toolbarWidth: toolbarWidth,
-      hasOverflow: hasOverflow,
-      useHorizontalScroll: useHorizontalScroll,
+      hasOverflow: resolvedHasOverflow,
+      useHorizontalScroll: resolvedUseHorizontalScroll,
       overflowExtent: widget.overflowExtent,
       spacing: widget.spacing,
       horizontalPadding: widget.horizontalPadding,
-      menuWidth: widget.menuWidth,
+      menuWidth: _menuWidth(context, hiddenIndexList),
       menuPadding: widget.menuPadding,
+    );
+  }
+
+  double _menuWidth(BuildContext context, List<int> hiddenIndices) {
+    final textDirection = Directionality.of(context);
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final style = CLTheme.of(
+      context,
+    ).typography.callout.withCLWeight(FontWeight.w400);
+    var widestRow = 0.0;
+
+    for (final index in hiddenIndices) {
+      final item = widget.items[index];
+      final painter = TextPainter(
+        text: TextSpan(text: item.overflowLabel!, style: style),
+        maxLines: 1,
+        textDirection: textDirection,
+        textScaler: mediaQuery?.textScaler ?? TextScaler.noScaling,
+        locale: Localizations.maybeLocaleOf(context),
+      )..layout();
+      widestRow = math.max(
+        widestRow,
+        painter.width + item.overflowLeadingExtent,
+      );
+    }
+
+    final naturalWidth =
+        widestRow +
+        _menuRowHorizontalPadding +
+        widget.menuPadding.resolve(textDirection).horizontal;
+    final availableWidth = mediaQuery == null
+        ? double.infinity
+        : math.max(
+            widget.overflowExtent,
+            mediaQuery.size.width -
+                mediaQuery.padding.horizontal -
+                _menuScreenMargin * 2,
+          );
+    return math.max(
+      widget.overflowExtent,
+      math.min(naturalWidth, availableWidth),
     );
   }
 
@@ -544,7 +658,7 @@ class _CLOverflowMigrationSurface<T> extends StatefulWidget {
   final bool animate;
   final _CLOverflowToolbarShellBuilder<T> shellBuilder;
   final _CLOverflowActiveTriggerBuilder<T> activeTriggerBuilder;
-  final CLOverflowToolbarTriggerBuilder<T> visualTriggerBuilder;
+  final CLOverflowToolbarTriggerBuilder visualTriggerBuilder;
 
   @override
   State<_CLOverflowMigrationSurface<T>> createState() =>
@@ -562,7 +676,6 @@ class _CLOverflowMigrationSurfaceState<T>
   Map<LocalKey, _CLOverflowVisualState> _from = const {};
   Map<LocalKey, _CLOverflowVisualState> _to = const {};
   _CLOverflowToolbarAllocation<T>? _settledAllocation;
-  Set<T> _outgoingMoreHiddenIds = const {};
 
   @override
   void initState() {
@@ -603,7 +716,6 @@ class _CLOverflowMigrationSurfaceState<T>
     _from = visuals;
     _to = visuals;
     _settledAllocation = allocation;
-    _outgoingMoreHiddenIds = const {};
     _migration.value = 1;
   }
 
@@ -684,9 +796,6 @@ class _CLOverflowMigrationSurfaceState<T>
     _from = Map<LocalKey, _CLOverflowVisualState>.unmodifiable(nextFrom);
     _to = Map<LocalKey, _CLOverflowVisualState>.unmodifiable(nextTo);
     _settledAllocation = null;
-    _outgoingMoreHiddenIds = currentAllocation.hasOverflow
-        ? currentAllocation.hiddenIds
-        : const {};
     _migration.value = 0;
     _migration.animateTo(
       1,
@@ -851,7 +960,6 @@ class _CLOverflowMigrationSurfaceState<T>
               alignment: Alignment.center,
               child: widget.visualTriggerBuilder(
                 context,
-                _outgoingMoreHiddenIds,
                 widget.overflowEnabled ? _noop : null,
               ),
             ),
@@ -923,7 +1031,6 @@ bool _sameVisualConfiguration<T>(
       first.horizontalPadding != second.horizontalPadding ||
       first.overflowExtent != second.overflowExtent ||
       first.overflowEnabled != second.overflowEnabled ||
-      first.menuWidth != second.menuWidth ||
       first.menuPadding != second.menuPadding ||
       first.usesCustomShell != second.usesCustomShell ||
       first.items.length != second.items.length) {
@@ -1017,7 +1124,9 @@ bool _haveUniqueIds<T>(List<CLOverflowToolbarItem<T>> items) {
 bool _haveRequiredOverflowBuilders<T>(List<CLOverflowToolbarItem<T>> items) {
   for (final item in items) {
     if (item.retention == CLToolbarItemRetention.overflowable &&
-        item.overflowBuilder == null) {
+        (item.overflowBuilder == null ||
+            item.overflowLabel == null ||
+            item.overflowLabel == '')) {
       return false;
     }
   }
