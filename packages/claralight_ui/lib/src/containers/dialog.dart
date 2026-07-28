@@ -6,6 +6,30 @@ import 'package:flutter/widgets.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
 
+/// A source anchor for a [CLDialog] transition.
+///
+/// [capture] snapshots the entrance bounds and remeasures the same context when
+/// dismissal starts. If that context has been disposed, the dialog dismisses
+/// in place. [fixed] keeps a geometry-only anchor for both directions.
+class CLDialogTrigger {
+  CLDialogTrigger._(this.initialRect, this._rectResolver);
+
+  factory CLDialogTrigger.capture(BuildContext context) {
+    Rect? resolve() => _dialogTriggerRect(context);
+    return CLDialogTrigger._(resolve(), resolve);
+  }
+
+  const CLDialogTrigger.fixed(Rect? rect)
+    : initialRect = rect,
+      _rectResolver = null;
+
+  final Rect? initialRect;
+  final Rect? Function()? _rectResolver;
+
+  Rect? _resolveForDismissal() =>
+      _rectResolver == null ? initialRect : _rectResolver();
+}
+
 /// A Claralight modal dialog — the "导出表盘" dialog of the design source.
 ///
 /// A large-radius (36) translucent panel with a centered [title], free-form
@@ -112,7 +136,9 @@ class CLDialog extends StatelessWidget {
 
   /// Presents a [CLDialog] centered over a scrim. The dialog uses the
   /// 4-corner perspective trapezoid morph animation unless reduced motion is
-  /// enabled, in which case it remains centered and only fades.
+  /// enabled, in which case it remains centered and only fades. A dynamic
+  /// [trigger] is measured again when dismissal starts so the dialog follows a
+  /// moved source and ignores one that has been removed.
   static Future<T?> show<T>(
     BuildContext context, {
     String? title,
@@ -120,18 +146,8 @@ class CLDialog extends StatelessWidget {
     List<Widget> actions = const [],
     double maxWidth = 320,
     bool barrierDismissible = true,
-    BuildContext? triggerContext,
-    Rect? triggerRect,
+    CLDialogTrigger? trigger,
   }) {
-    Rect? resolvedTriggerRect = triggerRect;
-    if (resolvedTriggerRect == null && triggerContext != null) {
-      final renderBox = triggerContext.findRenderObject() as RenderBox?;
-      if (renderBox != null && renderBox.attached) {
-        resolvedTriggerRect =
-            renderBox.localToGlobal(Offset.zero) & renderBox.size;
-      }
-    }
-
     final platformAnimationsDisabled = WidgetsBinding
         .instance
         .platformDispatcher
@@ -151,18 +167,28 @@ class CLDialog extends StatelessWidget {
         ),
         barrierDismissible: barrierDismissible,
         scrim: CLTheme.of(context).colors.scrim,
-        triggerRect: resolvedTriggerRect,
+        trigger: trigger,
         animationsDisabled: animationsDisabled,
       ),
     );
   }
 }
 
+Rect? _dialogTriggerRect(BuildContext context) {
+  if (!context.mounted) return null;
+  final renderBox = context.findRenderObject() as RenderBox?;
+  if (renderBox == null || !renderBox.attached || !renderBox.hasSize) {
+    return null;
+  }
+  return renderBox.localToGlobal(Offset.zero) & renderBox.size;
+}
+
 class _CLDialogRoute<T> extends PopupRoute<T> {
   final WidgetBuilder builder;
   final bool _barrierDismissible;
   final Color scrim;
-  final Rect? triggerRect;
+  final CLDialogTrigger? _trigger;
+  Rect? _activeTriggerRect;
   bool _animationsDisabled;
   AnimationStatus _reducedFadeDirection;
   double _reducedFadeStartT = 0;
@@ -175,8 +201,10 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
     required bool barrierDismissible,
     required this.scrim,
     required bool animationsDisabled,
-    this.triggerRect,
+    required CLDialogTrigger? trigger,
   }) : _barrierDismissible = barrierDismissible,
+       _trigger = trigger,
+       _activeTriggerRect = trigger?.initialRect,
        _animationsDisabled = animationsDisabled,
        _reducedFadeDirection = animationsDisabled
            ? AnimationStatus.forward
@@ -298,6 +326,13 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
   }
 
   void _handleTransitionStatus(AnimationStatus status) {
+    if (status == AnimationStatus.reverse && _trigger != null) {
+      // The entrance rect is only a snapshot. Refresh it at dismissal so a
+      // moved source remains connected, while a disposed source (such as a
+      // closed menu item) no longer attracts the reverse morph.
+      _activeTriggerRect = _trigger._resolveForDismissal();
+      changedInternalState();
+    }
     if (!_animationsDisabled) return;
     final t = controller?.value ?? 0;
     _beginReducedFade(status, t: t);
@@ -358,7 +393,7 @@ class _CLDialogRoute<T> extends PopupRoute<T> {
             else
               _CLDialogMorphWidget(
                 progress: t,
-                triggerRect: triggerRect,
+                triggerRect: _activeTriggerRect,
                 child: dialog,
               ),
           ],

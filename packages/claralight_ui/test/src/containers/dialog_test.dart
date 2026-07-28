@@ -54,9 +54,15 @@ void main() {
     expect(tester.getSize(find.byType(CLDialog)).width, 320);
   });
 
-  testWidgets('route keeps its duration and morphs from trigger', (
+  testWidgets('static trigger rect remains the dismissal target', (
     tester,
   ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    const triggerRect = Rect.fromLTWH(20, 20, 100, 40);
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -64,8 +70,8 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 context,
-                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
-                child: const SizedBox(key: _dialogContentKey),
+                trigger: const CLDialogTrigger.fixed(triggerRect),
+                child: const Text('Dialog body', key: _dialogContentKey),
               ),
               child: const Text('Open dialog'),
             ),
@@ -82,7 +88,130 @@ void main() {
     expect(route.reverseTransitionDuration, CLMotion.standard);
 
     await tester.pump(const Duration(milliseconds: 380));
-    expect(find.byKey(_dialogContentKey), findsOneWidget);
+    await tester.tapAt(const Offset(10, 590));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    final dismissingCenter = tester.getRect(find.byType(CLDialog)).center;
+    expect(
+      (dismissingCenter - triggerRect.center).distance,
+      lessThan((dismissingCenter - const Offset(400, 300)).distance),
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('dismissal remeasures a moved trigger context', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    var triggerLeft = 24.0;
+    late StateSetter setHostState;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              setHostState = setState;
+              return Stack(
+                children: [
+                  Positioned(
+                    left: triggerLeft,
+                    top: 24,
+                    child: Builder(
+                      builder: (triggerContext) => TextButton(
+                        key: const Key('moving-trigger'),
+                        onPressed: () => CLDialog.show<void>(
+                          context,
+                          trigger: CLDialogTrigger.capture(triggerContext),
+                          child: const Text(
+                            'Dialog body',
+                            key: _dialogContentKey,
+                          ),
+                        ),
+                        child: const Text('Open dialog'),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    final trigger = find.byKey(const Key('moving-trigger'));
+    final originalCenter = tester.getRect(trigger).center;
+    await tester.tap(trigger);
+    await tester.pumpAndSettle();
+
+    setHostState(() => triggerLeft = 640);
+    await tester.pump();
+    final movedCenter = tester.getRect(trigger).center;
+    expect(movedCenter.dx, greaterThan(originalCenter.dx + 500));
+
+    await tester.tapAt(const Offset(10, 590));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    final dismissingCenter = tester.getRect(find.byType(CLDialog)).center;
+    expect(
+      (dismissingCenter - movedCenter).distance,
+      lessThan((dismissingCenter - originalCenter).distance),
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('dismissal ignores a disposed trigger context', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    var showTrigger = true;
+    late StateSetter setHostState;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              setHostState = setState;
+              return showTrigger
+                  ? Builder(
+                      builder: (triggerContext) => TextButton(
+                        onPressed: () => CLDialog.show<void>(
+                          context,
+                          trigger: CLDialogTrigger.capture(triggerContext),
+                          child: const Text(
+                            'Dialog body',
+                            key: _dialogContentKey,
+                          ),
+                        ),
+                        child: const Text('Open dialog'),
+                      ),
+                    )
+                  : const SizedBox.expand();
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pumpAndSettle();
+    setHostState(() => showTrigger = false);
+    await tester.pump();
+
+    final dialog = find.byType(CLDialog);
+    await tester.tapAt(const Offset(10, 590));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+
+    expect(tester.getRect(dialog).center, const Offset(400, 300));
+    await tester.pumpAndSettle();
+    expect(dialog, findsNothing);
   });
 
   testWidgets('reduced motion skips morph and keeps a short fade', (
@@ -104,7 +233,9 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 context,
-                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                trigger: const CLDialogTrigger.fixed(
+                  Rect.fromLTWH(20, 20, 100, 40),
+                ),
                 child: const Text('Dialog body', key: _dialogContentKey),
               ),
               child: const Text('Open dialog'),
@@ -174,7 +305,9 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 context,
-                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                trigger: const CLDialogTrigger.fixed(
+                  Rect.fromLTWH(20, 20, 100, 40),
+                ),
                 child: const Text('Dialog body', key: _dialogContentKey),
               ),
               child: const Text('Open dialog'),
@@ -247,7 +380,9 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 context,
-                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                trigger: const CLDialogTrigger.fixed(
+                  Rect.fromLTWH(20, 20, 100, 40),
+                ),
                 child: const Text('Dialog body', key: _dialogContentKey),
               ),
               child: const Text('Open dialog'),
@@ -313,7 +448,9 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 context,
-                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                trigger: const CLDialogTrigger.fixed(
+                  Rect.fromLTWH(20, 20, 100, 40),
+                ),
                 child: const Text('Dialog body', key: _dialogContentKey),
               ),
               child: const Text('Open dialog'),
@@ -383,7 +520,9 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 context,
-                triggerRect: const Rect.fromLTWH(20, 20, 100, 40),
+                trigger: const CLDialogTrigger.fixed(
+                  Rect.fromLTWH(20, 20, 100, 40),
+                ),
                 child: const Text('Dialog body', key: _dialogContentKey),
               ),
               child: const Text('Open dialog'),
@@ -462,7 +601,7 @@ void main() {
     expect(find.byKey(_dialogContentKey), findsNothing);
   });
 
-  testWidgets('show accepts triggerContext', (tester) async {
+  testWidgets('show accepts a captured trigger', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -470,7 +609,7 @@ void main() {
             builder: (buttonContext) => TextButton(
               onPressed: () => CLDialog.show<void>(
                 buttonContext,
-                triggerContext: buttonContext,
+                trigger: CLDialogTrigger.capture(buttonContext),
                 child: const Text('Dialog body'),
               ),
               child: const Text('Open dialog'),

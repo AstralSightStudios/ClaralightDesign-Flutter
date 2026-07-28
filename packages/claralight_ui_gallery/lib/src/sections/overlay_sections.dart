@@ -252,7 +252,7 @@ class _DialogSection extends StatelessWidget {
               size: CLControlSize.medium,
               onPressed: () => CLDialog.show(
                 context,
-                triggerContext: btnContext,
+                trigger: CLDialogTrigger.capture(btnContext),
                 title: '导出表盘',
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 48),
@@ -280,7 +280,7 @@ class _DialogSection extends StatelessWidget {
               size: CLControlSize.medium,
               onPressed: () => CLDialog.show(
                 context,
-                triggerContext: btnContext,
+                trigger: CLDialogTrigger.capture(btnContext),
                 title: '保存更改',
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 48),
