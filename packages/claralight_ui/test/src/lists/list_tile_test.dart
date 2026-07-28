@@ -41,6 +41,23 @@ void main() {
     expect(disclosureRect.center.dx, tileRect.right - 16);
   });
 
+  testWidgets('CLListTile grows to show a wrapped label', (
+    WidgetTester tester,
+  ) async {
+    const tileKey = Key('tile');
+    const message =
+        'The selected image resource has no matching color variant for this theme.';
+
+    await tester.pumpWidget(
+      host(const CLListTile(key: tileKey, label: message, labelMaxLines: null)),
+    );
+
+    final label = tester.widget<Text>(find.text(message));
+    expect(label.maxLines, isNull);
+    expect(label.overflow, TextOverflow.clip);
+    expect(tester.getSize(find.byKey(tileKey)).height, greaterThan(35));
+  });
+
   testWidgets('CLListTile depth adds a guide slot before the leading icon', (
     WidgetTester tester,
   ) async {

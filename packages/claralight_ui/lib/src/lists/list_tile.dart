@@ -30,6 +30,10 @@ class CLListTile extends StatefulWidget {
 
   final CLControlSize size;
 
+  /// Maximum lines for the default label. `null` allows the row to grow with
+  /// all wrapped lines while preserving the control size as its minimum height.
+  final int? labelMaxLines;
+
   /// Tree indentation level. Each level adds a 14px guide and a 10px gap.
   final int depth;
 
@@ -56,12 +60,14 @@ class CLListTile extends StatefulWidget {
     this.selected = false,
     this.tint,
     this.size = CLControlSize.medium,
+    this.labelMaxLines = 1,
     this.depth = 0,
     this.outlined = false,
     this.expanded,
     this.onExpandedChanged,
     this.disclosureAnimationDuration = CLMotion.standard,
-  }) : assert(depth >= 0);
+  }) : assert(depth >= 0),
+       assert(labelMaxLines == null || labelMaxLines > 0);
 
   @override
   State<CLListTile> createState() => _CLListTileState();
@@ -105,6 +111,8 @@ class _CLListTileState extends State<CLListTile> {
                 : theme.typography.callout.withCLWeight(FontWeight.w400))
             .copyWith(color: labelColor);
 
+    final multiline = widget.labelMaxLines != 1;
+
     return Semantics(
       button: interactive,
       selected: widget.selected,
@@ -121,8 +129,12 @@ class _CLListTileState extends State<CLListTile> {
           showHighlight: false,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
-            height: _height,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            height: multiline ? null : _height,
+            constraints: multiline ? BoxConstraints(minHeight: _height) : null,
+            padding: EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: multiline ? 7 : 0,
+            ),
             decoration: clSmoothDecoration(
               color: fill,
               borderRadius: radius,
@@ -157,8 +169,10 @@ class _CLListTileState extends State<CLListTile> {
                   child: widget.labelBuilder == null
                       ? Text(
                           widget.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: widget.labelMaxLines,
+                          overflow: multiline
+                              ? TextOverflow.clip
+                              : TextOverflow.ellipsis,
                           style: textStyle,
                         )
                       : ExcludeSemantics(
