@@ -25,6 +25,11 @@ class CLListTile extends StatefulWidget {
   final Widget? trailing;
   final bool selected;
 
+  /// Optional row shape. Defaults to the theme's control radius.
+  ///
+  /// Directional radii are resolved against the ambient text direction.
+  final BorderRadiusGeometry? borderRadius;
+
   /// Optional color for the label and leading icon.
   final Color? tint;
 
@@ -58,6 +63,7 @@ class CLListTile extends StatefulWidget {
     this.leading,
     this.trailing,
     this.selected = false,
+    this.borderRadius,
     this.tint,
     this.size = CLControlSize.medium,
     this.labelMaxLines = 1,
@@ -86,7 +92,9 @@ class _CLListTileState extends State<CLListTile> {
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final colors = theme.colors;
-    final radius = BorderRadius.circular(theme.radii.control);
+    final radius =
+        (widget.borderRadius ?? BorderRadius.circular(theme.radii.control))
+            .resolve(Directionality.of(context));
     final interactive = widget.onTap != null;
 
     final fill = widget.outlined

@@ -41,6 +41,37 @@ void main() {
     expect(disclosureRect.center.dx, tileRect.right - 16);
   });
 
+  testWidgets('CLListTile resolves a custom directional border radius', (
+    WidgetTester tester,
+  ) async {
+    const radius = BorderRadiusDirectional.only(
+      topStart: Radius.circular(7),
+      bottomEnd: Radius.circular(3),
+    );
+
+    await tester.pumpWidget(
+      host(
+        const Directionality(
+          textDirection: TextDirection.rtl,
+          child: CLListTile(
+            label: 'Selected row',
+            selected: true,
+            borderRadius: radius,
+          ),
+        ),
+      ),
+    );
+
+    final pressable = tester.widget<CLPressable>(find.byType(CLPressable));
+    expect(
+      pressable.borderRadius,
+      const BorderRadius.only(
+        topRight: Radius.circular(7),
+        bottomLeft: Radius.circular(3),
+      ),
+    );
+  });
+
   testWidgets('CLListTile grows to show a wrapped label', (
     WidgetTester tester,
   ) async {
