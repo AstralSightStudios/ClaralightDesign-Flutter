@@ -493,6 +493,26 @@ void main() {
     );
   });
 
+  testWidgets('CLButton can retain an active foreground while disabled', (
+    WidgetTester tester,
+  ) async {
+    const foreground = Color(0xFF123456);
+    await tester.pumpWidget(
+      host(const CLButton(label: '42%', disabledForegroundColor: foreground)),
+    );
+
+    expect(tester.widget<Text>(find.text('42%')).style?.color, foreground);
+    final semantics = tester.widget<Semantics>(
+      find
+          .descendant(
+            of: find.byType(CLButton),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    expect(semantics.properties.enabled, isFalse);
+  });
+
   testWidgets('CLButton disabled primary retains its accent fill', (
     WidgetTester tester,
   ) async {

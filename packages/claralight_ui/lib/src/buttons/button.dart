@@ -47,6 +47,12 @@ class CLButton extends StatefulWidget {
   /// Custom [labelWidget] content receives this style through DefaultTextStyle.
   final TextStyle? labelStyle;
 
+  /// Overrides the foreground color while the button remains non-interactive.
+  ///
+  /// Semantics and pointer behavior stay disabled. This is intended for passive
+  /// status readouts, such as progress shown inside a temporarily locked button.
+  final Color? disabledForegroundColor;
+
   /// Keeps the label on the visual centerline in fixed-width buttons.
   /// Disable for compact label-and-icon readouts that should flow inline.
   final bool centerLabel;
@@ -90,6 +96,7 @@ class CLButton extends StatefulWidget {
     this.trailingIcon,
     this.semanticLabel,
     this.labelStyle,
+    this.disabledForegroundColor,
     this.centerLabel = true,
     CLButtonVariant? variant,
     CLControlSize? size,
@@ -350,6 +357,8 @@ class _CLButtonState extends State<CLButton> {
       CLButtonVariant.ghost => colors.textPrimary,
       CLButtonVariant.danger => colors.onDanger,
     };
-    return _enabled ? color : colors.textDisabled;
+    return _enabled
+        ? color
+        : widget.disabledForegroundColor ?? colors.textDisabled;
   }
 }
