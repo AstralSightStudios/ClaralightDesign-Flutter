@@ -141,6 +141,51 @@ void main() {
     expect(controller.isOpen, isTrue);
   });
 
+  testWidgets(
+    'tapping an exposed parent surface pops one level while outside closes all',
+    (tester) async {
+      final controller = CLMenuController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        buildMenu(
+          controller: controller,
+          children: const [
+            CLMenuSubmenu(
+              label: 'Child',
+              children: [CLListTile(label: 'Nested item')],
+            ),
+            CLListTile(label: 'Root item 1'),
+            CLListTile(label: 'Root item 2'),
+            CLListTile(label: 'Root item 3'),
+            CLListTile(label: 'Root item 4'),
+          ],
+        ),
+      );
+      await openRoot(tester, controller);
+      await tester.tap(find.text('Child'));
+      await tester.pumpAndSettle();
+
+      expect(frostedPanels(), findsNWidgets(2));
+      final parentRect = tester.getRect(frostedPanels().first);
+      final childRect = tester.getRect(frostedPanels().last);
+      final parentTap = Offset(parentRect.center.dx, parentRect.bottom - 8);
+      expect(parentRect.contains(parentTap), isTrue);
+      expect(childRect.contains(parentTap), isFalse);
+
+      await tester.tapAt(parentTap);
+      await tester.pumpAndSettle();
+      expect(controller.isOpen, isTrue);
+      expect(frostedPanels(), findsOneWidget);
+
+      await tester.tap(find.text('Child'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
+      expect(controller.isOpen, isFalse);
+      expect(frostedPanels(), findsNothing);
+    },
+  );
+
   testWidgets('isolates the trigger from parent retreat at every frame', (
     tester,
   ) async {

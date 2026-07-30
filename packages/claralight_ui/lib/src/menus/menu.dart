@@ -799,6 +799,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     });
   }
 
+  void _popTopSubmenu() {
+    if (_submenuPages.isEmpty) return;
+    _popSubmenu(_submenuPages.last);
+  }
+
   void _popSubmenu(_CLMenuPageEntry page) {
     if (!_open || _closing || _submenuPages.isEmpty) return;
     if (!identical(_submenuPages.last, page)) return;
@@ -1118,6 +1123,9 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                           alignment: _anchor,
                           child: _buildPageInteraction(
                             active: rootIsActive && _open,
+                            onInactiveTap: _open && !rootIsActive
+                                ? _popTopSubmenu
+                                : null,
                             child: _buildRetreatedPage(
                               pageIndex: 0,
                               alignment: _anchor,
@@ -1138,13 +1146,25 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildPageInteraction({required bool active, required Widget child}) {
-    return IgnorePointer(
+  Widget _buildPageInteraction({
+    required bool active,
+    VoidCallback? onInactiveTap,
+    required Widget child,
+  }) {
+    final page = IgnorePointer(
       ignoring: !active,
       child: ExcludeFocus(
         excluding: !active,
         child: ExcludeSemantics(excluding: !active, child: child),
       ),
+    );
+    if (active || onInactiveTap == null) return page;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTap: onInactiveTap,
+      child: page,
     );
   }
 
@@ -1206,6 +1226,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       rect: currentRect,
       child: _buildPageInteraction(
         active: isTop && _open && page.started,
+        onInactiveTap: _open && !isTop ? _popTopSubmenu : null,
         child: _buildClosingStackPage(
           currentRect: currentRect,
           child: _buildRetreatedPage(
