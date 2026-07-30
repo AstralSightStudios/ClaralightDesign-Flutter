@@ -302,24 +302,25 @@ class _CLSelectState<T> extends State<CLSelect<T>>
 
   void _finishClose() {
     if (!_closing) return;
-    _closing = false;
+    if (mounted) {
+      setState(() => _closing = false);
+    } else {
+      _closing = false;
+    }
     _travel.value = 0;
     _morph.value = 0;
     if (_portal.isShowing) _portal.hide();
     _scrollController?.dispose();
     _scrollController = null;
-    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _scrollController?.dispose();
-    _travel
-      ..removeListener(_handleMotionTick)
-      ..dispose();
-    _morph
-      ..removeListener(_handleMotionTick)
-      ..dispose();
+    _travel.removeListener(_handleMotionTick);
+    _travel.dispose();
+    _morph.removeListener(_handleMotionTick);
+    _morph.dispose();
     _content.dispose();
     super.dispose();
   }
@@ -481,29 +482,32 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       );
     }
 
-    _openTriggerSize = fieldBox.size;
-    _openTriggerOrigin = origin;
-    _targetClosingTriggerSize = fieldBox.size;
-    _targetClosingTriggerOrigin = origin;
-    _globalPanelOrigin = Offset(panelLeft.toDouble(), panelTop.toDouble());
     _scrollController?.dispose();
-    _scrollController = ScrollController(
-      initialScrollOffset: initialScrollOffset,
-    );
-    _open = true;
-    _closing = false;
-    _closeGeneration++;
+    setState(() {
+      _openTriggerSize = fieldBox.size;
+      _openTriggerOrigin = origin;
+      _targetClosingTriggerSize = fieldBox.size;
+      _targetClosingTriggerOrigin = origin;
+      _globalPanelOrigin = Offset(panelLeft.toDouble(), panelTop.toDouble());
+      _scrollController = ScrollController(
+        initialScrollOffset: initialScrollOffset,
+      );
+      _open = true;
+      _closing = false;
+      _closeGeneration++;
+    });
     _portal.show();
     _startOpenAnimation();
-    setState(() {});
   }
 
   void _close() {
     if (!_open) return;
-    _open = false;
-    _closing = true;
-    final closeGeneration = ++_closeGeneration;
-    setState(() {});
+    late final int closeGeneration;
+    setState(() {
+      _open = false;
+      _closing = true;
+      closeGeneration = ++_closeGeneration;
+    });
 
     if (_disableAnimations) {
       _startReducedCloseAnimation(closeGeneration);
@@ -552,90 +556,15 @@ class _CLSelectState<T> extends State<CLSelect<T>>
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
-    final colors = theme.colors;
-    final inToolbar = CLToolbarScope.maybeOf(context) != null;
-    final effectiveVariant = widget._usesDefaultVariant && inToolbar
-        ? CLSelectVariant.ghost
-        : widget.variant;
-    final effectiveTextAlign =
-        widget.textAlign ??
-        (effectiveVariant == CLSelectVariant.ghost
-            ? TextAlign.right
-            : TextAlign.left);
-
-    final selected = widget.options
-        .where((o) => o.value == widget.value)
-        .toList();
-    final label = selected.isEmpty ? '' : selected.first.label;
-    final textStyle =
-        (_size == CLControlSize.large
-                ? theme.typography.body
-                : theme.typography.callout)
-            .copyWith(
-              color: _enabled ? colors.textPrimary : colors.textDisabled,
-            );
+    final variant = _effectiveVariant;
+    final label = _selectedLabel;
     final radius =
         widget.borderRadius ?? BorderRadius.circular(theme.radii.control);
-
-    final fill = switch (effectiveVariant) {
-      CLSelectVariant.standard =>
-        _hovered && _enabled ? colors.controlHighlight : colors.control,
-      CLSelectVariant.ghost =>
-        _hovered && _enabled
-            ? colors.controlHighlight
-            : const Color(0x00000000),
-    };
-
-    final triggerContent = Row(
-      mainAxisSize:
-          widget.width != null || effectiveVariant == CLSelectVariant.standard
-          ? MainAxisSize.max
-          : MainAxisSize.min,
-      children: [
-        if (widget.width != null ||
-            effectiveVariant == CLSelectVariant.standard)
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: effectiveTextAlign,
-              style: textStyle,
-            ),
-          )
-        else
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: effectiveTextAlign,
-              style: textStyle,
-            ),
-          ),
-        const SizedBox(width: 6),
-        _Chevrons(color: colors.textTertiary),
-      ],
-    );
-
-    final surface = SizedBox(
-      height: _height,
-      child: CLSurface(
-        fill: fill,
-        borderRadius: radius,
-        padding: EdgeInsets.symmetric(
-          horizontal: _size == CLControlSize.small ? 10 : 12,
-        ),
-        child: triggerContent,
-      ),
-    );
-
-    final triggerBox = SizedBox(
-      width: widget.width,
-      height: _height,
-      child: effectiveVariant == CLSelectVariant.ghost && widget.width == null
-          ? Align(alignment: Alignment.centerRight, child: surface)
-          : surface,
+    final trigger = _buildTrigger(
+      theme: theme,
+      variant: variant,
+      label: label,
+      radius: radius,
     );
 
     return OverlayPortal(
@@ -647,25 +576,112 @@ class _CLSelectState<T> extends State<CLSelect<T>>
           animation: _travel,
           builder: (context, child) =>
               Transform.translate(offset: _triggerRecoilOffset, child: child),
-          child: Semantics(
-            button: true,
-            enabled: _enabled,
-            label: label,
-            child: MouseRegion(
-              cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
-              onEnter: (_) => setState(() => _hovered = true),
-              onExit: (_) => setState(() => _hovered = false),
-              child: CLPressable(
-                onTap: _enabled ? _toggle : null,
-                borderRadius: radius,
-                deformOnDrag: false,
-                pressedScale: 1.02,
-                child: triggerBox,
-              ),
-            ),
-          ),
+          child: trigger,
         ),
       ),
+    );
+  }
+
+  CLSelectVariant get _effectiveVariant {
+    final inToolbar = CLToolbarScope.maybeOf(context) != null;
+    return widget._usesDefaultVariant && inToolbar
+        ? CLSelectVariant.ghost
+        : widget.variant;
+  }
+
+  String get _selectedLabel {
+    for (final option in widget.options) {
+      if (option.value == widget.value) return option.label;
+    }
+    return '';
+  }
+
+  Widget _buildTrigger({
+    required CLThemeData theme,
+    required CLSelectVariant variant,
+    required String label,
+    required BorderRadius radius,
+  }) {
+    final colors = theme.colors;
+    final fill = switch (variant) {
+      CLSelectVariant.standard =>
+        _hovered && _enabled ? colors.controlHighlight : colors.control,
+      CLSelectVariant.ghost =>
+        _hovered && _enabled
+            ? colors.controlHighlight
+            : const Color(0x00000000),
+    };
+    final surface = SizedBox(
+      height: _height,
+      child: CLSurface(
+        fill: fill,
+        borderRadius: radius,
+        padding: EdgeInsets.symmetric(
+          horizontal: _size == CLControlSize.small ? 10 : 12,
+        ),
+        child: _buildTriggerContent(theme, variant, label),
+      ),
+    );
+    final triggerBox = SizedBox(
+      width: widget.width,
+      height: _height,
+      child: variant == CLSelectVariant.ghost && widget.width == null
+          ? Align(alignment: Alignment.centerRight, child: surface)
+          : surface,
+    );
+
+    return Semantics(
+      button: true,
+      enabled: _enabled,
+      label: label,
+      child: MouseRegion(
+        cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: CLPressable(
+          onTap: _enabled ? _toggle : null,
+          borderRadius: radius,
+          deformOnDrag: false,
+          pressedScale: 1.02,
+          child: triggerBox,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTriggerContent(
+    CLThemeData theme,
+    CLSelectVariant variant,
+    String label,
+  ) {
+    final expands = widget.width != null || variant == CLSelectVariant.standard;
+    final textAlign =
+        widget.textAlign ??
+        (variant == CLSelectVariant.ghost ? TextAlign.right : TextAlign.left);
+    final textStyle =
+        (_size == CLControlSize.large
+                ? theme.typography.body
+                : theme.typography.callout)
+            .copyWith(
+              color: _enabled
+                  ? theme.colors.textPrimary
+                  : theme.colors.textDisabled,
+            );
+    final text = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: textAlign,
+      style: textStyle,
+    );
+
+    return Row(
+      mainAxisSize: expands ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (expands) Expanded(child: text) else Flexible(child: text),
+        const SizedBox(width: 6),
+        _Chevrons(color: theme.colors.textTertiary),
+      ],
     );
   }
 
@@ -887,14 +903,11 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final colors = theme.colors;
-
-    final rowBg = widget.checked
+    final rowColor = widget.checked
         ? (_hovered
               ? Color.alphaBlend(colors.control, colors.accentBackground)
               : colors.accentBackground)
         : (_hovered ? colors.control : const Color(0x00000000));
-    final textColor = widget.checked ? colors.accent : colors.textPrimary;
-    final checkColor = widget.checked ? colors.accent : colors.textPrimary;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -907,36 +920,41 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
           height: widget.height,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: clSmoothDecoration(
-            color: rowBg,
+            color: rowColor,
             borderRadius: BorderRadius.circular(theme.radii.control - 2),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.option.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.start,
-                  style: theme.typography.callout.copyWith(
-                    color: textColor,
-                    fontWeight: widget.checked
-                        ? FontWeight.w500
-                        : FontWeight.normal,
-                  ),
-                ),
-              ),
-              if (widget.checked) ...[
-                const SizedBox(width: 8),
-                CustomPaint(
-                  size: const Size(12, 10),
-                  painter: _CheckPainter(color: checkColor),
-                ),
-              ],
-            ],
-          ),
+          child: _buildContent(theme),
         ),
       ),
+    );
+  }
+
+  Widget _buildContent(CLThemeData theme) {
+    final color = widget.checked
+        ? theme.colors.accent
+        : theme.colors.textPrimary;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            widget.option.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.start,
+            style: theme.typography.callout.copyWith(
+              color: color,
+              fontWeight: widget.checked ? FontWeight.w500 : FontWeight.normal,
+            ),
+          ),
+        ),
+        if (widget.checked) ...[
+          const SizedBox(width: 8),
+          CustomPaint(
+            size: const Size(12, 10),
+            painter: _CheckPainter(color: color),
+          ),
+        ],
+      ],
     );
   }
 }

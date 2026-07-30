@@ -133,8 +133,9 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
 
   void _handleRevealStatus(AnimationStatus status) {
     if (status != AnimationStatus.dismissed || !_portal.isShowing) return;
+    // OverlayPortalController owns the overlay rebuild; no local widget state
+    // changes when the dismissed overlay is removed.
     _portal.hide();
-    if (mounted) setState(() {});
     if (_disableAnimations) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !_portal.isShowing) {

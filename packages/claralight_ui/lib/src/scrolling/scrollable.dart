@@ -463,54 +463,49 @@ class CLScrollable extends StatefulWidget {
 }
 
 class _CLScrollableState extends State<CLScrollable> {
-  late ScrollController _horizontalController;
-  late ScrollController _verticalController;
-  late bool _ownsHorizontalController;
-  late bool _ownsVerticalController;
+  // These fallbacks are always owned by the state. Controllers passed through
+  // the widget remain borrowed and are never disposed here.
+  late ScrollController _ownedHorizontalController;
+  late ScrollController _ownedVerticalController;
+
+  ScrollController get _effectiveHorizontalController =>
+      widget.horizontalController ?? _ownedHorizontalController;
+  ScrollController get _effectiveVerticalController =>
+      widget.verticalController ?? _ownedVerticalController;
 
   @override
   void initState() {
     super.initState();
-    _setHorizontalController(widget.horizontalController);
-    _setVerticalController(widget.verticalController);
+    _ownedHorizontalController = ScrollController();
+    _ownedVerticalController = ScrollController();
   }
 
   @override
   void didUpdateWidget(covariant CLScrollable oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.horizontalController != widget.horizontalController) {
-      if (_ownsHorizontalController) _horizontalController.dispose();
-      _setHorizontalController(widget.horizontalController);
+      _ownedHorizontalController.dispose();
+      _ownedHorizontalController = ScrollController();
     }
     if (oldWidget.verticalController != widget.verticalController) {
-      if (_ownsVerticalController) _verticalController.dispose();
-      _setVerticalController(widget.verticalController);
+      _ownedVerticalController.dispose();
+      _ownedVerticalController = ScrollController();
     }
-  }
-
-  void _setHorizontalController(ScrollController? controller) {
-    _ownsHorizontalController = controller == null;
-    _horizontalController = controller ?? ScrollController();
-  }
-
-  void _setVerticalController(ScrollController? controller) {
-    _ownsVerticalController = controller == null;
-    _verticalController = controller ?? ScrollController();
   }
 
   @override
   Widget build(BuildContext context) {
     return widget._build(
       context,
-      effectiveHorizontalController: _horizontalController,
-      effectiveVerticalController: _verticalController,
+      effectiveHorizontalController: _effectiveHorizontalController,
+      effectiveVerticalController: _effectiveVerticalController,
     );
   }
 
   @override
   void dispose() {
-    if (_ownsHorizontalController) _horizontalController.dispose();
-    if (_ownsVerticalController) _verticalController.dispose();
+    _ownedHorizontalController.dispose();
+    _ownedVerticalController.dispose();
     super.dispose();
   }
 }

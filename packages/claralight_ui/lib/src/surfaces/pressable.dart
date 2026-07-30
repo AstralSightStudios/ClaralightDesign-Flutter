@@ -86,19 +86,16 @@ class _CLPressableState extends State<CLPressable>
   @override
   void initState() {
     super.initState();
-    _scale = AnimationController.unbounded(vsync: this)
-      ..addListener(() => setState(() {}));
+    _scale = AnimationController.unbounded(vsync: this);
     _dragReturn = AnimationController.unbounded(vsync: this)
       ..addListener(() {
-        setState(() {
-          _dragOffset = _dragReturnStart * _dragReturn.value;
-        });
+        _dragOffset = _dragReturnStart * _dragReturn.value;
       });
     _highlight = AnimationController(
       vsync: this,
       duration: widget.duration,
       reverseDuration: const Duration(milliseconds: 260),
-    )..addListener(() => setState(() {}));
+    );
   }
 
   @override
@@ -115,9 +112,11 @@ class _CLPressableState extends State<CLPressable>
     _dragReturn.stop();
     _scale.value = 0;
     _dragReturn.value = 0;
-    _dragOffset = Offset.zero;
-    _dragReturnStart = Offset.zero;
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      _dragOffset = Offset.zero;
+      _dragReturnStart = Offset.zero;
+    });
   }
 
   @override
@@ -162,40 +161,43 @@ class _CLPressableState extends State<CLPressable>
     // A tap callback may synchronously remove this pressable while the same
     // pointer-up event is still being dispatched to its raw listener.
     if (!mounted || event.pointer != _activePointer) return;
-    _activePointer = null;
+    setState(() {
+      _activePointer = null;
+      if (_disableAnimations) {
+        _dragOffset = Offset.zero;
+        _dragReturnStart = Offset.zero;
+      }
+    });
     _highlight.reverse();
     if (_disableAnimations) {
       _scale.stop();
       _dragReturn.stop();
       _scale.value = 0;
       _dragReturn.value = 0;
-      _dragOffset = Offset.zero;
-      _dragReturnStart = Offset.zero;
-    } else {
-      _scale.animateWith(
+      return;
+    }
+    _scale.animateWith(
+      SpringSimulation(
+        widget.spring,
+        _scale.value,
+        0,
+        0,
+        tolerance: Tolerance.defaultTolerance,
+      ),
+    );
+    if (_dragOffset != Offset.zero) {
+      _dragReturnStart = _dragOffset;
+      _dragReturn.value = 1;
+      _dragReturn.animateWith(
         SpringSimulation(
           widget.spring,
-          _scale.value,
+          1,
           0,
           0,
           tolerance: Tolerance.defaultTolerance,
         ),
       );
-      if (_dragOffset != Offset.zero) {
-        _dragReturnStart = _dragOffset;
-        _dragReturn.value = 1;
-        _dragReturn.animateWith(
-          SpringSimulation(
-            widget.spring,
-            1,
-            0,
-            0,
-            tolerance: Tolerance.defaultTolerance,
-          ),
-        );
-      }
     }
-    setState(() {});
   }
 
   double get _scaleValue =>
@@ -230,57 +232,56 @@ class _CLPressableState extends State<CLPressable>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final size = constraints.biggest;
-            Widget result = widget.child;
-
-            if (widget.showHighlight) {
-              final tint =
-                  widget.pressedTint ?? CLTheme.of(context).colors.control;
-              result = Stack(
-                fit: StackFit.passthrough,
-                children: [
-                  result,
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CLSmoothClip(
-                        borderRadius: widget.borderRadius,
-                        child: CustomPaint(
-                          painter: _HighlightPainter(
-                            pointer: _pointerPosition,
-                            tint: tint,
-                            press: Curves.easeOut.transform(_highlight.value),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            if (widget.deformOnDrag) {
-              result = Transform(
-                alignment: Alignment.center,
-                transform: _deformationMatrix(size),
-                child: result,
-              );
-            }
-
-            if (widget.pressedScale != 1) {
-              result = Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..scaleByDouble(_scaleValue, _scaleValue, 1, 1),
-                child: result,
-              );
-            }
-
-            return result;
-          },
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_scale, _dragReturn, _highlight]),
+          builder: (context, _) => LayoutBuilder(builder: _buildVisual),
         ),
       ),
+    );
+  }
+
+  Widget _buildVisual(BuildContext context, BoxConstraints constraints) {
+    Widget result = widget.child;
+    if (widget.showHighlight) result = _buildHighlight(context, result);
+    if (widget.deformOnDrag) {
+      result = Transform(
+        alignment: Alignment.center,
+        transform: _deformationMatrix(constraints.biggest),
+        child: result,
+      );
+    }
+    if (widget.pressedScale != 1) {
+      result = Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()
+          ..scaleByDouble(_scaleValue, _scaleValue, 1, 1),
+        child: result,
+      );
+    }
+    return result;
+  }
+
+  Widget _buildHighlight(BuildContext context, Widget child) {
+    final tint = widget.pressedTint ?? CLTheme.of(context).colors.control;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CLSmoothClip(
+              borderRadius: widget.borderRadius,
+              child: CustomPaint(
+                painter: _HighlightPainter(
+                  pointer: _pointerPosition,
+                  tint: tint,
+                  press: Curves.easeOut.transform(_highlight.value),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

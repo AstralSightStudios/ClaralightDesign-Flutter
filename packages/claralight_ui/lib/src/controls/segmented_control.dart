@@ -51,7 +51,7 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
     _position = AnimationController.unbounded(
       value: widget.selectedIndex.toDouble(),
       vsync: this,
-    )..addListener(() => setState(() {}));
+    );
   }
 
   @override
@@ -66,7 +66,6 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
   void _snapReducedMotionGeometry() {
     _position.stop();
     _position.value = widget.selectedIndex.toDouble();
-    if (mounted) setState(() {});
   }
 
   @override
@@ -108,64 +107,75 @@ class _CLSegmentedControlState extends State<CLSegmentedControl>
     final textStyle = widget.size == CLControlSize.small
         ? theme.typography.callout
         : theme.typography.body.withCLWeight(FontWeight.w600);
-    const inset = 3.0;
 
     return Semantics(
       enabled: enabled,
       child: SizedBox(
         height: _height,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final segmentWidth =
-                (constraints.maxWidth - inset * 2) / widget.segments.length;
-            final thumbLeft =
-                inset +
-                segmentWidth *
-                    _position.value.clamp(0, widget.segments.length - 1);
-
-            return DecoratedBox(
-              decoration: clSmoothDecoration(
-                color: theme.colors.track,
-                borderRadius: BorderRadius.circular(_height / 2),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: thumbLeft,
-                    top: inset,
-                    width: segmentWidth,
-                    height: _height - inset * 2,
-                    child: DecoratedBox(
-                      // The raised segment is another white-alpha layer on
-                      // top of the track, per the design source.
-                      decoration: clSmoothDecoration(
-                        color: theme.colors.control,
-                        borderRadius: BorderRadius.circular(
-                          (_height - inset * 2) / 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      for (var i = 0; i < widget.segments.length; i++)
-                        Expanded(
-                          child: _Segment(
-                            label: widget.segments[i],
-                            selected: i == widget.selectedIndex,
-                            enabled: enabled,
-                            textStyle: textStyle,
-                            onTap: enabled ? () => widget.onChanged!(i) : null,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
+        child: AnimatedBuilder(
+          animation: _position,
+          builder: (context, _) =>
+              _buildTrack(theme: theme, enabled: enabled, textStyle: textStyle),
         ),
       ),
+    );
+  }
+
+  Widget _buildTrack({
+    required CLThemeData theme,
+    required bool enabled,
+    required TextStyle textStyle,
+  }) {
+    const inset = 3.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final segmentWidth =
+            (constraints.maxWidth - inset * 2) / widget.segments.length;
+        final thumbLeft =
+            inset +
+            segmentWidth * _position.value.clamp(0, widget.segments.length - 1);
+
+        return DecoratedBox(
+          decoration: clSmoothDecoration(
+            color: theme.colors.track,
+            borderRadius: BorderRadius.circular(_height / 2),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                left: thumbLeft,
+                top: inset,
+                width: segmentWidth,
+                height: _height - inset * 2,
+                child: DecoratedBox(
+                  // The raised segment is another white-alpha layer on top of
+                  // the track, per the design source.
+                  decoration: clSmoothDecoration(
+                    color: theme.colors.control,
+                    borderRadius: BorderRadius.circular(
+                      (_height - inset * 2) / 2,
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  for (var i = 0; i < widget.segments.length; i++)
+                    Expanded(
+                      child: _Segment(
+                        label: widget.segments[i],
+                        selected: i == widget.selectedIndex,
+                        enabled: enabled,
+                        textStyle: textStyle,
+                        onTap: enabled ? () => widget.onChanged!(i) : null,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -251,6 +251,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   late final AnimationController _pressGlow;
   late final AnimationController _stackClose;
 
+  // Borrowed from FocusManager and restored on close; never owned or disposed.
   FocusNode? _previousFocus;
   Offset _pressPosition = Offset.zero;
   int? _pressPointer;
@@ -454,18 +455,15 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   void dispose() {
     _controller._detach(_handleControllerState);
     _restorePreviousFocus();
-    _travel
-      ..removeListener(_handleMotionTick)
-      ..dispose();
-    _morph
-      ..removeListener(_handleMotionTick)
-      ..dispose();
+    _travel.removeListener(_handleMotionTick);
+    _travel.dispose();
+    _morph.removeListener(_handleMotionTick);
+    _morph.dispose();
     _content.dispose();
     _resize.dispose();
     _pressGlow.dispose();
-    _stackClose
-      ..removeListener(_handleSubmenuMotionTick)
-      ..dispose();
+    _stackClose.removeListener(_handleSubmenuMotionTick);
+    _stackClose.dispose();
     for (final page in _submenuPages) {
       page.dispose();
     }
@@ -505,53 +503,69 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       Offset.zero & buttonBox.size,
     );
     final safeRect = _safeRectFor(overlayBox.size);
-    _rootButtonRect = buttonRect;
-    _collapsedWidth = buttonRect.width;
-    _collapsedHeight = buttonRect.height;
-
+    final collapsedWidth = buttonRect.width;
+    final collapsedHeight = buttonRect.height;
     final growLeft = buttonRect.center.dx > safeRect.center.dx;
     final availableWidth = growLeft
         ? buttonRect.right - safeRect.left
         : safeRect.right - buttonRect.left;
-    _expandedWidth = math.min(
+    final expandedWidth = math.min(
       widget.menuWidth,
-      math.max(_collapsedWidth, availableWidth),
+      math.max(collapsedWidth, availableWidth),
     );
-    _spaceBelow = math.max(safeRect.bottom - buttonRect.top, _collapsedHeight);
-    _spaceAbove = math.max(buttonRect.bottom - safeRect.top, _collapsedHeight);
-    _measurementLimit = math.max(_spaceBelow, _spaceAbove);
-    _anchor = Alignment(growLeft ? 1 : -1, -1);
+    final spaceBelow = math.max(
+      safeRect.bottom - buttonRect.top,
+      collapsedHeight,
+    );
+    final spaceAbove = math.max(
+      buttonRect.bottom - safeRect.top,
+      collapsedHeight,
+    );
+    final previousFocus = FocusManager.instance.primaryFocus;
 
-    _previousFocus = FocusManager.instance.primaryFocus;
-    _open = true;
-    _closing = false;
-    _closeGeneration++;
-    _measuring = true;
+    setState(() {
+      _rootButtonRect = buttonRect;
+      _collapsedWidth = collapsedWidth;
+      _collapsedHeight = collapsedHeight;
+      _expandedWidth = expandedWidth;
+      _spaceBelow = spaceBelow;
+      _spaceAbove = spaceAbove;
+      _measurementLimit = math.max(spaceBelow, spaceAbove);
+      _anchor = Alignment(growLeft ? 1 : -1, -1);
+      _previousFocus = previousFocus;
+      _open = true;
+      _closing = false;
+      _closeGeneration++;
+      _measuring = true;
+    });
     _portal.show();
     widget.onOpenChanged?.call(true);
-    setState(() {});
   }
 
   void _handleMeasuredSize(Size size) {
     if (!mounted || !_open || size.height <= 0) return;
 
     if (_measuring) {
-      _growDown = _spaceBelow >= size.height || _spaceBelow >= _spaceAbove;
-      _anchor = Alignment(_anchor.x, _growDown ? -1 : 1);
-      _rootOpeningAnchor = Offset(
-        _anchor.x > 0 ? _rootButtonRect.right : _rootButtonRect.left,
-        _anchor.y > 0 ? _rootButtonRect.bottom : _rootButtonRect.top,
+      final growDown = _spaceBelow >= size.height || _spaceBelow >= _spaceAbove;
+      final anchor = Alignment(_anchor.x, growDown ? -1 : 1);
+      final rootOpeningAnchor = Offset(
+        anchor.x > 0 ? _rootButtonRect.right : _rootButtonRect.left,
+        anchor.y > 0 ? _rootButtonRect.bottom : _rootButtonRect.top,
       );
-      final available = _growDown ? _spaceBelow : _spaceAbove;
+      final available = growDown ? _spaceBelow : _spaceAbove;
       final measuredHeight = math.max(
         _collapsedHeight,
         math.min(size.height, available),
       );
-      _heightFrom = measuredHeight;
-      _heightTo = measuredHeight;
-      _resize.value = 1;
-      _measuring = false;
-      setState(() {});
+      setState(() {
+        _growDown = growDown;
+        _anchor = anchor;
+        _rootOpeningAnchor = rootOpeningAnchor;
+        _heightFrom = measuredHeight;
+        _heightTo = measuredHeight;
+        _resize.value = 1;
+        _measuring = false;
+      });
       _startOpenAnimation();
       return;
     }
@@ -714,8 +728,9 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       vsync: this,
       animationBehavior: AnimationBehavior.preserve,
     )..addListener(_handleSubmenuMotionTick);
+    final generation = _submenuGeneration + 1;
     final page = _CLMenuPageEntry(
-      generation: ++_submenuGeneration,
+      generation: generation,
       sourceIdentity: identity,
       definition: definition,
       sourceRect: sourceRect,
@@ -727,9 +742,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       progress: progress,
       onProgressTick: _handleSubmenuMotionTick,
     );
-    _submenuPages.add(page);
-    _submenuRevision++;
-    setState(() {});
+    setState(() {
+      _submenuGeneration = generation;
+      _submenuPages.add(page);
+      _submenuRevision++;
+    });
   }
 
   void _handleSubmenuSize(_CLMenuPageEntry page, Size size) {
@@ -745,7 +762,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     final desiredTop = page.sourceRect.top - page.padding.top - surfaceInset;
     final maxLeft = page.safeRect.right - page.targetWidth;
     final maxTop = page.safeRect.bottom - targetHeight;
-    page.targetRect = Rect.fromLTWH(
+    final targetRect = Rect.fromLTWH(
       desiredLeft.clamp(page.safeRect.left, maxLeft).toDouble(),
       desiredTop.clamp(page.safeRect.top, maxTop).toDouble(),
       page.targetWidth,
@@ -753,13 +770,15 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     );
 
     if (page.started) {
-      setState(() {});
+      setState(() => page.targetRect = targetRect);
       return;
     }
 
-    page.started = true;
-    _submenuRevision++;
-    setState(() {});
+    setState(() {
+      page.targetRect = targetRect;
+      page.started = true;
+      _submenuRevision++;
+    });
     if (_disableAnimations) {
       page.progress.animateTo(
         1,
@@ -801,10 +820,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
           if (page.generation != generation || page.progress.value > 0.001) {
             return;
           }
-          _submenuPages.removeLast();
-          _submenuRevision++;
+          setState(() {
+            _submenuPages.removeLast();
+            _submenuRevision++;
+          });
           page.dispose();
-          setState(() {});
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _open && page.returnFocusNode.canRequestFocus) {
               page.returnFocusNode.requestFocus();
@@ -814,7 +834,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   }
 
   void _handleSubmenuMotionTick() {
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _submenuRevision++);
   }
 
   void _updateSubmenuDefinition(
@@ -824,9 +844,9 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     for (final page in _submenuPages) {
       if (identical(page.sourceIdentity, identity)) {
         if (page.definition.matches(definition)) return;
-        page.definition = definition;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _submenuPages.contains(page)) setState(() {});
+          if (!mounted || !_submenuPages.contains(page)) return;
+          setState(() => page.definition = definition);
         });
         return;
       }
@@ -860,16 +880,19 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   }
 
   void _hide() {
-    _open = false;
-    _closing = true;
-    _measuring = false;
-    final closeGeneration = ++_closeGeneration;
-    for (final page in _submenuPages) {
-      page.generation++;
-    }
-    _clearPanelPress();
+    late final int closeGeneration;
+    setState(() {
+      _open = false;
+      _closing = true;
+      _measuring = false;
+      closeGeneration = ++_closeGeneration;
+      for (final page in _submenuPages) {
+        page.generation++;
+      }
+      _pressPointer = null;
+    });
+    _pressGlow.reverse();
     widget.onOpenChanged?.call(false);
-    setState(() {});
 
     if (_disableAnimations) {
       _startReducedCloseAnimation(closeGeneration);
@@ -898,15 +921,30 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
 
   void _finishClose() {
     if (!_closing) return;
-    _closing = false;
-    _travel.value = 0;
-    _morph.value = 0;
-    _clearSubmenus();
-    _stackClose.stop();
-    _stackClose.value = 0;
+    final pages = List<_CLMenuPageEntry>.of(_submenuPages);
+    void completeState() {
+      _closing = false;
+      _travel.value = 0;
+      _morph.value = 0;
+      if (_submenuPages.isNotEmpty) {
+        _submenuGeneration++;
+        _submenuPages.clear();
+        _submenuRevision++;
+      }
+      _stackClose.stop();
+      _stackClose.value = 0;
+    }
+
+    if (mounted) {
+      setState(completeState);
+    } else {
+      completeState();
+    }
+    for (final page in pages) {
+      page.dispose();
+    }
     if (_portal.isShowing) _portal.hide();
     _restorePreviousFocus();
-    if (mounted) setState(() {});
   }
 
   void _restorePreviousFocus() {
@@ -946,60 +984,61 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       overlayChildBuilder: _buildOverlay,
       child: CompositedTransformTarget(
         link: _link,
-        child: KeyedSubtree(
-          key: _anchorKey,
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_travel, _morph]),
-            builder: (context, child) {
-              final presence = (math.max(_travel.value, _morph.value) * 5)
-                  .clamp(0.0, 1.0);
-              return Transform.translate(
-                offset: _triggerRecoilOffset,
-                child: Opacity(opacity: 1 - presence, child: child),
-              );
-            },
-            child: widget.buttonBuilder != null
-                ? Semantics(
-                    expanded: _open,
-                    child: widget.buttonBuilder!(context, _toggle),
-                  )
-                : FocusableActionDetector(
-                    shortcuts: const <ShortcutActivator, Intent>{
-                      SingleActivator(LogicalKeyboardKey.enter):
-                          ActivateIntent(),
-                      SingleActivator(LogicalKeyboardKey.space):
-                          ActivateIntent(),
-                    },
-                    actions: <Type, Action<Intent>>{
-                      ActivateIntent: CallbackAction<ActivateIntent>(
-                        onInvoke: (_) {
-                          _toggle();
-                          return null;
-                        },
-                      ),
-                    },
-                    child: Semantics(
-                      button: true,
-                      expanded: _open,
-                      child: CLPressable(
-                        onTap: _toggle,
-                        borderRadius: BorderRadius.circular(
-                          widget.buttonSize / 2,
-                        ),
-                        pressedScale: 1 + 4 / widget.buttonSize,
-                        child: SizedBox(
-                          width: widget.buttonSize,
-                          height: widget.buttonSize,
-                          child: CLSurface(
-                            borderRadius: BorderRadius.circular(
-                              widget.buttonSize / 2,
-                            ),
-                            child: Center(child: widget.anchor),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+        child: KeyedSubtree(key: _anchorKey, child: _buildTrigger(context)),
+      ),
+    );
+  }
+
+  Widget _buildTrigger(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_travel, _morph]),
+      builder: (context, child) {
+        final presence = (math.max(_travel.value, _morph.value) * 5).clamp(
+          0.0,
+          1.0,
+        );
+        return Transform.translate(
+          offset: _triggerRecoilOffset,
+          child: Opacity(opacity: 1 - presence, child: child),
+        );
+      },
+      child: widget.buttonBuilder != null
+          ? Semantics(
+              expanded: _open,
+              child: widget.buttonBuilder!(context, _toggle),
+            )
+          : _buildDefaultTrigger(),
+    );
+  }
+
+  Widget _buildDefaultTrigger() {
+    final borderRadius = BorderRadius.circular(widget.buttonSize / 2);
+    return FocusableActionDetector(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            _toggle();
+            return null;
+          },
+        ),
+      },
+      child: Semantics(
+        button: true,
+        expanded: _open,
+        child: CLPressable(
+          onTap: _toggle,
+          borderRadius: borderRadius,
+          pressedScale: 1 + 4 / widget.buttonSize,
+          child: SizedBox.square(
+            dimension: widget.buttonSize,
+            child: CLSurface(
+              borderRadius: borderRadius,
+              child: Center(child: widget.anchor),
+            ),
           ),
         ),
       ),
@@ -1711,9 +1750,8 @@ class _CLMenuPageEntry {
   bool started = false;
 
   void dispose() {
-    progress
-      ..removeListener(onProgressTick)
-      ..dispose();
+    progress.removeListener(onProgressTick);
+    progress.dispose();
     headerFocusNode.dispose();
   }
 }

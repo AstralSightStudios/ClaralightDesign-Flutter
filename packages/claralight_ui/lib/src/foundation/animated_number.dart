@@ -467,7 +467,7 @@ class _NumberScene extends ChangeNotifier {
     _ResolvedNumber configuration, {
     required _NumberLayout? previous,
   }) {
-    final layout = _NumberLayout.build(
+    final layout = _NumberLayout.create(
       configuration,
       previous: previous,
       nextDecorationSlot: () => _nextDecorationSlot++,
@@ -516,7 +516,7 @@ class _NumberLayout {
   final double alphabeticBaseline;
   final double scaledFontSize;
 
-  static _NumberLayout build(
+  static _NumberLayout create(
     _ResolvedNumber configuration, {
     required _NumberLayout? previous,
     required int Function() nextDecorationSlot,

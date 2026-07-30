@@ -123,7 +123,6 @@ class _CLColorPickerState extends State<CLColorPicker> {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
-    final color = _hsv.toColor();
     final radius = widget.cornerRadius ?? theme.radii.medium;
 
     return Column(
@@ -139,49 +138,53 @@ class _CLColorPickerState extends State<CLColorPicker> {
           height: 16,
           child: _HueBar(
             hue: _hsv.hue,
-            onChanged: (h) {
-              _emit(_hsv.withHue(h));
-            },
+            onChanged: (hue) => _emit(_hsv.withHue(hue)),
           ),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: clSmoothDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(radius),
-                side: BorderSide(color: theme.colors.outline),
-              ),
+        _buildHexRow(theme, radius),
+      ],
+    );
+  }
+
+  Widget _buildHexRow(CLThemeData theme, double radius) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: clSmoothDecoration(
+            color: _hsv.toColor(),
+            borderRadius: BorderRadius.circular(radius),
+            side: BorderSide(color: theme.colors.outline),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Focus(
+            onFocusChange: _handleHexFocusChange,
+            child: CLTextField(
+              controller: _hex,
+              mono: true,
+              size: CLControlSize.medium,
+              borderRadius: radius,
+              prefix: const Text('#'),
+              error: _showHexError,
+              onChanged: _handleHexChanged,
+              onSubmitted: _submitHex,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Focus(
-                onFocusChange: (focused) {
-                  if (focused) {
-                    _editingHex = true;
-                  } else {
-                    _submitHex(_hex.text);
-                  }
-                },
-                child: CLTextField(
-                  controller: _hex,
-                  mono: true,
-                  size: CLControlSize.medium,
-                  borderRadius: radius,
-                  prefix: const Text('#'),
-                  error: _showHexError,
-                  onChanged: _handleHexChanged,
-                  onSubmitted: _submitHex,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
+  }
+
+  void _handleHexFocusChange(bool focused) {
+    if (focused) {
+      _editingHex = true;
+    } else {
+      _submitHex(_hex.text);
+    }
   }
 }
 

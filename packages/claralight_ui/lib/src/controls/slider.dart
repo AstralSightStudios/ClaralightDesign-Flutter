@@ -58,6 +58,7 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
   /// springs to the new position when the value jumps (track taps,
   /// programmatic changes).
   late final AnimationController _visual;
+  late final Listenable _geometryAnimation;
 
   /// Whether the pointer is actively tracking (drag) — jumps skip the
   /// spring so the thumb never lags behind the finger.
@@ -67,10 +68,9 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _press = AnimationController.unbounded(vsync: this)
-      ..addListener(() => setState(() {}));
-    _visual = AnimationController.unbounded(value: _fraction, vsync: this)
-      ..addListener(() => setState(() {}));
+    _press = AnimationController.unbounded(vsync: this);
+    _visual = AnimationController.unbounded(value: _fraction, vsync: this);
+    _geometryAnimation = Listenable.merge([_press, _visual]);
   }
 
   @override
@@ -87,7 +87,6 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
     _visual.stop();
     _press.value = 0;
     _visual.value = _fraction;
-    if (mounted) setState(() {});
   }
 
   @override
@@ -163,101 +162,125 @@ class _CLSliderState extends State<CLSlider> with TickerProviderStateMixin {
       thumb = thumb.withValues(alpha: 0.7);
     }
 
-    final pressScale = 1 + 0.25 * _press.value.clamp(0.0, 1.5);
-
     return Semantics(
       slider: true,
       enabled: _enabled,
       value: widget.value.toStringAsFixed(2),
       child: SizedBox(
         height: CLSlider.hitHeight,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final usable = width - CLSlider.thumbSize;
-            final thumbLeft = usable * _visual.value.clamp(0.0, 1.0);
+        child: AnimatedBuilder(
+          animation: _geometryAnimation,
+          builder: (context, _) => _buildInteractiveSlider(
+            theme: theme,
+            activeColor: active,
+            thumbColor: thumb,
+          ),
+        ),
+      ),
+    );
+  }
 
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              // Track taps spring the thumb to the new position; drags
-              // keep it glued to the finger.
-              onTapDown: (d) {
-                _setPressed(true);
-                _update(d.localPosition, width);
-              },
-              onTapUp: (_) => _setPressed(false),
-              onTapCancel: () => _setPressed(false),
-              onHorizontalDragStart: (d) {
-                _setPressed(true, tracking: true);
-                _update(d.localPosition, width);
-              },
-              onHorizontalDragUpdate: (d) => _update(d.localPosition, width),
-              onHorizontalDragEnd: (_) => _setPressed(false),
-              onHorizontalDragCancel: () {
-                if (_tracking) _setPressed(false);
-              },
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  // Recessed track.
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: (CLSlider.hitHeight - CLSlider.trackHeight) / 2,
-                    height: CLSlider.trackHeight,
-                    child: DecoratedBox(
-                      decoration: clSmoothDecoration(
-                        color: theme.colors.track,
-                        borderRadius: BorderRadius.circular(
-                          CLSlider.trackHeight / 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Active fill.
-                  Positioned(
-                    left: 0,
-                    top: (CLSlider.hitHeight - CLSlider.trackHeight) / 2,
-                    height: CLSlider.trackHeight,
-                    width: thumbLeft + CLSlider.thumbSize / 2,
-                    child: DecoratedBox(
-                      decoration: clSmoothDecoration(
-                        color: active,
-                        borderRadius: BorderRadius.circular(
-                          CLSlider.trackHeight / 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Thumb.
-                  Positioned(
-                    left: thumbLeft,
-                    top: (CLSlider.hitHeight - CLSlider.thumbSize) / 2,
-                    width: CLSlider.thumbSize,
-                    height: CLSlider.thumbSize,
-                    child: Transform.scale(
-                      scale: pressScale,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: thumb,
-                          shape: BoxShape.circle,
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x4D000000),
-                              blurRadius: 6,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+  Widget _buildInteractiveSlider({
+    required CLThemeData theme,
+    required Color activeColor,
+    required Color thumbColor,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final usable = width - CLSlider.thumbSize;
+        final thumbLeft = usable * _visual.value.clamp(0.0, 1.0);
+        final pressScale = 1 + 0.25 * _press.value.clamp(0.0, 1.5);
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // Track taps spring the thumb; drags keep it glued to the finger.
+          onTapDown: (details) {
+            _setPressed(true);
+            _update(details.localPosition, width);
+          },
+          onTapUp: (_) => _setPressed(false),
+          onTapCancel: () => _setPressed(false),
+          onHorizontalDragStart: (details) {
+            _setPressed(true, tracking: true);
+            _update(details.localPosition, width);
+          },
+          onHorizontalDragUpdate: (details) =>
+              _update(details.localPosition, width),
+          onHorizontalDragEnd: (_) => _setPressed(false),
+          onHorizontalDragCancel: () {
+            if (_tracking) _setPressed(false);
+          },
+          child: _buildTrack(
+            theme: theme,
+            activeColor: activeColor,
+            thumbColor: thumbColor,
+            thumbLeft: thumbLeft,
+            pressScale: pressScale,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTrack({
+    required CLThemeData theme,
+    required Color activeColor,
+    required Color thumbColor,
+    required double thumbLeft,
+    required double pressScale,
+  }) {
+    final trackTop = (CLSlider.hitHeight - CLSlider.trackHeight) / 2;
+    return Stack(
+      alignment: Alignment.centerLeft,
+      children: [
+        Positioned(
+          left: 0,
+          right: 0,
+          top: trackTop,
+          height: CLSlider.trackHeight,
+          child: DecoratedBox(
+            decoration: clSmoothDecoration(
+              color: theme.colors.track,
+              borderRadius: BorderRadius.circular(CLSlider.trackHeight / 2),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          top: trackTop,
+          height: CLSlider.trackHeight,
+          width: thumbLeft + CLSlider.thumbSize / 2,
+          child: DecoratedBox(
+            decoration: clSmoothDecoration(
+              color: activeColor,
+              borderRadius: BorderRadius.circular(CLSlider.trackHeight / 2),
+            ),
+          ),
+        ),
+        Positioned(
+          left: thumbLeft,
+          top: (CLSlider.hitHeight - CLSlider.thumbSize) / 2,
+          width: CLSlider.thumbSize,
+          height: CLSlider.thumbSize,
+          child: Transform.scale(
+            scale: pressScale,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: thumbColor,
+                shape: BoxShape.circle,
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x4D000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 1),
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

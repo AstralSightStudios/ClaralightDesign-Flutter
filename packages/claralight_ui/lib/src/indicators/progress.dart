@@ -139,52 +139,51 @@ class _CLProgressBarState extends State<CLProgressBar>
             ),
             child: CLSmoothClip(
               borderRadius: radius,
-              child: widget.value != null
-                  ? TweenAnimationBuilder<double>(
-                      key: ValueKey(_animationsDisabled),
-                      tween: Tween<double>(
-                        end: widget.value!.clamp(0.0, 1.0).toDouble(),
-                      ),
-                      duration: _animationsDisabled
-                          ? Duration.zero
-                          : _determinateDuration,
-                      curve: _determinateCurve,
-                      builder: (context, animatedValue, _) => CustomPaint(
-                        painter: _DeterminateFillPainter(
-                          value: animatedValue,
-                          color: fillColor,
-                          radius: widget.height / 2,
-                          textDirection: Directionality.of(context),
-                        ),
-                        size: Size.infinite,
-                      ),
-                    )
-                  : _animationsDisabled
-                  ? CustomPaint(
-                      painter: _SweepPainter(
-                        t: _reducedMotionPosition,
-                        color: fillColor,
-                        radius: widget.height / 2,
-                      ),
-                      size: Size.infinite,
-                    )
-                  : AnimatedBuilder(
-                      animation: _sweep,
-                      builder: (context, _) {
-                        return CustomPaint(
-                          painter: _SweepPainter(
-                            t: _sweep.value,
-                            color: fillColor,
-                            radius: widget.height / 2,
-                          ),
-                          size: Size.infinite,
-                        );
-                      },
-                    ),
+              child: _buildIndicator(fillColor),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildIndicator(Color fillColor) {
+    if (widget.value != null) return _buildDeterminateIndicator(fillColor);
+    if (_animationsDisabled) {
+      return _buildSweepIndicator(fillColor, _reducedMotionPosition);
+    }
+    return AnimatedBuilder(
+      animation: _sweep,
+      builder: (context, _) => _buildSweepIndicator(fillColor, _sweep.value),
+    );
+  }
+
+  Widget _buildDeterminateIndicator(Color fillColor) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(_animationsDisabled),
+      tween: Tween<double>(end: widget.value!.clamp(0.0, 1.0).toDouble()),
+      duration: _animationsDisabled ? Duration.zero : _determinateDuration,
+      curve: _determinateCurve,
+      builder: (context, animatedValue, _) => CustomPaint(
+        painter: _DeterminateFillPainter(
+          value: animatedValue,
+          color: fillColor,
+          radius: widget.height / 2,
+          textDirection: Directionality.of(context),
+        ),
+        size: Size.infinite,
+      ),
+    );
+  }
+
+  Widget _buildSweepIndicator(Color fillColor, double position) {
+    return CustomPaint(
+      painter: _SweepPainter(
+        t: position,
+        color: fillColor,
+        radius: widget.height / 2,
+      ),
+      size: Size.infinite,
     );
   }
 }

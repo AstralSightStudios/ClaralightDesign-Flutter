@@ -138,32 +138,31 @@ class CLList extends StatefulWidget {
 }
 
 class _CLListState extends State<CLList> {
-  late ScrollController _controller;
-  late bool _ownsController;
+  // Externally supplied controllers are borrowed and never disposed by CLList.
+  late ScrollController _ownedController;
+
+  ScrollController get _effectiveController =>
+      widget.controller ?? _ownedController;
 
   @override
   void initState() {
     super.initState();
-    _setController(widget.controller);
+    _ownedController = ScrollController();
   }
 
   @override
   void didUpdateWidget(covariant CLList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      if (_ownsController) _controller.dispose();
-      _setController(widget.controller);
-    }
-  }
+    if (oldWidget.controller == widget.controller) return;
 
-  void _setController(ScrollController? controller) {
-    _ownsController = controller == null;
-    _controller = controller ?? ScrollController();
+    // A return to internal ownership starts with a fresh scroll position.
+    _ownedController.dispose();
+    _ownedController = ScrollController();
   }
 
   @override
   void dispose() {
-    if (_ownsController) _controller.dispose();
+    _ownedController.dispose();
     super.dispose();
   }
 
@@ -181,29 +180,40 @@ class _CLListState extends State<CLList> {
       'CLList blurSigma values must be finite and non-negative.',
     );
 
+    return _buildViewport(
+      context,
+      controller: _effectiveController,
+      blurExtent: resolvedBlurExtent,
+      blurSigma: resolvedBlurSigma,
+    );
+  }
+
+  Widget _buildViewport(
+    BuildContext context, {
+    required ScrollController controller,
+    required EdgeInsets blurExtent,
+    required EdgeInsets blurSigma,
+  }) {
     final isVertical = widget.scrollDirection == Axis.vertical;
     final axisDirection = getAxisDirectionFromAxisReverseAndDirectionality(
       context,
       widget.scrollDirection,
       widget.reverse,
     );
-
-    Widget result = _buildListView();
-
+    Widget result = _buildListView(controller);
     result = CLEdgeEffects(
-      horizontalController: isVertical ? null : _controller,
-      verticalController: isVertical ? _controller : null,
+      horizontalController: isVertical ? null : controller,
+      verticalController: isVertical ? controller : null,
       horizontalAxisDirection: isVertical ? null : axisDirection,
       verticalAxisDirection: isVertical ? axisDirection : null,
-      blurExtent: resolvedBlurExtent,
-      blurSigma: resolvedBlurSigma,
+      blurExtent: blurExtent,
+      blurSigma: blurSigma,
       borderRadius: widget.borderRadius,
       child: result,
     );
-
     result = CLScrollbarOverlay(
-      horizontalController: isVertical ? null : _controller,
-      verticalController: isVertical ? _controller : null,
+      horizontalController: isVertical ? null : controller,
+      verticalController: isVertical ? controller : null,
       horizontalVisibility: isVertical
           ? CLScrollbarVisibility.hidden
           : widget.scrollbarVisibility,
@@ -213,20 +223,19 @@ class _CLListState extends State<CLList> {
       thumbColor: CLTheme.of(context).colors.selection,
       child: result,
     );
-
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: result,
     );
   }
 
-  Widget _buildListView() {
+  Widget _buildListView(ScrollController controller) {
     if (widget._separatorBuilder != null) {
       return ListView.separated(
         key: ValueKey(widget.scrollDirection),
         scrollDirection: widget.scrollDirection,
         reverse: widget.reverse,
-        controller: _controller,
+        controller: controller,
         physics: widget.physics,
         shrinkWrap: widget.shrinkWrap,
         padding: widget.padding,
@@ -243,7 +252,7 @@ class _CLListState extends State<CLList> {
         key: ValueKey(widget.scrollDirection),
         scrollDirection: widget.scrollDirection,
         reverse: widget.reverse,
-        controller: _controller,
+        controller: controller,
         physics: widget.physics,
         shrinkWrap: widget.shrinkWrap,
         padding: widget.padding,
@@ -260,7 +269,7 @@ class _CLListState extends State<CLList> {
       key: ValueKey(widget.scrollDirection),
       scrollDirection: widget.scrollDirection,
       reverse: widget.reverse,
-      controller: _controller,
+      controller: controller,
       physics: widget.physics,
       shrinkWrap: widget.shrinkWrap,
       padding: widget.padding,

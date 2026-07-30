@@ -191,27 +191,10 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final enabled = widget.onChanged != null;
-
-    final activeColor = widget.activeColor ?? theme.colors.success;
-    final inactiveColor = theme.colors.controlHighlight;
-    var trackColor = Color.lerp(inactiveColor, activeColor, _currentFraction)!;
-    if (!enabled) trackColor = trackColor.withValues(alpha: trackColor.a * 0.5);
+    final trackColor = _resolveTrackColor(theme, enabled);
     final outlineColor = enabled
         ? theme.colors.outline
         : theme.colors.outline.withValues(alpha: theme.colors.outline.a * 0.5);
-
-    final thumbOffset = _lerpDouble(
-      CLToggle.thumbPadding,
-      CLToggle.thumbPadding + CLToggle.dragWidth,
-      _currentFraction,
-    );
-
-    final pressedScale = _lerpDouble(1, 1.12, _pressProgress);
-    final velocity = _dragVelocity / 50;
-    final velocityScaleX = 1 - (velocity * 0.75).clamp(-0.2, 0.2);
-    final velocityScaleY = 1 - (velocity * 0.25).clamp(-0.2, 0.2);
-    final thumbScaleX = pressedScale / velocityScaleX;
-    final thumbScaleY = pressedScale * velocityScaleY;
 
     return Semantics(
       toggled: widget.value,
@@ -223,44 +206,72 @@ class _CLToggleState extends State<CLToggle> with TickerProviderStateMixin {
         onPointerMove: _handlePointerMove,
         onPointerUp: _handlePointerUp,
         onPointerCancel: _handlePointerCancel,
-        child: SizedBox(
-          width: CLToggle.trackWidth,
-          height: CLToggle.trackHeight,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Track
-              Container(
-                key: _trackKey,
-                width: CLToggle.trackWidth,
-                height: CLToggle.trackHeight,
-                decoration: clSmoothDecoration(
-                  color: trackColor,
-                  borderRadius: BorderRadius.circular(CLToggle.trackHeight / 2),
-                  side: BorderSide(color: outlineColor),
-                ),
-              ),
-              // Thumb
-              Positioned.directional(
-                key: _thumbKey,
-                start: thumbOffset,
-                top: (CLToggle.trackHeight - CLToggle.thumbHeight) / 2,
-                width: CLToggle.thumbWidth,
-                height: CLToggle.thumbHeight,
-                textDirection: Directionality.of(context),
-                child: Transform(
-                  transform: Matrix4.diagonal3Values(
-                    thumbScaleX,
-                    thumbScaleY,
-                    1,
-                  ),
-                  alignment: Alignment.center,
-                  child: _buildThumb(enabled),
-                ),
-              ),
-            ],
+        child: _buildTrack(context, enabled, trackColor, outlineColor),
+      ),
+    );
+  }
+
+  Color _resolveTrackColor(CLThemeData theme, bool enabled) {
+    final activeColor = widget.activeColor ?? theme.colors.success;
+    final inactiveColor = theme.colors.controlHighlight;
+    final color = Color.lerp(inactiveColor, activeColor, _currentFraction)!;
+    return enabled ? color : color.withValues(alpha: color.a * 0.5);
+  }
+
+  Widget _buildTrack(
+    BuildContext context,
+    bool enabled,
+    Color trackColor,
+    Color outlineColor,
+  ) {
+    return SizedBox(
+      width: CLToggle.trackWidth,
+      height: CLToggle.trackHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            key: _trackKey,
+            width: CLToggle.trackWidth,
+            height: CLToggle.trackHeight,
+            decoration: clSmoothDecoration(
+              color: trackColor,
+              borderRadius: BorderRadius.circular(CLToggle.trackHeight / 2),
+              side: BorderSide(color: outlineColor),
+            ),
           ),
+          _buildPositionedThumb(context, enabled),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPositionedThumb(BuildContext context, bool enabled) {
+    final thumbOffset = _lerpDouble(
+      CLToggle.thumbPadding,
+      CLToggle.thumbPadding + CLToggle.dragWidth,
+      _currentFraction,
+    );
+    final pressedScale = _lerpDouble(1, 1.12, _pressProgress);
+    final velocity = _dragVelocity / 50;
+    final velocityScaleX = 1 - (velocity * 0.75).clamp(-0.2, 0.2);
+    final velocityScaleY = 1 - (velocity * 0.25).clamp(-0.2, 0.2);
+
+    return Positioned.directional(
+      key: _thumbKey,
+      start: thumbOffset,
+      top: (CLToggle.trackHeight - CLToggle.thumbHeight) / 2,
+      width: CLToggle.thumbWidth,
+      height: CLToggle.thumbHeight,
+      textDirection: Directionality.of(context),
+      child: Transform(
+        transform: Matrix4.diagonal3Values(
+          pressedScale / velocityScaleX,
+          pressedScale * velocityScaleY,
+          1,
         ),
+        alignment: Alignment.center,
+        child: _buildThumb(enabled),
       ),
     );
   }

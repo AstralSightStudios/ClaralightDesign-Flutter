@@ -76,63 +76,34 @@ class _CLToolbarState extends State<CLToolbar> {
       _hoveredTools.isNotEmpty || _pressedPointers.isNotEmpty;
 
   void _setToolHovered(int index, bool hovered) {
-    final changed = hovered
-        ? _hoveredTools.add(index)
-        : _hoveredTools.remove(index);
-    if (changed) setState(() {});
+    if (_hoveredTools.contains(index) == hovered) return;
+    setState(() {
+      if (hovered) {
+        _hoveredTools.add(index);
+      } else {
+        _hoveredTools.remove(index);
+      }
+    });
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (_pressedPointers.add(event.pointer)) setState(() {});
+    if (_pressedPointers.contains(event.pointer)) return;
+    setState(() {
+      _pressedPointers.add(event.pointer);
+    });
   }
 
   void _handlePointerEnd(PointerEvent event) {
-    if (_pressedPointers.remove(event.pointer)) setState(() {});
+    if (!_pressedPointers.contains(event.pointer)) return;
+    setState(() {
+      _pressedPointers.remove(event.pointer);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final radius = BorderRadius.circular(widget.height / 2);
-
-    final items = <Widget>[];
-    for (var i = 0; i < widget.children.length; i++) {
-      if (i > 0) {
-        if (widget.dividers) {
-          items.add(
-            AnimatedOpacity(
-              opacity: _hideDividers ? 0 : 1,
-              duration: const Duration(milliseconds: 90),
-              curve: Curves.easeOutCubic,
-              child: SizedBox(
-                width: 1,
-                height: widget.height * 0.5,
-                child: ColoredBox(color: theme.colors.separator),
-              ),
-            ),
-          );
-        } else {
-          items.add(SizedBox(width: widget.spacing));
-        }
-      }
-      final child = widget.children[i];
-      final interactive = _isInteractiveTool(child);
-      items.add(
-        MouseRegion(
-          key: child.key == null ? null : ValueKey<Key>(child.key!),
-          onEnter: interactive ? (_) => _setToolHovered(i, true) : null,
-          onExit: interactive ? (_) => _setToolHovered(i, false) : null,
-          child: Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: interactive ? _handlePointerDown : null,
-            onPointerUp: interactive ? _handlePointerEnd : null,
-            onPointerCancel: interactive ? _handlePointerEnd : null,
-            child: child,
-          ),
-        ),
-      );
-    }
-
     return SizedBox(
       height: widget.height,
       // Overlay the outline so it does not shrink same-size descendants.
@@ -152,9 +123,52 @@ class _CLToolbarState extends State<CLToolbar> {
           padding: EdgeInsets.symmetric(horizontal: widget.padding),
           child: CLToolbarScope(
             size: widget.size,
-            child: Row(mainAxisSize: MainAxisSize.min, children: items),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: _buildItems(theme),
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  List<Widget> _buildItems(CLThemeData theme) {
+    final items = <Widget>[];
+    for (var index = 0; index < widget.children.length; index++) {
+      if (index > 0) items.add(_buildSeparator(theme));
+      items.add(_buildTool(index));
+    }
+    return items;
+  }
+
+  Widget _buildSeparator(CLThemeData theme) {
+    if (!widget.dividers) return SizedBox(width: widget.spacing);
+    return AnimatedOpacity(
+      opacity: _hideDividers ? 0 : 1,
+      duration: const Duration(milliseconds: 90),
+      curve: Curves.easeOutCubic,
+      child: SizedBox(
+        width: 1,
+        height: widget.height * 0.5,
+        child: ColoredBox(color: theme.colors.separator),
+      ),
+    );
+  }
+
+  Widget _buildTool(int index) {
+    final child = widget.children[index];
+    final interactive = _isInteractiveTool(child);
+    return MouseRegion(
+      key: child.key == null ? null : ValueKey<Key>(child.key!),
+      onEnter: interactive ? (_) => _setToolHovered(index, true) : null,
+      onExit: interactive ? (_) => _setToolHovered(index, false) : null,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: interactive ? _handlePointerDown : null,
+        onPointerUp: interactive ? _handlePointerEnd : null,
+        onPointerCancel: interactive ? _handlePointerEnd : null,
+        child: child,
       ),
     );
   }

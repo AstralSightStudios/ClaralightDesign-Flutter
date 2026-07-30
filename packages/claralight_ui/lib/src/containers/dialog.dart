@@ -59,7 +59,6 @@ class CLDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
-
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
       child: CLSurface(
@@ -79,58 +78,64 @@ class CLDialog extends StatelessWidget {
           ),
         ],
         padding: const EdgeInsets.all(14),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (title != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-                child: Text(
-                  title!,
-                  textAlign: TextAlign.center,
-                  style: theme.typography.title.copyWith(
-                    color: theme.colors.textPrimary,
-                  ),
-                ),
-              ),
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: DefaultTextStyle(
-                  style: theme.typography.body
-                      .withCLWeight(FontWeight.w400)
-                      .copyWith(color: theme.colors.textPrimary),
-                  textAlign: TextAlign.center,
-                  child: child,
-                ),
-              ),
-            ),
-            if (actions.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              if (actions.length >= 3)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var i = 0; i < actions.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 10),
-                      actions[i],
-                    ],
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    for (var i = 0; i < actions.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 10),
-                      Expanded(child: actions[i]),
-                    ],
-                  ],
-                ),
-            ],
-          ],
-        ),
+        child: _buildContent(theme),
       ),
+    );
+  }
+
+  Widget _buildContent(CLThemeData theme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (title != null) _buildTitle(theme),
+        Flexible(
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: DefaultTextStyle(
+              style: theme.typography.body
+                  .withCLWeight(FontWeight.w400)
+                  .copyWith(color: theme.colors.textPrimary),
+              textAlign: TextAlign.center,
+              child: child,
+            ),
+          ),
+        ),
+        if (actions.isNotEmpty) ...[const SizedBox(height: 4), _buildActions()],
+      ],
+    );
+  }
+
+  Widget _buildTitle(CLThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      child: Text(
+        title!,
+        textAlign: TextAlign.center,
+        style: theme.typography.title.copyWith(color: theme.colors.textPrimary),
+      ),
+    );
+  }
+
+  Widget _buildActions() {
+    if (actions.length >= 3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < actions.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            actions[i],
+          ],
+        ],
+      );
+    }
+    return Row(
+      children: [
+        for (var i = 0; i < actions.length; i++) ...[
+          if (i > 0) const SizedBox(width: 10),
+          Expanded(child: actions[i]),
+        ],
+      ],
     );
   }
 

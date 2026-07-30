@@ -105,6 +105,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   late final CLPopoverController _internalController;
   late final AnimationController _reveal;
   late final AnimationController _spring;
+  // Borrowed from FocusManager and restored on close; never owned or disposed.
   FocusNode? _previousFocus;
   bool _open = false;
   bool _disableAnimations = false;
@@ -198,9 +199,8 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   @override
   void dispose() {
     _controller._detach(_handleControllerState);
-    _reveal
-      ..removeStatusListener(_handleAnimationStatus)
-      ..dispose();
+    _reveal.removeStatusListener(_handleAnimationStatus);
+    _reveal.dispose();
     _spring.dispose();
     _focusScopeNode.dispose();
     _internalController.dispose();
@@ -217,8 +217,11 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   }
 
   void _show() {
-    _previousFocus = FocusManager.instance.primaryFocus;
-    _open = true;
+    final previousFocus = FocusManager.instance.primaryFocus;
+    setState(() {
+      _previousFocus = previousFocus;
+      _open = true;
+    });
     if (_disableAnimations) {
       _spring.stop();
       _spring.value = 1;
@@ -226,7 +229,6 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
     _portal.show();
     widget.onOpenChanged?.call(true);
     if (!_open || !_controller.isOpen) return;
-    setState(() {});
     _animateRevealForward();
     if (!_disableAnimations) {
       _spring.animateWith(
@@ -263,10 +265,9 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   }
 
   void _hide() {
-    _open = false;
+    setState(() => _open = false);
     widget.onOpenChanged?.call(false);
     if (_open || _controller.isOpen) return;
-    setState(() {});
     if (_reveal.isDismissed) {
       _handleAnimationStatus(AnimationStatus.dismissed);
       return;
@@ -291,8 +292,11 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
   void _handleAnimationStatus(AnimationStatus status) {
     if (status != AnimationStatus.dismissed || _open) return;
     if (_portal.isShowing) {
-      _portal.hide();
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(_portal.hide);
+      } else {
+        _portal.hide();
+      }
     }
     if (_disableAnimations) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

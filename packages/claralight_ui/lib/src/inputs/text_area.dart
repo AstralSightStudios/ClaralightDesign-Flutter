@@ -176,12 +176,9 @@ class _CLTextAreaScrollBehavior extends ScrollBehavior {
 }
 
 class _CLTextAreaState extends State<CLTextArea> {
-  late TextEditingController _controller;
-  late FocusNode _focusNode;
-  late ScrollController _scrollController;
-  bool _ownsController = false;
-  bool _ownsFocusNode = false;
-  bool _ownsScrollController = false;
+  TextEditingController? _ownedController;
+  FocusNode? _ownedFocusNode;
+  ScrollController? _ownedScrollController;
   bool _selectionRevealScheduled = false;
   double _layoutTextMaxWidth = double.infinity;
   double _layoutTextTopInset = 0;
@@ -203,17 +200,15 @@ class _CLTextAreaState extends State<CLTextArea> {
   void didUpdateWidget(covariant CLTextArea oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_handleTextChanged);
-      if (_ownsController) _controller.dispose();
+      _ownedController?.dispose();
       _adoptController();
     }
     if (widget.focusNode != oldWidget.focusNode) {
-      _focusNode.removeListener(_handleFocusChanged);
-      if (_ownsFocusNode) _focusNode.dispose();
+      _ownedFocusNode?.dispose();
       _adoptFocusNode();
     }
     if (widget.scrollController != oldWidget.scrollController) {
-      if (_ownsScrollController) _scrollController.dispose();
+      _ownedScrollController?.dispose();
       _adoptScrollController();
     }
     if (oldWidget.enabled && !widget.enabled) {
@@ -221,29 +216,28 @@ class _CLTextAreaState extends State<CLTextArea> {
     }
   }
 
+  TextEditingController get _controller =>
+      widget.controller ?? _ownedController!;
+
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
+
+  ScrollController get _scrollController =>
+      widget.scrollController ?? _ownedScrollController!;
+
   void _adoptController() {
-    _ownsController = widget.controller == null;
-    _controller = widget.controller ?? TextEditingController();
-    _controller.addListener(_handleTextChanged);
+    _ownedController = widget.controller == null
+        ? TextEditingController()
+        : null;
   }
 
   void _adoptFocusNode() {
-    _ownsFocusNode = widget.focusNode == null;
-    _focusNode = widget.focusNode ?? FocusNode();
-    _focusNode.addListener(_handleFocusChanged);
+    _ownedFocusNode = widget.focusNode == null ? FocusNode() : null;
   }
 
   void _adoptScrollController() {
-    _ownsScrollController = widget.scrollController == null;
-    _scrollController = widget.scrollController ?? ScrollController();
-  }
-
-  void _handleTextChanged() {
-    if (mounted) setState(() {});
-  }
-
-  void _handleFocusChanged() {
-    if (mounted) setState(() {});
+    _ownedScrollController = widget.scrollController == null
+        ? ScrollController()
+        : null;
   }
 
   void _scheduleSelectionReveal() {
@@ -314,11 +308,9 @@ class _CLTextAreaState extends State<CLTextArea> {
 
   @override
   void dispose() {
-    _controller.removeListener(_handleTextChanged);
-    _focusNode.removeListener(_handleFocusChanged);
-    if (_ownsController) _controller.dispose();
-    if (_ownsFocusNode) _focusNode.dispose();
-    if (_ownsScrollController) _scrollController.dispose();
+    _ownedController?.dispose();
+    _ownedFocusNode?.dispose();
+    _ownedScrollController?.dispose();
     super.dispose();
   }
 
@@ -343,12 +335,16 @@ class _CLTextAreaState extends State<CLTextArea> {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_controller, _focusNode]),
+      builder: (context, _) => _buildTextArea(context),
+    );
+  }
+
+  Widget _buildTextArea(BuildContext context) {
     final theme = CLTheme.of(context);
     final colors = theme.colors;
     final focused = widget.enabled && _focusNode.hasFocus;
-    final animationsDisabled = MediaQuery.disableAnimationsOf(context);
-    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
-    final textScaler = MediaQuery.textScalerOf(context);
     final radius = widget.borderRadius ?? theme.radii.control;
     final inset = widget.size == CLControlSize.small ? 10.0 : 12.0;
     final textStyle =
@@ -361,11 +357,6 @@ class _CLTextAreaState extends State<CLTextArea> {
     final placeholderStyle = textStyle.copyWith(
       color: widget.enabled ? colors.textHint : colors.textDisabled,
     );
-    final borderColor = _showsError
-        ? colors.danger
-        : focused
-        ? colors.accent
-        : const Color(0x00000000);
 
     return Semantics(
       label: widget.semanticLabel,
@@ -380,111 +371,169 @@ class _CLTextAreaState extends State<CLTextArea> {
         child: SizedBox(
           width: widget.width,
           child: LayoutBuilder(
-            builder: (context, constraints) {
-              final textMaxWidth = constraints.hasBoundedWidth
-                  ? math.max(0.0, constraints.maxWidth - inset * 2)
-                  : double.infinity;
-              final measuredText = _controller.text.isEmpty
-                  ? widget.placeholder ?? ''
-                  : _controller.text;
-              final editableHeight = _measureText(
-                text: measuredText,
-                style: _controller.text.isEmpty ? placeholderStyle : textStyle,
-                textAlign: widget.textAlign,
-                textDirection: textDirection,
-                textScaler: textScaler,
-                maxWidth: textMaxWidth,
-              ).height;
-              final naturalHeight = editableHeight + inset * 2;
-              final targetHeight = naturalHeight.clamp(
-                widget.minHeight,
-                widget.maxHeight,
-              );
-              _layoutTextMaxWidth = textMaxWidth;
-              _layoutTextTopInset = inset;
-              _layoutBottomSafeInset = inset;
-              _layoutTextStyle = textStyle;
-              _layoutTextAlign = widget.textAlign;
-              _layoutTextDirection = textDirection;
-              _layoutTextScaler = textScaler;
-              _scheduleSelectionReveal();
-
-              final field = CupertinoTextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                placeholder: widget.placeholder,
-                placeholderStyle: placeholderStyle,
-                style: textStyle,
-                cursorColor: _showsError ? colors.danger : colors.accent,
-                keyboardType: widget.keyboardType,
-                textInputAction: widget.textInputAction,
-                textCapitalization: widget.textCapitalization,
-                inputFormatters: widget.inputFormatters,
-                enabled: widget.enabled,
-                readOnly: widget.readOnly,
-                autofocus: widget.autofocus,
-                autocorrect: widget.autocorrect,
-                enableSuggestions: widget.enableSuggestions,
-                textAlign: widget.textAlign,
-                textAlignVertical: TextAlignVertical.top,
-                onChanged: widget.onChanged,
-                onSubmitted: widget.onSubmitted,
-                // Keep the Claralight surface in charge of disabled styling.
-                // A null decoration makes CupertinoTextField inject its opaque
-                // platform disabled background behind the editable region.
-                decoration: const BoxDecoration(),
-                padding: EdgeInsets.zero,
-                minLines: 1,
-                maxLines: null,
-                scrollPhysics: const NeverScrollableScrollPhysics(),
-                scrollPadding: const EdgeInsets.all(20),
-              );
-
-              Widget scrollingRegion = ScrollConfiguration(
-                behavior: _CLTextAreaScrollBehavior(
-                  ScrollConfiguration.of(context),
-                ),
-                child: CLScrollable(
-                  direction: CLScrollDirection.vertical,
-                  blurExtent: const EdgeInsets.symmetric(vertical: 24),
-                  blurSigma: const EdgeInsets.symmetric(vertical: 5),
-                  padding: EdgeInsets.all(inset),
-                  horizontalScrollbar: CLScrollbarVisibility.hidden,
-                  verticalScrollbar: CLScrollbarVisibility.auto,
-                  verticalController: _scrollController,
-                  child: field,
-                ),
-              );
-              if (!widget.enabled) {
-                scrollingRegion = IgnorePointer(child: scrollingRegion);
-              }
-
-              return AnimatedContainer(
-                key: const Key('cl-text-area-surface'),
-                height: targetHeight,
-                duration: animationsDisabled ? Duration.zero : CLMotion.fast,
-                curve: CLMotion.easeOut,
-                decoration: clSmoothDecoration(
-                  color: widget.enabled
-                      ? colors.control
-                      : colors.control.withValues(
-                          alpha: colors.control.a * 0.5,
-                        ),
-                  borderRadius: BorderRadius.circular(radius),
-                  side: BorderSide(
-                    color: borderColor,
-                    width: focused ? 1.5 : 1,
-                  ),
-                ),
-                child: CLSmoothClip(
-                  borderRadius: BorderRadius.circular(radius),
-                  child: scrollingRegion,
-                ),
-              );
-            },
+            builder: (context, constraints) => _buildSurface(
+              context,
+              constraints: constraints,
+              theme: theme,
+              focused: focused,
+              radius: radius,
+              inset: inset,
+              textStyle: textStyle,
+              placeholderStyle: placeholderStyle,
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildSurface(
+    BuildContext context, {
+    required BoxConstraints constraints,
+    required CLThemeData theme,
+    required bool focused,
+    required double radius,
+    required double inset,
+    required TextStyle textStyle,
+    required TextStyle placeholderStyle,
+  }) {
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textMaxWidth = constraints.hasBoundedWidth
+        ? math.max(0.0, constraints.maxWidth - inset * 2)
+        : double.infinity;
+    final measuredText = _controller.text.isEmpty
+        ? widget.placeholder ?? ''
+        : _controller.text;
+    final editableHeight = _measureText(
+      text: measuredText,
+      style: _controller.text.isEmpty ? placeholderStyle : textStyle,
+      textAlign: widget.textAlign,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      maxWidth: textMaxWidth,
+    ).height;
+    final targetHeight = (editableHeight + inset * 2).clamp(
+      widget.minHeight,
+      widget.maxHeight,
+    );
+    _updateLayoutMetrics(
+      textMaxWidth: textMaxWidth,
+      inset: inset,
+      textStyle: textStyle,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    );
+
+    final field = _buildEditableText(
+      theme: theme,
+      textStyle: textStyle,
+      placeholderStyle: placeholderStyle,
+    );
+    final scrollingRegion = _buildScrollingRegion(
+      context,
+      inset: inset,
+      field: field,
+    );
+    final colors = theme.colors;
+    final borderColor = _showsError
+        ? colors.danger
+        : focused
+        ? colors.accent
+        : const Color(0x00000000);
+
+    return AnimatedContainer(
+      key: const Key('cl-text-area-surface'),
+      height: targetHeight,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : CLMotion.fast,
+      curve: CLMotion.easeOut,
+      decoration: clSmoothDecoration(
+        color: widget.enabled
+            ? colors.control
+            : colors.control.withValues(alpha: colors.control.a * 0.5),
+        borderRadius: BorderRadius.circular(radius),
+        side: BorderSide(color: borderColor, width: focused ? 1.5 : 1),
+      ),
+      child: CLSmoothClip(
+        borderRadius: BorderRadius.circular(radius),
+        child: scrollingRegion,
+      ),
+    );
+  }
+
+  void _updateLayoutMetrics({
+    required double textMaxWidth,
+    required double inset,
+    required TextStyle textStyle,
+    required TextDirection textDirection,
+    required TextScaler textScaler,
+  }) {
+    _layoutTextMaxWidth = textMaxWidth;
+    _layoutTextTopInset = inset;
+    _layoutBottomSafeInset = inset;
+    _layoutTextStyle = textStyle;
+    _layoutTextAlign = widget.textAlign;
+    _layoutTextDirection = textDirection;
+    _layoutTextScaler = textScaler;
+    _scheduleSelectionReveal();
+  }
+
+  Widget _buildEditableText({
+    required CLThemeData theme,
+    required TextStyle textStyle,
+    required TextStyle placeholderStyle,
+  }) {
+    return CupertinoTextField(
+      controller: _controller,
+      focusNode: _focusNode,
+      placeholder: widget.placeholder,
+      placeholderStyle: placeholderStyle,
+      style: textStyle,
+      cursorColor: _showsError ? theme.colors.danger : theme.colors.accent,
+      keyboardType: widget.keyboardType,
+      textInputAction: widget.textInputAction,
+      textCapitalization: widget.textCapitalization,
+      inputFormatters: widget.inputFormatters,
+      enabled: widget.enabled,
+      readOnly: widget.readOnly,
+      autofocus: widget.autofocus,
+      autocorrect: widget.autocorrect,
+      enableSuggestions: widget.enableSuggestions,
+      textAlign: widget.textAlign,
+      textAlignVertical: TextAlignVertical.top,
+      onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
+      // Keep the Claralight surface in charge of disabled styling.
+      decoration: const BoxDecoration(),
+      padding: EdgeInsets.zero,
+      minLines: 1,
+      maxLines: null,
+      scrollPhysics: const NeverScrollableScrollPhysics(),
+      scrollPadding: const EdgeInsets.all(20),
+    );
+  }
+
+  Widget _buildScrollingRegion(
+    BuildContext context, {
+    required double inset,
+    required Widget field,
+  }) {
+    Widget region = ScrollConfiguration(
+      behavior: _CLTextAreaScrollBehavior(ScrollConfiguration.of(context)),
+      child: CLScrollable(
+        direction: CLScrollDirection.vertical,
+        blurExtent: const EdgeInsets.symmetric(vertical: 24),
+        blurSigma: const EdgeInsets.symmetric(vertical: 5),
+        padding: EdgeInsets.all(inset),
+        horizontalScrollbar: CLScrollbarVisibility.hidden,
+        verticalScrollbar: CLScrollbarVisibility.auto,
+        verticalController: _scrollController,
+        child: field,
+      ),
+    );
+    if (!widget.enabled) region = IgnorePointer(child: region);
+    return region;
   }
 }

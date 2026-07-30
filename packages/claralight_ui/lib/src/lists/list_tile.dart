@@ -90,13 +90,29 @@ class _CLListTileState extends State<CLListTile> {
 
   @override
   Widget build(BuildContext context) {
+    final visuals = _resolveVisuals(context);
+    return Semantics(
+      button: visuals.interactive,
+      selected: widget.selected,
+      label: widget.label,
+      child: MouseRegion(
+        cursor: visuals.interactive
+            ? SystemMouseCursors.click
+            : MouseCursor.defer,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: _buildPressable(context, visuals),
+      ),
+    );
+  }
+
+  _ListTileVisuals _resolveVisuals(BuildContext context) {
     final theme = CLTheme.of(context);
     final colors = theme.colors;
     final radius =
         (widget.borderRadius ?? BorderRadius.circular(theme.radii.control))
             .resolve(Directionality.of(context));
     final interactive = widget.onTap != null;
-
     final fill = widget.outlined
         ? const Color(0x00000000)
         : widget.selected
@@ -104,10 +120,6 @@ class _CLListTileState extends State<CLListTile> {
         : _hovered && interactive
         ? colors.controlHighlight
         : const Color(0x00000000);
-    final side = widget.outlined
-        ? BorderSide(color: colors.control, width: 2)
-        : BorderSide.none;
-
     final labelColor =
         widget.tint ??
         (widget.outlined ? colors.textHint : colors.textSecondary);
@@ -119,113 +131,164 @@ class _CLListTileState extends State<CLListTile> {
                 : theme.typography.callout.withCLWeight(FontWeight.w400))
             .copyWith(color: labelColor);
 
-    final multiline = widget.labelMaxLines != 1;
+    return _ListTileVisuals(
+      theme: theme,
+      radius: radius,
+      interactive: interactive,
+      fill: fill,
+      side: widget.outlined
+          ? BorderSide(color: colors.control, width: 2)
+          : BorderSide.none,
+      leadingColor: leadingColor,
+      textStyle: textStyle,
+      multiline: widget.labelMaxLines != 1,
+    );
+  }
 
-    return Semantics(
-      button: interactive,
-      selected: widget.selected,
-      label: widget.label,
-      child: MouseRegion(
-        cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: CLPressable(
-          onTap: widget.onTap,
-          borderRadius: radius,
-          pressedScale: 1.015,
-          deformOnDrag: false,
-          showHighlight: false,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            height: multiline ? null : _height,
-            constraints: multiline ? BoxConstraints(minHeight: _height) : null,
-            padding: EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: multiline ? 7 : 0,
+  Widget _buildPressable(BuildContext context, _ListTileVisuals visuals) {
+    return CLPressable(
+      onTap: widget.onTap,
+      borderRadius: visuals.radius,
+      pressedScale: 1.015,
+      deformOnDrag: false,
+      showHighlight: false,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: visuals.multiline ? null : _height,
+        constraints: visuals.multiline
+            ? BoxConstraints(minHeight: _height)
+            : null,
+        padding: EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: visuals.multiline ? 7 : 0,
+        ),
+        decoration: clSmoothDecoration(
+          color: visuals.fill,
+          borderRadius: visuals.radius,
+          side: visuals.side,
+        ),
+        child: _buildRow(context, visuals),
+      ),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, _ListTileVisuals visuals) {
+    return Row(
+      children: [
+        ..._buildDepthGuides(visuals),
+        if (widget.leading != null) ..._buildLeading(visuals),
+        Expanded(child: _buildLabel(context, visuals)),
+        if (widget.trailing != null) ..._buildTrailing(visuals),
+        if (widget.expanded != null) ..._buildDisclosure(visuals),
+      ],
+    );
+  }
+
+  List<Widget> _buildDepthGuides(_ListTileVisuals visuals) {
+    return [
+      for (var i = 0; i < widget.depth; i++) ...[
+        SizedBox(
+          width: 14,
+          height: 18,
+          child: CustomPaint(
+            painter: _DepthGuidePainter(
+              color: visuals.theme.colors.textPrimary.withValues(alpha: 0.18),
+              rowHeight: _height,
             ),
-            decoration: clSmoothDecoration(
-              color: fill,
-              borderRadius: radius,
-              side: side,
-            ),
-            child: Row(
-              children: [
-                for (var i = 0; i < widget.depth; i++) ...[
-                  SizedBox(
-                    width: 14,
-                    height: 18,
-                    child: CustomPaint(
-                      painter: _DepthGuidePainter(
-                        color: colors.textPrimary.withValues(alpha: 0.18),
-                        rowHeight: _height,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                if (widget.leading != null) ...[
-                  IconTheme.merge(
-                    data: IconThemeData(
-                      size: widget.size == CLControlSize.small ? 14 : 18,
-                      color: leadingColor,
-                    ),
-                    child: widget.leading!,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Expanded(
-                  child: widget.labelBuilder == null
-                      ? Text(
-                          widget.label,
-                          maxLines: widget.labelMaxLines,
-                          overflow: multiline
-                              ? TextOverflow.clip
-                              : TextOverflow.ellipsis,
-                          style: textStyle,
-                        )
-                      : ExcludeSemantics(
-                          child: widget.labelBuilder!(context, textStyle),
-                        ),
+          ),
+        ),
+        const SizedBox(width: 10),
+      ],
+    ];
+  }
+
+  List<Widget> _buildLeading(_ListTileVisuals visuals) {
+    return [
+      IconTheme.merge(
+        data: IconThemeData(
+          size: widget.size == CLControlSize.small ? 14 : 18,
+          color: visuals.leadingColor,
+        ),
+        child: widget.leading!,
+      ),
+      const SizedBox(width: 10),
+    ];
+  }
+
+  Widget _buildLabel(BuildContext context, _ListTileVisuals visuals) {
+    final labelBuilder = widget.labelBuilder;
+    if (labelBuilder != null) {
+      return ExcludeSemantics(child: labelBuilder(context, visuals.textStyle));
+    }
+    return Text(
+      widget.label,
+      maxLines: widget.labelMaxLines,
+      overflow: visuals.multiline ? TextOverflow.clip : TextOverflow.ellipsis,
+      style: visuals.textStyle,
+    );
+  }
+
+  List<Widget> _buildTrailing(_ListTileVisuals visuals) {
+    return [
+      const SizedBox(width: 10),
+      IconTheme.merge(
+        data: IconThemeData(
+          size: widget.size == CLControlSize.small ? 14 : 17,
+          color: visuals.theme.colors.textSecondary,
+        ),
+        child: widget.trailing!,
+      ),
+    ];
+  }
+
+  List<Widget> _buildDisclosure(_ListTileVisuals visuals) {
+    return [
+      const SizedBox(width: 10),
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onExpandedChanged == null
+            ? null
+            : () => widget.onExpandedChanged!(!widget.expanded!),
+        child: SizedBox.square(
+          dimension: 16,
+          child: Center(
+            child: AnimatedRotation(
+              duration: widget.disclosureAnimationDuration,
+              turns: widget.expanded! ? 0.5 : 0,
+              child: CustomPaint(
+                size: const Size(11.5, 6.5),
+                painter: _DisclosurePainter(
+                  color: visuals.theme.colors.textHint,
                 ),
-                if (widget.trailing != null) ...[
-                  const SizedBox(width: 10),
-                  IconTheme.merge(
-                    data: IconThemeData(
-                      size: widget.size == CLControlSize.small ? 14 : 17,
-                      color: colors.textSecondary,
-                    ),
-                    child: widget.trailing!,
-                  ),
-                ],
-                if (widget.expanded != null) ...[
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.onExpandedChanged == null
-                        ? null
-                        : () => widget.onExpandedChanged!(!widget.expanded!),
-                    child: SizedBox.square(
-                      dimension: 16,
-                      child: Center(
-                        child: AnimatedRotation(
-                          duration: widget.disclosureAnimationDuration,
-                          turns: widget.expanded! ? 0.5 : 0,
-                          child: CustomPaint(
-                            size: const Size(11.5, 6.5),
-                            painter: _DisclosurePainter(color: colors.textHint),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),
       ),
-    );
+    ];
   }
+}
+
+class _ListTileVisuals {
+  const _ListTileVisuals({
+    required this.theme,
+    required this.radius,
+    required this.interactive,
+    required this.fill,
+    required this.side,
+    required this.leadingColor,
+    required this.textStyle,
+    required this.multiline,
+  });
+
+  final CLThemeData theme;
+  final BorderRadius radius;
+  final bool interactive;
+  final Color fill;
+  final BorderSide side;
+  final Color leadingColor;
+  final TextStyle textStyle;
+  final bool multiline;
 }
 
 /// A vertical group of [CLListTile]s with an optional header, matching the
@@ -298,31 +361,28 @@ class CLTreeView extends StatefulWidget {
 }
 
 class _CLTreeViewState extends State<CLTreeView> {
-  late ScrollController _controller;
-  late bool _ownsController;
+  ScrollController? _ownedController;
+
+  ScrollController get _effectiveController =>
+      widget.controller ?? _ownedController!;
 
   @override
   void initState() {
     super.initState();
-    _setController(widget.controller);
+    _ownedController = widget.controller == null ? ScrollController() : null;
   }
 
   @override
   void didUpdateWidget(CLTreeView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller == widget.controller) return;
-    if (_ownsController) _controller.dispose();
-    _setController(widget.controller);
-  }
-
-  void _setController(ScrollController? controller) {
-    _ownsController = controller == null;
-    _controller = controller ?? ScrollController();
+    _ownedController?.dispose();
+    _ownedController = widget.controller == null ? ScrollController() : null;
   }
 
   @override
   void dispose() {
-    if (_ownsController) _controller.dispose();
+    _ownedController?.dispose();
     super.dispose();
   }
 
@@ -335,7 +395,7 @@ class _CLTreeViewState extends State<CLTreeView> {
           'CLTreeView requires a bounded height.',
         );
         return CLList.separated(
-          controller: _controller,
+          controller: _effectiveController,
           padding: const EdgeInsets.only(top: 4, right: 10, bottom: 4),
           itemCount: widget.children.length,
           itemBuilder: (context, index) => widget.children[index],

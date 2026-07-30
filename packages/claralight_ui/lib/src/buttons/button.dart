@@ -158,23 +158,11 @@ class _CLButtonState extends State<CLButton> {
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
     final inToolbar = CLToolbarScope.maybeOf(context) != null;
-    final effectiveVariant = widget._usesDefaultVariant && inToolbar
+    final variant = widget._usesDefaultVariant && inToolbar
         ? CLButtonVariant.ghost
         : widget.variant;
-    final outlined =
-        widget.outlined ?? effectiveVariant != CLButtonVariant.ghost;
-    final radius = BorderRadius.circular(theme.radii.capsule);
-    final foreground = _foregroundColor(theme, effectiveVariant);
-    final baseTextStyle = _size == CLControlSize.large
-        ? theme.typography.title
-              .withCLWeight(FontWeight.w500)
-              .copyWith(fontSize: 17, height: 22 / 17, letterSpacing: -0.43)
-        : theme.typography.label;
-    final textStyle =
-        (widget.labelStyle == null
-                ? baseTextStyle
-                : baseTextStyle.merge(widget.labelStyle))
-            .copyWith(color: foreground);
+    final foreground = _foregroundColor(theme, variant);
+
     return Semantics(
       button: true,
       enabled: _enabled,
@@ -184,53 +172,82 @@ class _CLButtonState extends State<CLButton> {
         cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: CLPressable(
-          onTap: widget.onPressed,
-          borderRadius: radius,
-          pressedScale: 1 + 4 / _height / 2,
-          child: SizedBox(
-            width: widget.width,
-            height: _height,
-            child: DecoratedBox(
-              position: DecorationPosition.foreground,
-              decoration: clSmoothDecoration(
-                borderRadius: radius,
-                side: outlined
-                    ? BorderSide(
-                        color: widget.outlineColor ?? theme.colors.outline,
-                      )
-                    : BorderSide.none,
-              ),
-              child: CLSurface(
-                fill: _fillColor(
-                  theme,
-                  effectiveVariant,
-                  pressedHover: _hovered && _enabled,
-                ),
-                frosted: effectiveVariant != CLButtonVariant.ghost,
-                frostSigma: 36,
-                borderRadius: radius,
-                padding: EdgeInsets.symmetric(horizontal: _hPadding),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // `Expanded`, as used by ExportPage, gives this button a
-                    // tight width without setting `widget.width`. Use the real
-                    // constraint so either route keeps the label centered.
-                    final fillsAvailableWidth =
-                        widget.width != null || constraints.hasTightWidth;
-                    return Align(
-                      widthFactor: fillsAvailableWidth ? null : 1,
-                      child: fillsAvailableWidth && widget.centerLabel
-                          ? _fullWidthContent(textStyle, foreground)
-                          : _huggingContent(textStyle, foreground),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
+        child: _buildPressable(theme, variant, foreground),
       ),
+    );
+  }
+
+  Widget _buildPressable(
+    CLThemeData theme,
+    CLButtonVariant variant,
+    Color foreground,
+  ) {
+    final radius = BorderRadius.circular(theme.radii.capsule);
+    return CLPressable(
+      onTap: widget.onPressed,
+      borderRadius: radius,
+      pressedScale: 1 + 4 / _height / 2,
+      child: SizedBox(
+        width: widget.width,
+        height: _height,
+        child: _buildSurface(theme, variant, foreground, radius),
+      ),
+    );
+  }
+
+  Widget _buildSurface(
+    CLThemeData theme,
+    CLButtonVariant variant,
+    Color foreground,
+    BorderRadius radius,
+  ) {
+    final outlined = widget.outlined ?? variant != CLButtonVariant.ghost;
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: clSmoothDecoration(
+        borderRadius: radius,
+        side: outlined
+            ? BorderSide(color: widget.outlineColor ?? theme.colors.outline)
+            : BorderSide.none,
+      ),
+      child: CLSurface(
+        fill: _fillColor(theme, variant, pressedHover: _hovered && _enabled),
+        frosted: variant != CLButtonVariant.ghost,
+        frostSigma: 36,
+        borderRadius: radius,
+        padding: EdgeInsets.symmetric(horizontal: _hPadding),
+        child: _buildContentLayout(_textStyle(theme, foreground), foreground),
+      ),
+    );
+  }
+
+  TextStyle _textStyle(CLThemeData theme, Color foreground) {
+    final baseStyle = _size == CLControlSize.large
+        ? theme.typography.title
+              .withCLWeight(FontWeight.w500)
+              .copyWith(fontSize: 17, height: 22 / 17, letterSpacing: -0.43)
+        : theme.typography.label;
+    return (widget.labelStyle == null
+            ? baseStyle
+            : baseStyle.merge(widget.labelStyle))
+        .copyWith(color: foreground);
+  }
+
+  Widget _buildContentLayout(TextStyle textStyle, Color foreground) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // `Expanded`, as used by ExportPage, gives this button a tight width
+        // without setting `widget.width`. Use the real constraint so either
+        // route keeps the label centered.
+        final fillsAvailableWidth =
+            widget.width != null || constraints.hasTightWidth;
+        return Align(
+          widthFactor: fillsAvailableWidth ? null : 1,
+          child: fillsAvailableWidth && widget.centerLabel
+              ? _fullWidthContent(textStyle, foreground)
+              : _huggingContent(textStyle, foreground),
+        );
+      },
     );
   }
 

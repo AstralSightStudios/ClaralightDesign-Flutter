@@ -72,7 +72,10 @@ class CLEdgeEffectsState extends State<CLEdgeEffects>
   static const _right = 2;
   static const _bottom = 3;
 
-  late final List<AnimationController> _controllers;
+  late final AnimationController _leftController;
+  late final AnimationController _topController;
+  late final AnimationController _rightController;
+  late final AnimationController _bottomController;
   late final Listenable _animation;
   final List<bool> _targets = List<bool>.filled(4, false);
   bool _disableAnimations = false;
@@ -106,14 +109,22 @@ class CLEdgeEffectsState extends State<CLEdgeEffects>
   @override
   void initState() {
     super.initState();
-    _controllers = List.generate(
-      4,
-      (_) => AnimationController(vsync: this, duration: _transitionDuration),
-    );
-    _animation = Listenable.merge(_controllers);
+    _leftController = _createController();
+    _topController = _createController();
+    _rightController = _createController();
+    _bottomController = _createController();
+    _animation = Listenable.merge([
+      _leftController,
+      _topController,
+      _rightController,
+      _bottomController,
+    ]);
     _addControllerListeners();
     _schedulePositionSync();
   }
+
+  AnimationController _createController() =>
+      AnimationController(vsync: this, duration: _transitionDuration);
 
   @override
   void didChangeDependencies() {
@@ -122,8 +133,8 @@ class CLEdgeEffectsState extends State<CLEdgeEffects>
     if (_disableAnimations == disableAnimations) return;
     _disableAnimations = disableAnimations;
     if (disableAnimations) {
-      for (var index = 0; index < _controllers.length; index += 1) {
-        _controllers[index].value = _targets[index] ? 1 : 0;
+      for (var index = _left; index <= _bottom; index += 1) {
+        _controllerAt(index).value = _targets[index] ? 1 : 0;
       }
     }
   }
@@ -290,7 +301,7 @@ class CLEdgeEffectsState extends State<CLEdgeEffects>
   void _setTarget(int index, bool target) {
     if (_targets[index] == target) return;
     _targets[index] = target;
-    final controller = _controllers[index];
+    final controller = _controllerAt(index);
     if (_disableAnimations) {
       controller.value = target ? 1 : 0;
       return;
@@ -302,6 +313,14 @@ class CLEdgeEffectsState extends State<CLEdgeEffects>
     );
   }
 
+  AnimationController _controllerAt(int index) => switch (index) {
+    _left => _leftController,
+    _top => _topController,
+    _right => _rightController,
+    _bottom => _bottomController,
+    _ => throw RangeError.index(index, _targets),
+  };
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -309,55 +328,59 @@ class CLEdgeEffectsState extends State<CLEdgeEffects>
       child: widget.child,
       builder: (context, child) {
         final activation = EdgeInsets.fromLTRB(
-          _controllers[_left].value,
-          _controllers[_top].value,
-          _controllers[_right].value,
-          _controllers[_bottom].value,
+          _leftController.value,
+          _topController.value,
+          _rightController.value,
+          _bottomController.value,
         );
         return LayoutBuilder(
-          builder: (context, constraints) {
-            Widget result = child!;
-            if (_effectsMounted) {
-              final viewportSize = Size(
-                constraints.hasBoundedWidth
-                    ? constraints.maxWidth
-                    : _horizontalPosition?.viewportDimension ?? 0,
-                constraints.hasBoundedHeight
-                    ? constraints.maxHeight
-                    : _verticalPosition?.viewportDimension ?? 0,
-              );
-              final atlas = _getAtlas(viewportSize, widget.blurExtent);
-              result = ProgressiveBlurWidget.multiLayer(
-                blurAtlas: atlas,
-                layerSigmas: ProgressiveBlurLayerValues(
-                  layer0: widget.blurSigma.left,
-                  layer1: widget.blurSigma.top,
-                  layer2: widget.blurSigma.right,
-                  layer3: widget.blurSigma.bottom,
-                ),
-                layerActivations: ProgressiveBlurLayerValues(
-                  layer0: activation.left,
-                  layer1: activation.top,
-                  layer2: activation.right,
-                  layer3: activation.bottom,
-                ),
-                maskAlpha: true,
-                child: result,
-              );
-            } else {
-              _clearAtlasCache();
-            }
-            if (widget.borderRadius != BorderRadius.zero) {
-              result = CLSmoothClip(
-                borderRadius: widget.borderRadius,
-                child: result,
-              );
-            }
-            return result;
-          },
+          builder: (context, constraints) =>
+              _buildEffects(constraints, child!, activation),
         );
       },
     );
+  }
+
+  Widget _buildEffects(
+    BoxConstraints constraints,
+    Widget child,
+    EdgeInsets activation,
+  ) {
+    Widget result = child;
+    if (_effectsMounted) {
+      final viewportSize = Size(
+        constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : _horizontalPosition?.viewportDimension ?? 0,
+        constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : _verticalPosition?.viewportDimension ?? 0,
+      );
+      final atlas = _getAtlas(viewportSize, widget.blurExtent);
+      result = ProgressiveBlurWidget.multiLayer(
+        blurAtlas: atlas,
+        layerSigmas: ProgressiveBlurLayerValues(
+          layer0: widget.blurSigma.left,
+          layer1: widget.blurSigma.top,
+          layer2: widget.blurSigma.right,
+          layer3: widget.blurSigma.bottom,
+        ),
+        layerActivations: ProgressiveBlurLayerValues(
+          layer0: activation.left,
+          layer1: activation.top,
+          layer2: activation.right,
+          layer3: activation.bottom,
+        ),
+        maskAlpha: true,
+        child: result,
+      );
+    } else {
+      _clearAtlasCache();
+    }
+    if (widget.borderRadius != BorderRadius.zero) {
+      result = CLSmoothClip(borderRadius: widget.borderRadius, child: result);
+    }
+    return result;
   }
 
   ui.Image _getAtlas(Size size, EdgeInsets extent) {
@@ -402,9 +425,10 @@ class CLEdgeEffectsState extends State<CLEdgeEffects>
     widget.horizontalController?.removeListener(_handleControllerChanged);
     widget.verticalController?.removeListener(_handleControllerChanged);
     _removePositionListeners();
-    for (final controller in _controllers) {
-      controller.dispose();
-    }
+    _leftController.dispose();
+    _topController.dispose();
+    _rightController.dispose();
+    _bottomController.dispose();
     for (final entry in _atlasCache) {
       entry.image.dispose();
     }

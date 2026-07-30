@@ -97,65 +97,74 @@ class CLSurface extends StatelessWidget {
     final side = outlined
         ? BorderSide(color: outlineColor ?? theme.colors.outline)
         : BorderSide.none;
+    final content = padding == null
+        ? child
+        : Padding(padding: padding!, child: child);
+    final surface = frosted
+        ? _buildFrostedSurface(theme, radius, side, content)
+        : _buildOpaqueSurface(theme, radius, side, content);
+    return margin == null ? surface : Padding(padding: margin!, child: surface);
+  }
 
-    Widget content = padding != null
-        ? Padding(padding: padding!, child: child)
-        : child;
-
-    Widget surface;
-    if (frosted) {
-      surface = Stack(
-        fit: StackFit.passthrough,
-        clipBehavior: Clip.none,
-        children: [
-          Padding(
-            padding: side == BorderSide.none
-                ? EdgeInsets.zero
-                : EdgeInsets.all(side.width),
-            child: ClipRSuperellipse(
-              borderRadius: radius,
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(
-                  sigmaX: frostSigma,
-                  sigmaY: frostSigma,
-                ),
-                child: ColoredBox(
-                  color: fill ?? theme.colors.frost,
-                  child: content,
+  Widget _buildFrostedSurface(
+    CLThemeData theme,
+    BorderRadius radius,
+    BorderSide side,
+    Widget content,
+  ) {
+    return Stack(
+      fit: StackFit.passthrough,
+      clipBehavior: Clip.none,
+      children: [
+        Padding(
+          padding: side == BorderSide.none
+              ? EdgeInsets.zero
+              : EdgeInsets.all(side.width),
+          child: ClipRSuperellipse(
+            borderRadius: radius,
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(
+                sigmaX: frostSigma,
+                sigmaY: frostSigma,
+              ),
+              child: ColoredBox(
+                color: fill ?? theme.colors.frost,
+                child: content,
+              ),
+            ),
+          ),
+        ),
+        if ((shadow?.isNotEmpty ?? false) || side != BorderSide.none)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _FrostedSurfaceChrome(
+                  borderRadius: radius,
+                  side: side,
+                  shadows: shadow ?? const [],
                 ),
               ),
             ),
           ),
-          if ((shadow?.isNotEmpty ?? false) || side != BorderSide.none)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _FrostedSurfaceChrome(
-                    borderRadius: radius,
-                    side: side,
-                    shadows: shadow ?? const [],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      );
-    } else {
-      surface = Container(
-        decoration: clSmoothDecoration(
-          color: fill ?? fillFor(theme, level),
-          borderRadius: radius,
-          side: side,
-          shadows: shadow,
-        ),
-        child: CLSmoothClip(borderRadius: radius, child: content),
-      );
-    }
+      ],
+    );
+  }
 
-    if (margin != null) {
-      surface = Padding(padding: margin!, child: surface);
-    }
-    return surface;
+  Widget _buildOpaqueSurface(
+    CLThemeData theme,
+    BorderRadius radius,
+    BorderSide side,
+    Widget content,
+  ) {
+    return Container(
+      decoration: clSmoothDecoration(
+        color: fill ?? fillFor(theme, level),
+        borderRadius: radius,
+        side: side,
+        shadows: shadow,
+      ),
+      child: CLSmoothClip(borderRadius: radius, child: content),
+    );
   }
 }
 

@@ -165,89 +165,113 @@ class _CLMarqueeTextState extends State<CLMarqueeText>
 
   @override
   Widget build(BuildContext context) {
-    final textDirection = Directionality.of(context);
-    final textScaler = MediaQuery.textScalerOf(context);
-    final locale = Localizations.maybeLocaleOf(context);
     final effectiveStyle = DefaultTextStyle.of(
       context,
     ).style.merge(widget.style);
+    final textDirection = Directionality.of(context);
+    final textScaler = MediaQuery.textScalerOf(context);
+    final locale = Localizations.maybeLocaleOf(context);
 
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: effectiveStyle),
-          maxLines: 1,
-          textDirection: textDirection,
-          textScaler: textScaler,
-          locale: locale,
-        )..layout();
-        final textWidth = painter.width;
-        final overflowing =
-            constraints.hasBoundedWidth && textWidth > constraints.maxWidth;
-        _scheduleLayoutUpdate(
-          overflowing: overflowing,
-          distance: textWidth + widget.gap,
-        );
+      builder: (context, constraints) => _buildLayout(
+        constraints,
+        effectiveStyle: effectiveStyle,
+        textDirection: textDirection,
+        textScaler: textScaler,
+        locale: locale,
+      ),
+    );
+  }
 
-        final visual = overflowing && !_animationsDisabled
-            ? ClipRect(
-                child: OverflowBox(
-                  alignment: AlignmentDirectional.centerStart,
-                  minWidth: 0,
-                  maxWidth: double.infinity,
-                  child: AnimatedBuilder(
-                    animation: _controller,
-                    builder: (context, child) => Transform.translate(
-                      offset: Offset(
-                        -_controller.value * (textWidth + widget.gap),
-                        0,
-                      ),
-                      child: child,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.text,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: effectiveStyle,
-                        ),
-                        SizedBox(width: widget.gap),
-                        Text(
-                          widget.text,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: effectiveStyle,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            : Text(
+  Widget _buildLayout(
+    BoxConstraints constraints, {
+    required TextStyle effectiveStyle,
+    required TextDirection textDirection,
+    required TextScaler textScaler,
+    required Locale? locale,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: widget.text, style: effectiveStyle),
+      maxLines: 1,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      locale: locale,
+    )..layout();
+    final textWidth = painter.width;
+    final height = painter.height;
+    painter.dispose();
+
+    final overflowing =
+        constraints.hasBoundedWidth && textWidth > constraints.maxWidth;
+    _scheduleLayoutUpdate(
+      overflowing: overflowing,
+      distance: textWidth + widget.gap,
+    );
+
+    return SizedBox(
+      height: height,
+      child: VisibilityDetector(
+        key: _visibilityKey,
+        onVisibilityChanged: _handleVisibilityChanged,
+        child: Semantics(
+          label: widget.text,
+          excludeSemantics: true,
+          child: _buildVisual(
+            effectiveStyle: effectiveStyle,
+            textWidth: textWidth,
+            overflowing: overflowing,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisual({
+    required TextStyle effectiveStyle,
+    required double textWidth,
+    required bool overflowing,
+  }) {
+    if (!overflowing || _animationsDisabled) {
+      return Text(
+        widget.text,
+        maxLines: 1,
+        softWrap: false,
+        overflow: overflowing ? TextOverflow.ellipsis : TextOverflow.clip,
+        style: effectiveStyle,
+      );
+    }
+
+    return ClipRect(
+      child: OverflowBox(
+        alignment: AlignmentDirectional.centerStart,
+        minWidth: 0,
+        maxWidth: double.infinity,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) => Transform.translate(
+            offset: Offset(-_controller.value * (textWidth + widget.gap), 0),
+            child: child,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
                 widget.text,
                 maxLines: 1,
                 softWrap: false,
-                overflow: overflowing
-                    ? TextOverflow.ellipsis
-                    : TextOverflow.clip,
                 style: effectiveStyle,
-              );
-
-        return SizedBox(
-          height: painter.height,
-          child: VisibilityDetector(
-            key: _visibilityKey,
-            onVisibilityChanged: _handleVisibilityChanged,
-            child: Semantics(
-              label: widget.text,
-              excludeSemantics: true,
-              child: visual,
-            ),
+              ),
+              SizedBox(width: widget.gap),
+              Text(
+                widget.text,
+                maxLines: 1,
+                softWrap: false,
+                style: effectiveStyle,
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

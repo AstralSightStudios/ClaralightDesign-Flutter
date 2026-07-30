@@ -224,7 +224,7 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
   static const _menuScreenMargin = 12.0;
 
   CLMenuController _menuController = CLMenuController();
-  final List<CLMenuController> _retiredMenuControllers = [];
+  final _retiredMenus = <CLMenuController>[];
   _CLOverflowToolbarAllocation<T>? _lastAllocation;
   Set<T>? _lastReportedHiddenIds;
   Set<T>? _pendingHiddenIds;
@@ -246,11 +246,11 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
   void dispose() {
     _menuController.close();
     _menuController.dispose();
-    for (final controller in _retiredMenuControllers) {
-      controller.close();
-      controller.dispose();
+    for (final retiredMenu in _retiredMenus) {
+      retiredMenu.close();
+      retiredMenu.dispose();
     }
-    _retiredMenuControllers.clear();
+    _retiredMenus.clear();
     super.dispose();
   }
 
@@ -596,12 +596,12 @@ class _CLOverflowToolbarState<T> extends State<CLOverflowToolbar<T>> {
       if (previous.hasOverflow &&
           (!allocation.hasOverflow ||
               previous.useHorizontalScroll != allocation.useHorizontalScroll)) {
-        final retiredController = _menuController;
-        _retiredMenuControllers.add(retiredController);
+        final retiredMenu = _menuController;
+        _retiredMenus.add(retiredMenu);
         _menuController = CLMenuController();
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_retiredMenuControllers.remove(retiredController)) {
-            retiredController.dispose();
+          if (_retiredMenus.remove(retiredMenu)) {
+            retiredMenu.dispose();
           }
         });
       }
@@ -835,9 +835,8 @@ class _CLOverflowMigrationSurfaceState<T>
 
   @override
   void dispose() {
-    _migration
-      ..removeStatusListener(_handleMigrationStatus)
-      ..dispose();
+    _migration.removeStatusListener(_handleMigrationStatus);
+    _migration.dispose();
     super.dispose();
   }
 

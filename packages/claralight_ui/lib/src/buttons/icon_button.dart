@@ -124,60 +124,7 @@ class _CLIconButtonState extends State<CLIconButton> {
   @override
   Widget build(BuildContext context) {
     final theme = CLTheme.of(context);
-    final toolbar = CLToolbarScope.maybeOf(context);
-    final size = widget._sizeOverride ?? toolbar?.size ?? CLControlSize.large;
-    final extent = widget.extent ?? size.controlHeight;
-    final radius = BorderRadius.circular(
-      widget.shape == CLIconButtonShape.circle
-          ? extent / 2
-          : theme.radii.control,
-    );
-
-    final isHovered = _hovered && _enabled;
-    final inToolbar = toolbar != null;
-    final effectiveVariant = widget._usesDefaultVariant && inToolbar
-        ? CLIconButtonVariant.ghost
-        : widget.variant;
-    final usesVariantColors =
-        effectiveVariant == CLIconButtonVariant.primary ||
-        effectiveVariant == CLIconButtonVariant.secondary ||
-        effectiveVariant == CLIconButtonVariant.danger;
-    final outlined =
-        widget.outlined ?? effectiveVariant != CLIconButtonVariant.ghost;
-    var fill = widget.selected
-        ? (widget.selectedFill ??
-              (effectiveVariant == CLIconButtonVariant.secondary
-                  ? Color.alphaBlend(
-                      theme.colors.controlHighlight,
-                      theme.colors.floatingControl,
-                    )
-                  : usesVariantColors
-                  ? _fillColor(theme, effectiveVariant, isHovered: false)
-                  : inToolbar
-                  ? isHovered
-                        ? theme.colors.controlHighlight
-                        : theme.colors.control
-                  : theme.colors.controlHighlight))
-        : (widget.fill ??
-              _fillColor(theme, effectiveVariant, isHovered: isHovered));
-    if (!_enabled) {
-      fill = switch (effectiveVariant) {
-        CLIconButtonVariant.primary || CLIconButtonVariant.secondary => fill,
-        _ =>
-          usesVariantColors && widget.fill == null
-              ? theme.colors.control
-              : fill.withValues(alpha: fill.a * 0.45),
-      };
-    }
-
-    final iconColor = !_enabled
-        ? theme.colors.textDisabled
-        : widget.iconColor ??
-              (usesVariantColors
-                  ? _foregroundColor(theme, effectiveVariant)
-                  : widget.selected && !inToolbar
-                  ? theme.colors.textPrimary
-                  : theme.colors.textSecondary);
+    final visuals = _resolveVisuals(context, theme);
 
     return Semantics(
       button: true,
@@ -188,39 +135,123 @@ class _CLIconButtonState extends State<CLIconButton> {
         cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: CLPressable(
-          onTap: widget.onPressed,
-          borderRadius: radius,
-          pressedScale: 1 + 4 / extent,
-          child: SizedBox(
-            width: extent,
-            height: extent,
-            child: DecoratedBox(
-              position: DecorationPosition.foreground,
-              decoration: clSmoothDecoration(
-                borderRadius: radius,
-                side: outlined
-                    ? BorderSide(
-                        color: widget.outlineColor ?? theme.colors.outline,
-                      )
-                    : BorderSide.none,
-              ),
-              child: CLSurface(
-                fill: fill,
-                borderRadius: radius,
-                frosted:
-                    effectiveVariant != CLIconButtonVariant.ghost && fill.a > 0,
-                frostSigma: 36,
-                child: Center(
-                  child: Icon(
-                    widget.icon,
-                    size: _iconSize(size, effectiveVariant),
-                    color: iconColor,
-                  ),
-                ),
-              ),
-            ),
+        child: _buildPressable(theme, visuals),
+      ),
+    );
+  }
+
+  _IconButtonVisuals _resolveVisuals(BuildContext context, CLThemeData theme) {
+    final toolbar = CLToolbarScope.maybeOf(context);
+    final size = widget._sizeOverride ?? toolbar?.size ?? CLControlSize.large;
+    final extent = widget.extent ?? size.controlHeight;
+    final radius = BorderRadius.circular(
+      widget.shape == CLIconButtonShape.circle
+          ? extent / 2
+          : theme.radii.control,
+    );
+    final isHovered = _hovered && _enabled;
+    final inToolbar = toolbar != null;
+    final variant = widget._usesDefaultVariant && inToolbar
+        ? CLIconButtonVariant.ghost
+        : widget.variant;
+    final usesVariantColors =
+        variant == CLIconButtonVariant.primary ||
+        variant == CLIconButtonVariant.secondary ||
+        variant == CLIconButtonVariant.danger;
+    var fill = _resolveFill(
+      theme,
+      variant,
+      usesVariantColors: usesVariantColors,
+      inToolbar: inToolbar,
+      isHovered: isHovered,
+    );
+    if (!_enabled) {
+      fill = switch (variant) {
+        CLIconButtonVariant.primary || CLIconButtonVariant.secondary => fill,
+        _ =>
+          usesVariantColors && widget.fill == null
+              ? theme.colors.control
+              : fill.withValues(alpha: fill.a * 0.45),
+      };
+    }
+    final iconColor = !_enabled
+        ? theme.colors.textDisabled
+        : widget.iconColor ??
+              (usesVariantColors
+                  ? _foregroundColor(theme, variant)
+                  : widget.selected && !inToolbar
+                  ? theme.colors.textPrimary
+                  : theme.colors.textSecondary);
+
+    return _IconButtonVisuals(
+      size: size,
+      extent: extent,
+      radius: radius,
+      variant: variant,
+      outlined: widget.outlined ?? variant != CLIconButtonVariant.ghost,
+      fill: fill,
+      iconColor: iconColor,
+    );
+  }
+
+  Color _resolveFill(
+    CLThemeData theme,
+    CLIconButtonVariant variant, {
+    required bool usesVariantColors,
+    required bool inToolbar,
+    required bool isHovered,
+  }) {
+    if (!widget.selected) {
+      return widget.fill ?? _fillColor(theme, variant, isHovered: isHovered);
+    }
+    return widget.selectedFill ??
+        (variant == CLIconButtonVariant.secondary
+            ? Color.alphaBlend(
+                theme.colors.controlHighlight,
+                theme.colors.floatingControl,
+              )
+            : usesVariantColors
+            ? _fillColor(theme, variant, isHovered: false)
+            : inToolbar
+            ? isHovered
+                  ? theme.colors.controlHighlight
+                  : theme.colors.control
+            : theme.colors.controlHighlight);
+  }
+
+  Widget _buildPressable(CLThemeData theme, _IconButtonVisuals visuals) {
+    return CLPressable(
+      onTap: widget.onPressed,
+      borderRadius: visuals.radius,
+      pressedScale: 1 + 4 / visuals.extent,
+      child: SizedBox.square(
+        dimension: visuals.extent,
+        child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: clSmoothDecoration(
+            borderRadius: visuals.radius,
+            side: visuals.outlined
+                ? BorderSide(color: widget.outlineColor ?? theme.colors.outline)
+                : BorderSide.none,
           ),
+          child: _buildSurface(visuals),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSurface(_IconButtonVisuals visuals) {
+    return CLSurface(
+      fill: visuals.fill,
+      borderRadius: visuals.radius,
+      frosted:
+          visuals.variant != CLIconButtonVariant.ghost && visuals.fill.a > 0,
+      frostSigma: 36,
+      child: Center(
+        child: Icon(
+          widget.icon,
+          size: _iconSize(visuals.size, visuals.variant),
+          color: visuals.iconColor,
         ),
       ),
     );
@@ -258,4 +289,24 @@ class _CLIconButtonState extends State<CLIconButton> {
       CLIconButtonVariant.danger => theme.colors.onDanger,
     };
   }
+}
+
+class _IconButtonVisuals {
+  const _IconButtonVisuals({
+    required this.size,
+    required this.extent,
+    required this.radius,
+    required this.variant,
+    required this.outlined,
+    required this.fill,
+    required this.iconColor,
+  });
+
+  final CLControlSize size;
+  final double extent;
+  final BorderRadius radius;
+  final CLIconButtonVariant variant;
+  final bool outlined;
+  final Color fill;
+  final Color iconColor;
 }

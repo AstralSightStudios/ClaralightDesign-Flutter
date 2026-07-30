@@ -166,8 +166,8 @@ class CLTextField extends StatefulWidget {
 
 class _CLTextFieldState extends State<CLTextField>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  late TextEditingController _controller;
-  late FocusNode _focusNode;
+  TextEditingController? _ownedController;
+  FocusNode? _ownedFocusNode;
   final FocusNode _operationFocusNode = FocusNode(
     debugLabel: 'CLTextField numeric operation focus',
   );
@@ -178,8 +178,6 @@ class _CLTextFieldState extends State<CLTextField>
   late final NumericScrubCursorSession _scrubCursorSession;
 
   int? _scrubMouseDevice;
-  bool _ownsController = false;
-  bool _ownsFocusNode = false;
   bool _showValidationError = false;
   bool _operationFocusRequested = false;
   bool _lifecycleSuspended = false;
@@ -237,13 +235,13 @@ class _CLTextFieldState extends State<CLTextField>
   void didUpdateWidget(CLTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onTextChanged);
-      if (_ownsController) _controller.dispose();
+      _ownedController?.dispose();
       _adoptController();
     }
     if (widget.focusNode != oldWidget.focusNode) {
-      _focusNode.removeListener(_onFocusChanged);
-      if (_ownsFocusNode) _focusNode.dispose();
+      final oldFocusNode = oldWidget.focusNode ?? _ownedFocusNode!;
+      oldFocusNode.removeListener(_onFocusChanged);
+      _ownedFocusNode?.dispose();
       _adoptFocusNode();
     }
     if (oldWidget.wrapNumericScrubCursor && !widget.wrapNumericScrubCursor) {
@@ -257,48 +255,49 @@ class _CLTextFieldState extends State<CLTextField>
     }
   }
 
+  TextEditingController get _controller =>
+      widget.controller ?? _ownedController!;
+
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
+
   void _adoptController() {
-    _ownsController = widget.controller == null;
-    _controller = widget.controller ?? TextEditingController();
-    _controller.addListener(_onTextChanged);
+    _ownedController = widget.controller == null
+        ? TextEditingController()
+        : null;
   }
 
   void _adoptFocusNode() {
-    _ownsFocusNode = widget.focusNode == null;
-    _focusNode = widget.focusNode ?? FocusNode();
+    _ownedFocusNode = widget.focusNode == null ? FocusNode() : null;
     _focusNode.addListener(_onFocusChanged);
-  }
-
-  void _onTextChanged() {
-    if (mounted) setState(() {});
   }
 
   void _onFocusChanged() {
     if (_focusNode.hasFocus) {
       if (_textEditingStartText == null) {
-        _textEditingStartText = _controller.text;
-        _textEditingChanged = false;
+        setState(() {
+          _textEditingStartText = _controller.text;
+          _textEditingChanged = false;
+        });
       }
-    } else {
-      if (_numericInteractionStartText != null) {
-        _cancelNumericInteraction();
-      }
-      if (_isNumeric && !_isValidNumber) {
-        _showValidationError = true;
-        _cancelTextEditing();
-      } else {
-        _commitTextEditing();
-      }
-      _closeScrub(immediate: true);
+      return;
     }
-    if (mounted) setState(() {});
+
+    if (_numericInteractionStartText != null) {
+      _cancelNumericInteraction();
+    }
+    if (_isNumeric && !_isValidNumber) {
+      setState(() => _showValidationError = true);
+      _cancelTextEditing();
+    } else {
+      _commitTextEditing();
+    }
+    _closeScrub(immediate: true);
   }
 
   void _onOperationFocusChanged() {
-    if (!_operationFocusNode.hasPrimaryFocus) {
-      _operationFocusRequested = false;
+    if (!_operationFocusNode.hasPrimaryFocus && _operationFocusRequested) {
+      setState(() => _operationFocusRequested = false);
     }
-    if (mounted) setState(() {});
   }
 
   @override
@@ -321,7 +320,6 @@ class _CLTextFieldState extends State<CLTextField>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scrollCommitTimer?.cancel();
-    _controller.removeListener(_onTextChanged);
     _focusNode.removeListener(_onFocusChanged);
     if (_numericInteractionStartText != null) {
       _cancelNumericInteraction();
@@ -336,8 +334,8 @@ class _CLTextFieldState extends State<CLTextField>
     _rulerSpacingTransition.dispose();
     _operationFocusNode.removeListener(_onOperationFocusChanged);
     _operationFocusNode.dispose();
-    if (_ownsController) _controller.dispose();
-    if (_ownsFocusNode) _focusNode.dispose();
+    _ownedController?.dispose();
+    _ownedFocusNode?.dispose();
     super.dispose();
   }
 
@@ -589,17 +587,18 @@ class _CLTextFieldState extends State<CLTextField>
       _requestEditingFocus();
     }
 
-    _scrubGestureActive = true;
-    _scrubVisualMounted = true;
-    _scrubDy = 0;
-    _scrubTier = 0;
-    _scrubProgress = 0;
-    _scrubMultiplier = 1;
-    _resetRulerSpacing();
+    setState(() {
+      _scrubGestureActive = true;
+      _scrubVisualMounted = true;
+      _scrubDy = 0;
+      _scrubTier = 0;
+      _scrubProgress = 0;
+      _scrubMultiplier = 1;
+      _resetRulerSpacing();
+    });
 
     if (!_scrubPortal.isShowing) _scrubPortal.show();
     _keepScrubMouseCursor();
-    if (mounted) setState(() {});
     _animateScrubReveal(show: true);
     return true;
   }
@@ -612,26 +611,11 @@ class _CLTextFieldState extends State<CLTextField>
       position: update.position,
     );
     final delta = corrected.delta;
-    _scrubDy += delta.dy;
-    _transitionRulerSpacing(_updateScrubMultiplierForDy(_scrubDy));
-
-    if (delta.dx != 0) {
-      final direction = delta.dx.sign;
-      if (!_canStep(direction)) {
-        _scrubProgress = 0;
-      } else {
-        final combined = _scrubProgress + delta.dx / _currentRulerSpacing;
-        final steps = combined.truncate();
-        if (steps == 0) {
-          _scrubProgress = combined;
-        } else if (_handlePointerStep(steps)) {
-          _scrubProgress = combined - steps;
-          if (!_canStep(steps.sign.toDouble())) _scrubProgress = 0;
-        } else {
-          _scrubProgress = 0;
-        }
-      }
-    }
+    setState(() {
+      _scrubDy += delta.dy;
+      _transitionRulerSpacing(_updateScrubMultiplierForDy(_scrubDy));
+      _applyHorizontalScrub(delta.dx);
+    });
 
     _scrubCursorSession.maybeWrap(
       position: corrected.position,
@@ -642,43 +626,65 @@ class _CLTextFieldState extends State<CLTextField>
       canDecrease: _canStep(-1),
     );
     _keepScrubMouseCursor();
-    if (mounted) setState(() {});
+  }
+
+  void _applyHorizontalScrub(double deltaX) {
+    if (deltaX == 0) return;
+    final direction = deltaX.sign;
+    if (!_canStep(direction)) {
+      _scrubProgress = 0;
+      return;
+    }
+
+    final combined = _scrubProgress + deltaX / _currentRulerSpacing;
+    final steps = combined.truncate();
+    if (steps == 0) {
+      _scrubProgress = combined;
+    } else if (_handlePointerStep(steps)) {
+      _scrubProgress = combined - steps;
+      if (!_canStep(steps.sign.toDouble())) _scrubProgress = 0;
+    } else {
+      _scrubProgress = 0;
+    }
   }
 
   void _endScrub() {
     if (!_scrubGestureActive) return;
     _scrubCursorSession.finish();
-    _scrubMouseDevice = null;
-    _scrubGestureActive = false;
-    _scrubProgress = 0;
-    _scrubDy = 0;
-    _scrubTier = 0;
-    if (mounted) setState(() {});
+    setState(() {
+      _scrubMouseDevice = null;
+      _scrubGestureActive = false;
+      _scrubProgress = 0;
+      _scrubDy = 0;
+      _scrubTier = 0;
+    });
     _animateScrubReveal(show: false);
   }
 
   void _closeScrub({required bool immediate}) {
     if (!_scrubGestureActive && !_scrubVisualMounted) return;
     _scrubCursorSession.finish();
-    _scrubMouseDevice = null;
-    _scrubGestureActive = false;
-    _scrubProgress = 0;
-    _scrubDy = 0;
-    _scrubTier = 0;
+    setState(() {
+      _scrubMouseDevice = null;
+      _scrubGestureActive = false;
+      _scrubProgress = 0;
+      _scrubDy = 0;
+      _scrubTier = 0;
+      if (immediate) {
+        _scrubMultiplier = 1;
+        _resetRulerSpacing();
+        _scrubVisualMounted = false;
+      }
+    });
 
     if (!immediate) {
-      if (mounted) setState(() {});
       _animateScrubReveal(show: false);
       return;
     }
 
     _scrubReveal.stop();
     _scrubReveal.value = 0;
-    _scrubMultiplier = 1;
-    _resetRulerSpacing();
     if (_scrubPortal.isShowing) _scrubPortal.hide();
-    _scrubVisualMounted = false;
-    if (mounted) setState(() {});
   }
 
   void _handleScrubRevealStatus(AnimationStatus status) {
@@ -914,30 +920,62 @@ class _CLTextFieldState extends State<CLTextField>
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _controller,
+        _focusNode,
+        _operationFocusNode,
+      ]),
+      builder: (context, _) => _buildTextField(context),
+    );
+  }
+
+  Widget _buildTextField(BuildContext context) {
     final theme = CLTheme.of(context);
-    final colors = theme.colors;
     final focused =
         _focusNode.hasFocus ||
         (_operationFocusRequested && _operationFocusNode.hasPrimaryFocus);
+    final textStyle = _textStyle(theme);
+    final field = _buildEditableText(theme, textStyle);
+    final horizontalPad = widget.size == CLControlSize.small ? 10.0 : 12.0;
+    final borderRadius =
+        widget.borderRadiusGeometry ??
+        BorderRadius.circular(widget.borderRadius ?? theme.radii.control);
+    final content = _showsStepper
+        ? _buildStepperContent(field, theme, focused, horizontalPad)
+        : _buildPlainContent(field, theme);
+    final control = _buildControl(
+      theme: theme,
+      focused: focused,
+      borderRadius: borderRadius,
+      horizontalPad: horizontalPad,
+      content: content,
+    );
+    return _buildSemantics(control);
+  }
+
+  TextStyle _textStyle(CLThemeData theme) {
     final useMono = widget.mono || _showsStepper;
+    return (useMono
+            ? theme.typography.monoStrong
+            : widget.size == CLControlSize.large
+            ? theme.typography.body
+            : theme.typography.callout)
+        .copyWith(
+          color: widget.enabled
+              ? theme.colors.textPrimary
+              : theme.colors.textDisabled,
+        );
+  }
 
-    final textStyle =
-        (useMono
-                ? theme.typography.monoStrong
-                : widget.size == CLControlSize.large
-                ? theme.typography.body
-                : theme.typography.callout)
-            .copyWith(
-              color: widget.enabled ? colors.textPrimary : colors.textDisabled,
-            );
-
-    final field = CupertinoTextField(
+  Widget _buildEditableText(CLThemeData theme, TextStyle textStyle) {
+    return CupertinoTextField(
       controller: _controller,
       focusNode: _focusNode,
       placeholder: widget.placeholder,
-      placeholderStyle: textStyle.copyWith(color: colors.textHint),
+      placeholderStyle: textStyle.copyWith(color: theme.colors.textHint),
       style: textStyle,
-      cursorColor: _showsError ? colors.danger : colors.accent,
+      cursorColor: _showsError ? theme.colors.danger : theme.colors.accent,
       keyboardType: widget.keyboardType,
       inputFormatters: widget.inputFormatters,
       autofocus: widget.autofocus,
@@ -952,62 +990,82 @@ class _CLTextFieldState extends State<CLTextField>
       padding: EdgeInsets.zero,
       maxLines: 1,
     );
+  }
 
-    final horizontalPad = widget.size == CLControlSize.small ? 10.0 : 12.0;
-    final borderRadius =
-        widget.borderRadiusGeometry ??
-        BorderRadius.circular(widget.borderRadius ?? theme.radii.control);
-
-    final content = _showsStepper
-        ? Row(
-            children: [
-              if (widget.prefix case final prefix?)
-                _NumericPrefixScrubRegion(
-                  key: const Key('cl-text-field-prefix-scrub-zone'),
-                  enabled: _canAdjustNumber,
-                  height: _height,
-                  onRequestOperationFocus: _requestOperationFocus,
-                  onScrubPointerDown: _prepareScrubCursor,
-                  onScrubStart: _beginScrub,
-                  onScrubUpdate: _updateScrub,
-                  onScrubEnd: _endScrub,
-                  onAdjustmentEnd: (canceled) => canceled
-                      ? _cancelNumericInteraction()
-                      : _commitNumericInteraction(),
-                  child: Padding(
-                    padding: EdgeInsets.only(left: horizontalPad, right: 10),
-                    child: _stepperSlot(prefix, theme, unit: false),
-                  ),
-                )
-              else
-                SizedBox(width: horizontalPad),
-              Expanded(
-                child: KeyedSubtree(
-                  key: _scrubAnchorKey,
-                  child: _buildNumericBody(
-                    field: field,
-                    theme: theme,
-                    focused: focused,
-                  ),
-                ),
-              ),
-            ],
+  Widget _buildStepperContent(
+    Widget field,
+    CLThemeData theme,
+    bool focused,
+    double horizontalPad,
+  ) {
+    return Row(
+      children: [
+        if (widget.prefix case final prefix?)
+          _NumericPrefixScrubRegion(
+            key: const Key('cl-text-field-prefix-scrub-zone'),
+            enabled: _canAdjustNumber,
+            height: _height,
+            onRequestOperationFocus: _requestOperationFocus,
+            onScrubPointerDown: _prepareScrubCursor,
+            onScrubStart: _beginScrub,
+            onScrubUpdate: _updateScrub,
+            onScrubEnd: _endScrub,
+            onAdjustmentEnd: _finishAdjustment,
+            child: Padding(
+              padding: EdgeInsets.only(left: horizontalPad, right: 10),
+              child: _stepperSlot(prefix, theme, unit: false),
+            ),
           )
-        : Row(
-            children: [
-              if (widget.prefix != null) ...[
-                _slot(widget.prefix!, theme),
-                SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
-              ],
-              Expanded(child: Center(child: field)),
-              if (widget.suffix != null) ...[
-                SizedBox(width: widget.size == CLControlSize.small ? 6 : 8),
-                _slot(widget.suffix!, theme),
-              ],
-            ],
-          );
+        else
+          SizedBox(width: horizontalPad),
+        Expanded(
+          child: KeyedSubtree(
+            key: _scrubAnchorKey,
+            child: _buildNumericBody(
+              field: field,
+              theme: theme,
+              focused: focused,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
-    final control = GestureDetector(
+  void _finishAdjustment(bool canceled) {
+    if (canceled) {
+      _cancelNumericInteraction();
+    } else {
+      _commitNumericInteraction();
+    }
+  }
+
+  Widget _buildPlainContent(Widget field, CLThemeData theme) {
+    final gap = widget.size == CLControlSize.small ? 6.0 : 8.0;
+    return Row(
+      children: [
+        if (widget.prefix case final prefix?) ...[
+          _slot(prefix, theme),
+          SizedBox(width: gap),
+        ],
+        Expanded(child: Center(child: field)),
+        if (widget.suffix case final suffix?) ...[
+          SizedBox(width: gap),
+          _slot(suffix, theme),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildControl({
+    required CLThemeData theme,
+    required bool focused,
+    required BorderRadiusGeometry borderRadius,
+    required double horizontalPad,
+    required Widget content,
+  }) {
+    final colors = theme.colors;
+    return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.enabled && !widget.readOnly ? _requestEditingFocus : null,
       child: Focus(
@@ -1043,7 +1101,9 @@ class _CLTextFieldState extends State<CLTextField>
         ),
       ),
     );
+  }
 
+  Widget _buildSemantics(Widget control) {
     final increasedValue = _semanticSteppedValue(1);
     final decreasedValue = _semanticSteppedValue(-1);
     return Semantics(
@@ -1055,20 +1115,8 @@ class _CLTextFieldState extends State<CLTextField>
           : null,
       increasedValue: increasedValue,
       decreasedValue: decreasedValue,
-      onIncrease: increasedValue != null
-          ? () {
-              _beginNumericInteraction();
-              _bump(1);
-              _commitNumericInteraction();
-            }
-          : null,
-      onDecrease: decreasedValue != null
-          ? () {
-              _beginNumericInteraction();
-              _bump(-1);
-              _commitNumericInteraction();
-            }
-          : null,
+      onIncrease: increasedValue != null ? () => _semanticStep(1) : null,
+      onDecrease: decreasedValue != null ? () => _semanticStep(-1) : null,
       child: TextFieldTapRegion(
         child: Listener(
           onPointerSignal: _showsStepper ? _handlePointerSignal : null,
@@ -1080,6 +1128,12 @@ class _CLTextFieldState extends State<CLTextField>
         ),
       ),
     );
+  }
+
+  void _semanticStep(double direction) {
+    _beginNumericInteraction();
+    _bump(direction);
+    _commitNumericInteraction();
   }
 
   Widget _buildNumericBody({
@@ -1788,44 +1842,42 @@ class _NumericStepperState extends State<_NumericStepper>
                 direction: _axis,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _ChevronButton(
-                    key: Key(
-                      _axis == Axis.vertical
-                          ? 'cl-text-field-step-up'
-                          : 'cl-text-field-step-left',
-                    ),
-                    direction: _axis == Axis.vertical
-                        ? CLNumericStepperDirection.up
-                        : CLNumericStepperDirection.left,
-                    enabled: widget.canStep(_leadingDirection),
-                    onPointerDown: (event) =>
-                        _handleButtonDown(_leadingDirection, event),
-                    onTap: () => _handleButtonTap(_leadingDirection),
-                    onTapCancel: _handleButtonCancel,
-                    onExit: () => _handleButtonExit(_leadingDirection),
-                  ),
-                  _ChevronButton(
-                    key: Key(
-                      _axis == Axis.vertical
-                          ? 'cl-text-field-step-down'
-                          : 'cl-text-field-step-right',
-                    ),
-                    direction: _axis == Axis.vertical
-                        ? CLNumericStepperDirection.down
-                        : CLNumericStepperDirection.right,
-                    enabled: widget.canStep(-_leadingDirection),
-                    onPointerDown: (event) =>
-                        _handleButtonDown(-_leadingDirection, event),
-                    onTap: () => _handleButtonTap(-_leadingDirection),
-                    onTapCancel: _handleButtonCancel,
-                    onExit: () => _handleButtonExit(-_leadingDirection),
-                  ),
+                  _buildChevron(_leadingDirection),
+                  _buildChevron(-_leadingDirection),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildChevron(int direction) {
+    final leading = direction == _leadingDirection;
+    final vertical = _axis == Axis.vertical;
+    return _ChevronButton(
+      key: Key(
+        vertical
+            ? leading
+                  ? 'cl-text-field-step-up'
+                  : 'cl-text-field-step-down'
+            : leading
+            ? 'cl-text-field-step-left'
+            : 'cl-text-field-step-right',
+      ),
+      direction: vertical
+          ? leading
+                ? CLNumericStepperDirection.up
+                : CLNumericStepperDirection.down
+          : leading
+          ? CLNumericStepperDirection.left
+          : CLNumericStepperDirection.right,
+      enabled: widget.canStep(direction),
+      onPointerDown: (event) => _handleButtonDown(direction, event),
+      onTap: () => _handleButtonTap(direction),
+      onTapCancel: _handleButtonCancel,
+      onExit: () => _handleButtonExit(direction),
     );
   }
 }
@@ -2124,27 +2176,11 @@ class _ChevronButtonState extends State<_ChevronButton> {
           behavior: HitTestBehavior.opaque,
           onTap: widget.enabled ? widget.onTap : null,
           onTapCancel: widget.enabled ? widget.onTapCancel : null,
-          child: SizedBox(
-            width: switch (widget.direction) {
-              CLNumericStepperDirection.up ||
-              CLNumericStepperDirection.down => _NumericStepper.arrowWidth,
-              CLNumericStepperDirection.left ||
-              CLNumericStepperDirection.right => _NumericStepper.arrowHeight,
-            },
-            height: switch (widget.direction) {
-              CLNumericStepperDirection.up ||
-              CLNumericStepperDirection.down => _NumericStepper.arrowHeight,
-              CLNumericStepperDirection.left ||
-              CLNumericStepperDirection.right => _NumericStepper.arrowWidth,
-            },
+          child: SizedBox.fromSize(
+            size: _buttonSize,
             child: Center(
               child: CustomPaint(
-                size: switch (widget.direction) {
-                  CLNumericStepperDirection.up ||
-                  CLNumericStepperDirection.down => const Size(8, 4.5),
-                  CLNumericStepperDirection.left ||
-                  CLNumericStepperDirection.right => const Size(4.5, 8),
-                },
+                size: _chevronSize,
                 painter: _StepChevronPainter(
                   color: color,
                   direction: widget.direction,
@@ -2156,6 +2192,18 @@ class _ChevronButtonState extends State<_ChevronButton> {
       ),
     );
   }
+
+  bool get _isVertical => switch (widget.direction) {
+    CLNumericStepperDirection.up || CLNumericStepperDirection.down => true,
+    CLNumericStepperDirection.left || CLNumericStepperDirection.right => false,
+  };
+
+  Size get _buttonSize => _isVertical
+      ? const Size(_NumericStepper.arrowWidth, _NumericStepper.arrowHeight)
+      : const Size(_NumericStepper.arrowHeight, _NumericStepper.arrowWidth);
+
+  Size get _chevronSize =>
+      _isVertical ? const Size(8, 4.5) : const Size(4.5, 8);
 }
 
 class _StepChevronPainter extends CustomPainter {
