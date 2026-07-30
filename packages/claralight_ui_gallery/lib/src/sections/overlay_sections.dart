@@ -390,48 +390,62 @@ class _MenuSectionState extends State<_MenuSection> {
                 onTap: () => _select(() {}),
               ),
               const CLDivider(),
-              CLListTile(
-                label: '图标',
-                leading: const Icon(Icons.grid_view_outlined),
-                trailing: checkmark(!_listView),
-                onTap: () => _select(() => setState(() => _listView = false)),
+              CLMenuSubmenu(
+                label: '查看方式',
+                leading: const Icon(Icons.view_quilt_outlined),
+                children: [
+                  CLListTile(
+                    label: '图标',
+                    leading: const Icon(Icons.grid_view_outlined),
+                    trailing: checkmark(!_listView),
+                    onTap: () =>
+                        _select(() => setState(() => _listView = false)),
+                  ),
+                  CLListTile(
+                    label: '列表',
+                    leading: const Icon(Icons.format_list_bulleted),
+                    trailing: checkmark(_listView),
+                    onTap: () =>
+                        _select(() => setState(() => _listView = true)),
+                  ),
+                  CLMenuSubmenu(
+                    label: '排序方式',
+                    leading: const Icon(Icons.sort),
+                    children: [
+                      for (final key in const ['名称', '种类', '日期', '标签'])
+                        CLListTile(
+                          label: key,
+                          trailing: _sortKey == key
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '升序',
+                                      style: theme.typography.caption.copyWith(
+                                        color: theme.colors.textTertiary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Icons.check,
+                                      color: theme.colors.textSecondary,
+                                    ),
+                                  ],
+                                )
+                              : null,
+                          onTap: () =>
+                              _select(() => setState(() => _sortKey = key)),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-              CLListTile(
-                label: '列表',
-                leading: const Icon(Icons.format_list_bulleted),
-                trailing: checkmark(_listView),
-                onTap: () => _select(() => setState(() => _listView = true)),
-              ),
-              const CLDivider(),
-              for (final key in const ['名称', '种类', '日期', '标签'])
-                CLListTile(
-                  label: key,
-                  trailing: _sortKey == key
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '升序',
-                              style: theme.typography.caption.copyWith(
-                                color: theme.colors.textTertiary,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.check,
-                              color: theme.colors.textSecondary,
-                            ),
-                          ],
-                        )
-                      : null,
-                  onTap: () => _select(() => setState(() => _sortKey = key)),
-                ),
             ],
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '菜单内容由 CLList 与自定义行构建',
+              '菜单支持任意层级的 morph 子菜单',
               style: theme.typography.caption.copyWith(
                 color: theme.colors.textHint,
               ),

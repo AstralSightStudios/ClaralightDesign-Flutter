@@ -6,6 +6,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/control_size.dart';
+import '../indicators/divider.dart';
+import '../lists/list_tile.dart';
 import '../scrolling/cl_list.dart';
 import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
@@ -52,6 +55,101 @@ class CLMenuController extends ChangeNotifier {
 
 typedef CLMenuButtonBuilder =
     Widget Function(BuildContext context, VoidCallback onPressed);
+
+/// A row that opens a nested page inside the nearest [CLMenu].
+///
+/// Nested pages inherit the owning menu's width, padding, surface, and motion.
+/// The row becomes a fixed header while its page is open; activating that
+/// header returns to the previous page. Empty submenus remain inert.
+class CLMenuSubmenu extends StatefulWidget {
+  const CLMenuSubmenu({
+    super.key,
+    required this.label,
+    required this.children,
+    this.leading,
+    this.tint,
+    this.size = CLControlSize.medium,
+    this.labelMaxLines = 1,
+  }) : assert(labelMaxLines == null || labelMaxLines > 0);
+
+  /// Accessible label and default text shown by the trigger/header row.
+  final String label;
+
+  /// Rows shown below the fixed header and divider.
+  final List<Widget> children;
+
+  /// Optional leading icon shared by the trigger and fixed header.
+  final Widget? leading;
+
+  /// Optional tint shared by the trigger and fixed header.
+  final Color? tint;
+
+  /// Control size shared by the trigger and fixed header.
+  final CLControlSize size;
+
+  /// Maximum lines used by the label.
+  final int? labelMaxLines;
+
+  @override
+  State<CLMenuSubmenu> createState() => _CLMenuSubmenuState();
+}
+
+class _CLMenuSubmenuState extends State<CLMenuSubmenu> {
+  final Object _identity = Object();
+  final GlobalKey _triggerKey = GlobalKey();
+  final FocusNode _focusNode = FocusNode(debugLabel: 'CLMenuSubmenu');
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _open(_CLMenuScope scope) {
+    if (widget.children.isEmpty) return;
+    scope.openSubmenu(
+      identity: _identity,
+      triggerKey: _triggerKey,
+      returnFocusNode: _focusNode,
+      definition: _CLMenuSubmenuDefinition.fromWidget(widget),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = _CLMenuScope.maybeOf(context);
+    assert(
+      scope != null,
+      'CLMenuSubmenu must be placed inside CLMenu.children or another '
+      'CLMenuSubmenu.children list.',
+    );
+
+    if (scope == null) {
+      return _CLMenuSubmenuRow(
+        definition: _CLMenuSubmenuDefinition.fromWidget(widget),
+        focusNode: _focusNode,
+        progress: 0,
+      );
+    }
+
+    final definition = _CLMenuSubmenuDefinition.fromWidget(widget);
+    scope.updateSubmenuDefinition(_identity, definition);
+    final placeholderSize = scope.placeholderSizeFor(_identity);
+    if (placeholderSize != null) {
+      return SizedBox(height: placeholderSize.height, width: double.infinity);
+    }
+
+    return KeyedSubtree(
+      key: _triggerKey,
+      child: _CLMenuSubmenuRow(
+        definition: definition,
+        focusNode: _focusNode,
+        progress: 0,
+        onPressed: widget.children.isEmpty ? null : () => _open(scope),
+      ),
+    );
+  }
+}
 
 /// The ClaraLight popup menu.
 ///
@@ -129,10 +227,15 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     damping: 28,
   );
   static const _closeMorphDuration = Duration(milliseconds: 160);
+  static const _submenuOpenDuration = Duration(milliseconds: 260);
+  static const _submenuCloseDuration = Duration(milliseconds: 180);
   static const _screenMargin = 12.0;
+  static const _retreatScale = 0.96;
+  static const _retreatOpacity = 0.72;
   final _link = LayerLink();
   final _anchorKey = GlobalKey();
   final _listKey = GlobalKey();
+  final _overlayKey = GlobalKey();
   final _portal = OverlayPortalController();
   final _focusScopeNode = FocusScopeNode(
     debugLabel: 'CLMenu',
@@ -146,6 +249,7 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   late final AnimationController _content;
   late final AnimationController _resize;
   late final AnimationController _pressGlow;
+  late final AnimationController _stackClose;
 
   FocusNode? _previousFocus;
   Offset _pressPosition = Offset.zero;
@@ -165,6 +269,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   double _collapsedWidth = 44;
   double _collapsedHeight = 44;
   double _expandedWidth = 44;
+  Rect _rootButtonRect = Rect.zero;
+  Offset _rootOpeningAnchor = Offset.zero;
+  int _submenuRevision = 0;
+  int _submenuGeneration = 0;
+  final List<_CLMenuPageEntry> _submenuPages = [];
 
   CLMenuController get _controller => widget.controller ?? _internalController;
 
@@ -217,6 +326,11 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 90),
       reverseDuration: const Duration(milliseconds: 180),
     );
+    _stackClose = AnimationController(
+      vsync: this,
+      duration: _closeMorphDuration,
+      animationBehavior: AnimationBehavior.preserve,
+    )..addListener(_handleSubmenuMotionTick);
     _controller._attach(_handleControllerState);
     if (_controller.isOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -243,7 +357,13 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _travel.stop();
     _morph.stop();
     _resize.stop();
+    for (final page in _submenuPages) {
+      page.progress.stop();
+      if (page.started) page.progress.value = 1;
+    }
     if (_open) {
+      _stackClose.stop();
+      _stackClose.value = 0;
       _travel.value = 1;
       _morph.value = 1;
       _resize.value = 1;
@@ -266,6 +386,13 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _travel.value = 1;
     _morph.value = 1;
     _resize.value = 1;
+    if (_submenuPages.isNotEmpty) {
+      _stackClose.animateTo(
+        1,
+        duration: CLMotion.reducedFade,
+        curve: CLMotion.easeOut,
+      );
+    }
     _animateReducedContent(0).whenCompleteOrCancel(() {
       if (!mounted || !_closing || closeGeneration != _closeGeneration) return;
       _finishClose();
@@ -276,6 +403,13 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   }
 
   void _startNormalCloseAnimation() {
+    if (_submenuPages.isNotEmpty) {
+      _stackClose.animateTo(
+        1,
+        duration: _closeMorphDuration,
+        curve: Curves.easeOutCubic,
+      );
+    }
     _travel.animateWith(
       SpringSimulation(
         _closeTravelSpring,
@@ -329,6 +463,12 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _content.dispose();
     _resize.dispose();
     _pressGlow.dispose();
+    _stackClose
+      ..removeListener(_handleSubmenuMotionTick)
+      ..dispose();
+    for (final page in _submenuPages) {
+      page.dispose();
+    }
     _focusScopeNode.dispose();
     _internalController.dispose();
     super.dispose();
@@ -353,32 +493,32 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   }
 
   void _show() {
+    if (_submenuPages.isNotEmpty) _clearSubmenus();
+    _stackClose.stop();
+    _stackClose.value = 0;
     final overlayBox =
         Overlay.of(context).context.findRenderObject()! as RenderBox;
     final buttonBox =
         _anchorKey.currentContext!.findRenderObject()! as RenderBox;
-    final origin = buttonBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-    final buttonRect = origin & buttonBox.size;
-    final overlaySize = overlayBox.size;
+    final buttonRect = MatrixUtils.transformRect(
+      buttonBox.getTransformTo(overlayBox),
+      Offset.zero & buttonBox.size,
+    );
+    final safeRect = _safeRectFor(overlayBox.size);
+    _rootButtonRect = buttonRect;
     _collapsedWidth = buttonRect.width;
     _collapsedHeight = buttonRect.height;
 
-    final growLeft = buttonRect.center.dx > overlaySize.width / 2;
-    final mediaPadding = MediaQuery.maybePaddingOf(context) ?? EdgeInsets.zero;
-    final safeLeft = mediaPadding.left + _screenMargin;
-    final safeRight = overlaySize.width - mediaPadding.right - _screenMargin;
+    final growLeft = buttonRect.center.dx > safeRect.center.dx;
     final availableWidth = growLeft
-        ? buttonRect.right - safeLeft
-        : safeRight - buttonRect.left;
+        ? buttonRect.right - safeRect.left
+        : safeRect.right - buttonRect.left;
     _expandedWidth = math.min(
       widget.menuWidth,
       math.max(_collapsedWidth, availableWidth),
     );
-    _spaceBelow = math.max(
-      overlaySize.height - buttonRect.top - _screenMargin,
-      _collapsedHeight,
-    );
-    _spaceAbove = math.max(buttonRect.bottom - _screenMargin, _collapsedHeight);
+    _spaceBelow = math.max(safeRect.bottom - buttonRect.top, _collapsedHeight);
+    _spaceAbove = math.max(buttonRect.bottom - safeRect.top, _collapsedHeight);
     _measurementLimit = math.max(_spaceBelow, _spaceAbove);
     _anchor = Alignment(growLeft ? 1 : -1, -1);
 
@@ -398,6 +538,10 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     if (_measuring) {
       _growDown = _spaceBelow >= size.height || _spaceBelow >= _spaceAbove;
       _anchor = Alignment(_anchor.x, _growDown ? -1 : 1);
+      _rootOpeningAnchor = Offset(
+        _anchor.x > 0 ? _rootButtonRect.right : _rootButtonRect.left,
+        _anchor.y > 0 ? _rootButtonRect.bottom : _rootButtonRect.top,
+      );
       final available = _growDown ? _spaceBelow : _spaceAbove;
       final measuredHeight = math.max(
         _collapsedHeight,
@@ -515,11 +659,214 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     }
   }
 
+  Rect _safeRectFor(Size overlaySize) {
+    final media = MediaQuery.of(context);
+    final left =
+        math.max(media.viewPadding.left, media.viewInsets.left) + _screenMargin;
+    final top =
+        math.max(media.viewPadding.top, media.viewInsets.top) + _screenMargin;
+    final right =
+        overlaySize.width -
+        math.max(media.viewPadding.right, media.viewInsets.right) -
+        _screenMargin;
+    final bottom =
+        overlaySize.height -
+        math.max(media.viewPadding.bottom, media.viewInsets.bottom) -
+        _screenMargin;
+    final safeLeft = left.clamp(0.0, overlaySize.width).toDouble();
+    final safeTop = top.clamp(0.0, overlaySize.height).toDouble();
+    return Rect.fromLTRB(
+      safeLeft,
+      safeTop,
+      right.clamp(safeLeft, overlaySize.width).toDouble(),
+      bottom.clamp(safeTop, overlaySize.height).toDouble(),
+    );
+  }
+
+  void _openSubmenu({
+    required Object identity,
+    required GlobalKey triggerKey,
+    required FocusNode returnFocusNode,
+    required _CLMenuSubmenuDefinition definition,
+  }) {
+    if (!_open || _closing || definition.children.isEmpty) return;
+    if (_submenuPages.any((page) => identical(page.sourceIdentity, identity))) {
+      return;
+    }
+
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final triggerBox = triggerKey.currentContext?.findRenderObject();
+    if (triggerBox is! RenderBox || !triggerBox.hasSize) return;
+    final sourceRect = MatrixUtils.transformRect(
+      triggerBox.getTransformTo(overlayBox),
+      Offset.zero & triggerBox.size,
+    );
+    final safeRect = _safeRectFor(overlayBox.size);
+    if (safeRect.isEmpty) return;
+    final resolvedPadding = widget.padding.resolve(Directionality.of(context));
+    final preferredWidth = math.max(
+      _expandedWidth,
+      sourceRect.width + resolvedPadding.horizontal,
+    );
+    final targetWidth = math.min(preferredWidth, safeRect.width);
+    final progress = AnimationController(
+      vsync: this,
+      animationBehavior: AnimationBehavior.preserve,
+    )..addListener(_handleSubmenuMotionTick);
+    final page = _CLMenuPageEntry(
+      generation: ++_submenuGeneration,
+      sourceIdentity: identity,
+      definition: definition,
+      sourceRect: sourceRect,
+      placeholderSize: triggerBox.size,
+      safeRect: safeRect,
+      padding: resolvedPadding,
+      targetWidth: targetWidth,
+      returnFocusNode: returnFocusNode,
+      progress: progress,
+      onProgressTick: _handleSubmenuMotionTick,
+    );
+    _submenuPages.add(page);
+    _submenuRevision++;
+    setState(() {});
+  }
+
+  void _handleSubmenuSize(_CLMenuPageEntry page, Size size) {
+    if (!mounted || !_open || !_submenuPages.contains(page) || size.isEmpty) {
+      return;
+    }
+    final targetHeight = math.min(
+      math.max(size.height, page.sourceRect.height),
+      page.safeRect.height,
+    );
+    const surfaceInset = 1.0;
+    final desiredLeft = page.sourceRect.left - page.padding.left - surfaceInset;
+    final desiredTop = page.sourceRect.top - page.padding.top - surfaceInset;
+    final maxLeft = page.safeRect.right - page.targetWidth;
+    final maxTop = page.safeRect.bottom - targetHeight;
+    page.targetRect = Rect.fromLTWH(
+      desiredLeft.clamp(page.safeRect.left, maxLeft).toDouble(),
+      desiredTop.clamp(page.safeRect.top, maxTop).toDouble(),
+      page.targetWidth,
+      targetHeight,
+    );
+
+    if (page.started) {
+      setState(() {});
+      return;
+    }
+
+    page.started = true;
+    _submenuRevision++;
+    setState(() {});
+    if (_disableAnimations) {
+      page.progress.animateTo(
+        1,
+        duration: CLMotion.reducedFade,
+        curve: CLMotion.easeOut,
+      );
+    } else {
+      page.progress.animateTo(
+        1,
+        duration: _submenuOpenDuration,
+        curve: Curves.easeOutCubic,
+      );
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _open && _submenuPages.contains(page)) {
+        page.headerFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _popSubmenu(_CLMenuPageEntry page) {
+    if (!_open || _closing || _submenuPages.isEmpty) return;
+    if (!identical(_submenuPages.last, page)) return;
+    // The trigger and header occupy the same screen rect. Ignore a second tap
+    // until the push settles so a quick double-tap cannot open and immediately
+    // close the submenu, which otherwise looks like a missed interaction.
+    if (page.progress.isAnimating && page.progress.value < 0.999) return;
+    final generation = ++page.generation;
+    final duration = _disableAnimations
+        ? CLMotion.reducedFade
+        : _submenuCloseDuration;
+    page.progress
+        .animateBack(0, duration: duration, curve: Curves.easeOutCubic)
+        .whenCompleteOrCancel(() {
+          if (!mounted || !_open || _closing) return;
+          if (_submenuPages.isEmpty || !identical(_submenuPages.last, page)) {
+            return;
+          }
+          if (page.generation != generation || page.progress.value > 0.001) {
+            return;
+          }
+          _submenuPages.removeLast();
+          _submenuRevision++;
+          page.dispose();
+          setState(() {});
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _open && page.returnFocusNode.canRequestFocus) {
+              page.returnFocusNode.requestFocus();
+            }
+          });
+        });
+  }
+
+  void _handleSubmenuMotionTick() {
+    if (mounted) setState(() {});
+  }
+
+  void _updateSubmenuDefinition(
+    Object identity,
+    _CLMenuSubmenuDefinition definition,
+  ) {
+    for (final page in _submenuPages) {
+      if (identical(page.sourceIdentity, identity)) {
+        if (page.definition.matches(definition)) return;
+        page.definition = definition;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _submenuPages.contains(page)) setState(() {});
+        });
+        return;
+      }
+    }
+  }
+
+  void _clearSubmenus() {
+    if (_submenuPages.isEmpty) return;
+    _submenuGeneration++;
+    final pages = List<_CLMenuPageEntry>.of(_submenuPages);
+    _submenuPages.clear();
+    _submenuRevision++;
+    for (final page in pages) {
+      page.dispose();
+    }
+  }
+
+  double _submenuDepthForPage(int pageIndex) {
+    var depth = 0.0;
+    for (var i = pageIndex; i < _submenuPages.length; i++) {
+      final page = _submenuPages[i];
+      if (page.started) depth += page.progress.value;
+    }
+    return depth;
+  }
+
+  double _submenuContentOpacityForPage(int pageIndex) {
+    final depth = _submenuDepthForPage(pageIndex);
+    if (depth <= 0.001) return 1;
+    return math.pow(_retreatOpacity, depth).toDouble();
+  }
+
   void _hide() {
     _open = false;
     _closing = true;
     _measuring = false;
     final closeGeneration = ++_closeGeneration;
+    for (final page in _submenuPages) {
+      page.generation++;
+    }
     _clearPanelPress();
     widget.onOpenChanged?.call(false);
     setState(() {});
@@ -554,6 +901,9 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
     _closing = false;
     _travel.value = 0;
     _morph.value = 0;
+    _clearSubmenus();
+    _stackClose.stop();
+    _stackClose.value = 0;
     if (_portal.isShowing) _portal.hide();
     _restorePreviousFocus();
     if (mounted) setState(() {});
@@ -657,74 +1007,307 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
   }
 
   Widget _buildOverlay(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _open) _controller.close();
-      },
-      child: CallbackShortcuts(
-        bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.escape): _controller.close,
+    final rootIsActive = !_submenuPages.any((page) => page.started);
+    return _CLMenuScope(
+      state: this,
+      revision: _submenuRevision,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && _open) _controller.close();
         },
-        child: FocusTraversalGroup(
-          child: FocusScope(
-            node: _focusScopeNode,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: Listener(
-                    behavior: _open
-                        ? HitTestBehavior.opaque
-                        : HitTestBehavior.translucent,
-                    onPointerDown: (_) => _controller.close(),
+        child: CallbackShortcuts(
+          bindings: <ShortcutActivator, VoidCallback>{
+            const SingleActivator(LogicalKeyboardKey.escape): _controller.close,
+          },
+          child: FocusTraversalGroup(
+            child: FocusScope(
+              node: _focusScopeNode,
+              child: Stack(
+                key: _overlayKey,
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: Listener(
+                      behavior: _open
+                          ? HitTestBehavior.opaque
+                          : HitTestBehavior.translucent,
+                      onPointerDown: (_) => _controller.close(),
+                    ),
                   ),
-                ),
-                if (_measuring)
-                  CompositedTransformFollower(
-                    link: _link,
-                    showWhenUnlinked: false,
-                    targetAnchor: _anchor,
-                    followerAnchor: _anchor,
-                    child: Align(
-                      alignment: _anchor,
-                      child: ExcludeFocus(
-                        child: ExcludeSemantics(
-                          child: IgnorePointer(
-                            child: Opacity(
-                              opacity: 0,
-                              child: _buildMeasuredList(
-                                maxHeight: _measurementLimit,
+                  if (_measuring)
+                    CompositedTransformFollower(
+                      link: _link,
+                      showWhenUnlinked: false,
+                      targetAnchor: _anchor,
+                      followerAnchor: _anchor,
+                      child: Align(
+                        alignment: _anchor,
+                        child: ExcludeFocus(
+                          child: ExcludeSemantics(
+                            child: IgnorePointer(
+                              child: Opacity(
+                                opacity: 0,
+                                child: _buildMeasuredList(
+                                  maxHeight: _measurementLimit,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  )
-                else
-                  AnimatedBuilder(
-                    animation: Listenable.merge([
-                      _travel,
-                      _morph,
-                      _content,
-                      _resize,
-                      _pressGlow,
-                    ]),
-                    child: _buildMeasuredList(
-                      maxHeight: _growDown ? _spaceBelow : _spaceAbove,
-                    ),
-                    builder: (context, child) => CompositedTransformFollower(
-                      link: _link,
-                      showWhenUnlinked: false,
-                      targetAnchor: _anchor,
-                      followerAnchor: _anchor,
-                      offset: _panelTranslation,
-                      child: Align(
-                        alignment: _anchor,
-                        child: _buildPanel(child!),
+                    )
+                  else
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        _travel,
+                        _morph,
+                        _content,
+                        _resize,
+                        _pressGlow,
+                      ]),
+                      child: _buildMeasuredList(
+                        maxHeight: _growDown ? _spaceBelow : _spaceAbove,
+                      ),
+                      builder: (context, child) => CompositedTransformFollower(
+                        link: _link,
+                        showWhenUnlinked: false,
+                        targetAnchor: _anchor,
+                        followerAnchor: _anchor,
+                        offset: _panelTranslation,
+                        child: Align(
+                          alignment: _anchor,
+                          child: _buildPageInteraction(
+                            active: rootIsActive && _open,
+                            child: _buildRetreatedPage(
+                              pageIndex: 0,
+                              alignment: _anchor,
+                              child: _buildPanel(child!),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  for (var i = 0; i < _submenuPages.length; i++)
+                    _buildSubmenuPage(_submenuPages[i], i),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageInteraction({required bool active, required Widget child}) {
+    return IgnorePointer(
+      ignoring: !active,
+      child: ExcludeFocus(
+        excluding: !active,
+        child: ExcludeSemantics(excluding: !active, child: child),
+      ),
+    );
+  }
+
+  Widget _buildRetreatedPage({
+    required int pageIndex,
+    required Alignment alignment,
+    Offset? origin,
+    required Widget child,
+  }) {
+    final rawDepth = _submenuDepthForPage(pageIndex);
+    final depth = _closing ? rawDepth * (1 - _stackClose.value) : rawDepth;
+    if (depth <= 0.001) return child;
+    final scale = _disableAnimations
+        ? 1.0
+        : math.pow(_retreatScale, depth).toDouble();
+    final transform = Matrix4.identity()..scaleByDouble(scale, scale, 1, 1);
+    return RepaintBoundary(
+      child: Transform(
+        alignment: origin == null ? alignment : null,
+        origin: origin,
+        transform: transform,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildSubmenuPage(_CLMenuPageEntry page, int routeIndex) {
+    if (!page.started || page.targetRect == null) {
+      return Positioned(
+        left: page.safeRect.left,
+        top: page.safeRect.top,
+        width: page.targetWidth,
+        child: IgnorePointer(
+          child: ExcludeFocus(
+            child: ExcludeSemantics(
+              child: Opacity(
+                opacity: 0,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: page.safeRect.height),
+                  child: _buildSubmenuContent(page, measuring: true),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final progress = page.progress.value.clamp(0.0, 1.0).toDouble();
+    final targetRect = page.targetRect!;
+    final currentRect = _disableAnimations
+        ? targetRect
+        : Rect.lerp(page.sourceRect, targetRect, progress)!;
+    final isTop =
+        _submenuPages.isNotEmpty && identical(_submenuPages.last, page);
+    final localGroupOrigin = _rootOpeningAnchor - currentRect.topLeft;
+
+    return Positioned.fromRect(
+      rect: currentRect,
+      child: _buildPageInteraction(
+        active: isTop && _open && page.started,
+        child: _buildClosingStackPage(
+          currentRect: currentRect,
+          child: _buildRetreatedPage(
+            pageIndex: routeIndex + 1,
+            alignment: Alignment.topLeft,
+            origin: localGroupOrigin,
+            child: _buildSubmenuSurface(
+              page,
+              progress,
+              pageIndex: routeIndex + 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClosingStackPage({
+    required Rect currentRect,
+    required Widget child,
+  }) {
+    final progress = _stackClose.value.clamp(0.0, 1.0).toDouble();
+    if (!_closing || progress <= 0.001) return child;
+    final targetScale = math.max(0.18, _collapsedWidth / _expandedWidth);
+    final scale = _disableAnimations
+        ? 1.0
+        : ui.lerpDouble(1, targetScale, progress)!;
+    final origin = _rootOpeningAnchor - currentRect.topLeft;
+    return Transform(
+      origin: origin,
+      transform: Matrix4.identity()..scaleByDouble(scale, scale, 1, 1),
+      child: child,
+    );
+  }
+
+  Widget _buildSubmenuSurface(
+    _CLMenuPageEntry page,
+    double progress, {
+    required int pageIndex,
+  }) {
+    final theme = CLTheme.of(context);
+    final radius = ui.lerpDouble(
+      theme.radii.control,
+      widget.cornerRadius ?? theme.radii.panel,
+      _disableAnimations ? 1 : progress,
+    )!;
+    final closingProgress = _closing
+        ? _stackClose.value.clamp(0.0, 1.0).toDouble()
+        : 0.0;
+    final materialPresence =
+        1 -
+        const Interval(
+          0.12,
+          0.55,
+          curve: Curves.easeInCubic,
+        ).transform(closingProgress);
+    final shadowStrength = progress * materialPresence;
+    final closingContentOpacity = _closing
+        ? 1 -
+              const Interval(
+                0,
+                0.24,
+                curve: Curves.easeOut,
+              ).transform(_stackClose.value.clamp(0.0, 1.0).toDouble())
+        : 1.0;
+    return CLSurface(
+      frosted: true,
+      frostSigma: 36 * materialPresence,
+      fill: theme.colors.frost.withValues(
+        alpha: theme.colors.frost.a * materialPresence,
+      ),
+      borderRadius: BorderRadius.circular(radius),
+      outlined: true,
+      outlineColor: theme.colors.outlineStrong.withValues(
+        alpha: theme.colors.outlineStrong.a * materialPresence,
+      ),
+      shadow: [
+        BoxShadow(
+          color: Color.fromARGB((0x40 * shadowStrength).round(), 0, 0, 0),
+          blurRadius: 36,
+          offset: const Offset(0, 14),
+        ),
+      ],
+      child: Opacity(
+        opacity:
+            _submenuContentOpacityForPage(pageIndex) *
+            (_disableAnimations ? progress : 1) *
+            closingContentOpacity,
+        child: Flow(
+          delegate: _CLSubmenuContentFlowDelegate(
+            targetSize: page.targetRect!.size,
+            initialOffset: Offset(
+              -page.padding.left - 1,
+              -page.padding.top - 1,
+            ),
+            progress: _disableAnimations ? 1 : progress,
+          ),
+          children: [_buildSubmenuContent(page, measuring: false)],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubmenuContent(
+    _CLMenuPageEntry page, {
+    required bool measuring,
+  }) {
+    final bodyOpacity = _disableAnimations
+        ? 1.0
+        : Interval(
+            0.18,
+            1,
+            curve: Curves.easeOutCubic,
+          ).transform(page.progress.value.clamp(0.0, 1.0).toDouble());
+    final height = measuring ? null : page.targetRect?.height;
+    return KeyedSubtree(
+      key: page.contentKey,
+      child: _SizeReporter(
+        onSizeChanged: (size) => _handleSubmenuSize(page, size),
+        child: SizedBox(
+          width: page.targetWidth,
+          height: height,
+          child: Padding(
+            padding: page.padding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _CLMenuSubmenuRow(
+                  definition: page.definition,
+                  focusNode: page.headerFocusNode,
+                  progress: _disableAnimations ? 1 : page.progress.value,
+                  expanded: true,
+                  showLeading: !measuring,
+                  onPressed: () => _popSubmenu(page),
+                ),
+                const CLDivider(),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Opacity(opacity: bodyOpacity, child: page.body),
+                ),
               ],
             ),
           ),
@@ -839,7 +1422,9 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
                           ),
                         ),
                         Opacity(
-                          opacity: opacity.clamp(0.0, 1.0).toDouble(),
+                          opacity: (opacity * _submenuContentOpacityForPage(0))
+                              .clamp(0.0, 1.0)
+                              .toDouble(),
                           child: Flow(
                             delegate: _CLMenuContentFlowDelegate(
                               targetWidth: _expandedWidth,
@@ -895,6 +1480,280 @@ class _CLMenuState extends State<CLMenu> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+class _CLMenuScope extends InheritedWidget {
+  const _CLMenuScope({
+    required this.state,
+    required this.revision,
+    required super.child,
+  });
+
+  final _CLMenuState state;
+  final int revision;
+
+  static _CLMenuScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_CLMenuScope>();
+
+  Size? placeholderSizeFor(Object identity) {
+    for (final page in state._submenuPages.reversed) {
+      if (page.started && identical(page.sourceIdentity, identity)) {
+        return page.placeholderSize;
+      }
+    }
+    return null;
+  }
+
+  void updateSubmenuDefinition(
+    Object identity,
+    _CLMenuSubmenuDefinition definition,
+  ) {
+    state._updateSubmenuDefinition(identity, definition);
+  }
+
+  void openSubmenu({
+    required Object identity,
+    required GlobalKey triggerKey,
+    required FocusNode returnFocusNode,
+    required _CLMenuSubmenuDefinition definition,
+  }) {
+    state._openSubmenu(
+      identity: identity,
+      triggerKey: triggerKey,
+      returnFocusNode: returnFocusNode,
+      definition: definition,
+    );
+  }
+
+  @override
+  bool updateShouldNotify(_CLMenuScope oldWidget) =>
+      revision != oldWidget.revision;
+}
+
+class _CLMenuSubmenuDefinition {
+  const _CLMenuSubmenuDefinition({
+    required this.label,
+    required this.children,
+    required this.leading,
+    required this.tint,
+    required this.size,
+    required this.labelMaxLines,
+  });
+
+  factory _CLMenuSubmenuDefinition.fromWidget(CLMenuSubmenu widget) =>
+      _CLMenuSubmenuDefinition(
+        label: widget.label,
+        children: widget.children,
+        leading: widget.leading,
+        tint: widget.tint,
+        size: widget.size,
+        labelMaxLines: widget.labelMaxLines,
+      );
+
+  final String label;
+  final List<Widget> children;
+  final Widget? leading;
+  final Color? tint;
+  final CLControlSize size;
+  final int? labelMaxLines;
+
+  bool matches(_CLMenuSubmenuDefinition other) =>
+      label == other.label &&
+      identical(children, other.children) &&
+      identical(leading, other.leading) &&
+      tint == other.tint &&
+      size == other.size &&
+      labelMaxLines == other.labelMaxLines;
+}
+
+class _CLMenuSubmenuRow extends StatelessWidget {
+  const _CLMenuSubmenuRow({
+    required this.definition,
+    required this.focusNode,
+    required this.progress,
+    this.onPressed,
+    this.expanded = false,
+    this.showLeading = true,
+  });
+
+  final _CLMenuSubmenuDefinition definition;
+  final FocusNode focusNode;
+  final double progress;
+  final VoidCallback? onPressed;
+  final bool expanded;
+  final bool showLeading;
+
+  @override
+  Widget build(BuildContext context) {
+    final chevronColor = CLTheme.of(context).colors.textHint;
+    return FocusableActionDetector(
+      enabled: onPressed != null,
+      focusNode: focusNode,
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            onPressed?.call();
+            return null;
+          },
+        ),
+      },
+      child: Semantics(
+        button: onPressed != null,
+        expanded: expanded,
+        label: definition.label,
+        child: ExcludeSemantics(
+          child: CLListTile(
+            label: definition.label,
+            leading: showLeading ? definition.leading : null,
+            tint: definition.tint,
+            size: definition.size,
+            labelMaxLines: definition.labelMaxLines,
+            trailing: definition.children.isEmpty
+                ? null
+                : SizedBox.square(
+                    dimension: 16,
+                    child: Center(
+                      child: Transform.rotate(
+                        angle: math.pi / 2 * progress.clamp(0.0, 1.0),
+                        child: CustomPaint(
+                          size: const Size(7, 12),
+                          painter: _CLMenuSubmenuChevronPainter(chevronColor),
+                        ),
+                      ),
+                    ),
+                  ),
+            onTap: onPressed,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CLMenuSubmenuChevronPainter extends CustomPainter {
+  const _CLMenuSubmenuChevronPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(
+      Path()
+        ..moveTo(0.5, 0.5)
+        ..lineTo(size.width - 0.5, size.height / 2)
+        ..lineTo(0.5, size.height - 0.5),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CLMenuSubmenuChevronPainter oldDelegate) =>
+      color != oldDelegate.color;
+}
+
+class _CLMenuPageEntry {
+  _CLMenuPageEntry({
+    required this.generation,
+    required this.sourceIdentity,
+    required _CLMenuSubmenuDefinition definition,
+    required this.sourceRect,
+    required this.placeholderSize,
+    required this.safeRect,
+    required this.padding,
+    required this.targetWidth,
+    required this.returnFocusNode,
+    required this.progress,
+    required this.onProgressTick,
+  }) : _definition = definition {
+    body = _buildBody(definition);
+  }
+
+  int generation;
+  final Object sourceIdentity;
+  _CLMenuSubmenuDefinition _definition;
+  late Widget body;
+
+  _CLMenuSubmenuDefinition get definition => _definition;
+
+  set definition(_CLMenuSubmenuDefinition value) {
+    _definition = value;
+    body = _buildBody(value);
+  }
+
+  static Widget _buildBody(_CLMenuSubmenuDefinition definition) => CLList(
+    shrinkWrap: true,
+    physics: const ClampingScrollPhysics(),
+    children: definition.children,
+  );
+  final Rect sourceRect;
+  final Size placeholderSize;
+  final Rect safeRect;
+  final EdgeInsets padding;
+  final double targetWidth;
+  final FocusNode returnFocusNode;
+  final AnimationController progress;
+  final VoidCallback onProgressTick;
+  final FocusNode headerFocusNode = FocusNode(
+    debugLabel: 'CLMenuSubmenu header',
+  );
+  final GlobalKey contentKey = GlobalKey();
+  Rect? targetRect;
+  bool started = false;
+
+  void dispose() {
+    progress
+      ..removeListener(onProgressTick)
+      ..dispose();
+    headerFocusNode.dispose();
+  }
+}
+
+class _CLSubmenuContentFlowDelegate extends FlowDelegate {
+  const _CLSubmenuContentFlowDelegate({
+    required this.targetSize,
+    required this.initialOffset,
+    required this.progress,
+  });
+
+  final Size targetSize;
+  final Offset initialOffset;
+  final double progress;
+
+  @override
+  Size getSize(BoxConstraints constraints) => constraints.biggest;
+
+  @override
+  BoxConstraints getConstraintsForChild(int i, BoxConstraints constraints) =>
+      BoxConstraints.tight(targetSize);
+
+  @override
+  void paintChildren(FlowPaintingContext context) {
+    final offset = Offset.lerp(initialOffset, Offset.zero, progress)!;
+    context.paintChild(
+      0,
+      transform: Matrix4.identity()
+        ..translateByDouble(offset.dx, offset.dy, 0, 1),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_CLSubmenuContentFlowDelegate oldDelegate) =>
+      targetSize != oldDelegate.targetSize;
+
+  @override
+  bool shouldRepaint(_CLSubmenuContentFlowDelegate oldDelegate) =>
+      initialOffset != oldDelegate.initialOffset ||
+      progress != oldDelegate.progress;
 }
 
 class _CLMenuContentFlowDelegate extends FlowDelegate {

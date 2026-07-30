@@ -1,5 +1,13 @@
 ## Unreleased
 
+* Added arbitrary-depth `CLMenuSubmenu` pages. Each page morphs from an
+  isolated trigger that stays aligned while all ancestors recede, preserves
+  ancestor state, clamps to safe areas and keyboard insets, and supports
+  one-level header return plus whole-stack Escape, Back, outside-tap, and
+  controller dismissal. Reduced Motion uses fixed geometry and fading.
+* `CLPressable` now safely tolerates tap callbacks that remove the pressed
+  widget before the same pointer-up dispatch completes.
+
 * Smoothed every anchored overlay tail into one four-direction, G2-continuous
   profile shared by tooltips, popovers, and numeric scrub value overlays.
 

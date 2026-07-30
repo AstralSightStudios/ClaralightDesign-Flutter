@@ -129,7 +129,7 @@ class _CLPressableState extends State<CLPressable>
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (!_enabled || _activePointer != null) return;
+    if (!mounted || !_enabled || _activePointer != null) return;
     _scale.stop();
     _dragReturn.stop();
     if (_disableAnimations) {
@@ -149,7 +149,7 @@ class _CLPressableState extends State<CLPressable>
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
-    if (event.pointer != _activePointer) return;
+    if (!mounted || event.pointer != _activePointer) return;
     setState(() {
       if (widget.deformOnDrag && !_disableAnimations) {
         _dragOffset = (event.localPosition - _pressOrigin) / widget.dragTension;
@@ -159,7 +159,9 @@ class _CLPressableState extends State<CLPressable>
   }
 
   void _handlePointerRelease(PointerEvent event) {
-    if (event.pointer != _activePointer) return;
+    // A tap callback may synchronously remove this pressable while the same
+    // pointer-up event is still being dispatched to its raw listener.
+    if (!mounted || event.pointer != _activePointer) return;
     _activePointer = null;
     _highlight.reverse();
     if (_disableAnimations) {

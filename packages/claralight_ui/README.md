@@ -216,7 +216,8 @@ Three free-for-commercial-use families ship with the package (see
 - **Lists** — `CLTreeView`, `CLListSection`, `CLListTile` (progressive
   scrolling, selection, tree guides, disclosure, tint, `outlined:` add-rows)
 - **Menus** — `CLMenu` (morphs out of its anchor with the jelly spring and
-  hosts caller-built rows in an internal `CLList`)
+  hosts caller-built rows in an internal `CLList`) and `CLMenuSubmenu`
+  (arbitrary-depth trigger-to-panel morphs with stacked ancestors)
 - **Indicators** — `CLProgressBar`, `CLProgressRing`, `CLColorSwatchGroup`,
   `CLBanner`, `CLBadge`, `CLDivider` (solid/dashed), `CLTooltip`
 
@@ -229,6 +230,33 @@ macOS, Windows, and Linux X11; unsupported environments fall back to finite
 movement without affecting the value gesture. Linux Wayland is not supported by
 the underlying `mouse` package, and its Windows multi-display positioning is
 currently limited to the primary display coordinate model.
+
+Nested menu pages use `CLMenuSubmenu` inside any `CLMenu.children` or
+`CLMenuSubmenu.children` list:
+
+```dart
+CLMenu(
+  anchor: const Icon(Icons.more_horiz),
+  children: const [
+    CLMenuSubmenu(
+      label: 'View mode',
+      children: [
+        CLListTile(label: 'Grid'),
+        CLMenuSubmenu(
+          label: 'Sort by',
+          children: [CLListTile(label: 'Capture date')],
+        ),
+      ],
+    ),
+  ],
+)
+```
+
+The active submenu trigger becomes its fixed header. Activating that header
+returns one level; Escape, system Back, an outside tap, or
+`CLMenuController.close()` closes the complete stack. Ancestors remain visible
+but inert, while safe-area or keyboard pressure may shift the new page left or
+up and constrain its scrolling body.
 
 Floating layers (menus, popovers, dialogs, sheets, tooltips) are
 frosted: a backdrop blur under a translucent `colors.frost` wash.

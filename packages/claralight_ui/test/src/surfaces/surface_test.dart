@@ -68,4 +68,38 @@ void main() {
       },
     );
   }
+
+  testWidgets('pressable tolerates removing itself from onTap', (tester) async {
+    late StateSetter update;
+    var visible = true;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return visible
+                  ? CLPressable(
+                      key: const Key('self-removing-pressable'),
+                      onTap: () => update(() => visible = false),
+                      child: const SizedBox(width: 100, height: 40),
+                    )
+                  : const SizedBox(width: 100, height: 40);
+            },
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('self-removing-pressable'))),
+    );
+    await gesture.up();
+    await tester.pump();
+
+    expect(find.byKey(const Key('self-removing-pressable')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
