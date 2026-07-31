@@ -533,6 +533,82 @@ void main() {
     );
   });
 
+  testWidgets('readOnly and disabled keep the stepper layout and render it inert', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '4');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    Widget build({required bool enabled, required bool readOnly}) => host(
+      CLTextField(
+        controller: controller,
+        focusNode: focusNode,
+        keyboardType: const TextInputType.numberWithOptions(signed: false),
+        prefix: const Text('W'),
+        enabled: enabled,
+        readOnly: readOnly,
+        step: 1,
+        min: 0,
+        max: 10,
+        size: CLControlSize.small,
+      ),
+    );
+
+    await tester.pumpWidget(build(enabled: true, readOnly: false));
+    await tester.pumpAndSettle();
+    final base = tester.getSize(find.byType(CLTextField));
+    expect(stepUp, findsOneWidget);
+
+    // readOnly keeps the arrows and the geometry, but cannot step.
+    await tester.pumpWidget(build(enabled: true, readOnly: true));
+    await tester.pumpAndSettle();
+    expect(stepUp, findsOneWidget);
+    expect(tester.getSize(find.byType(CLTextField)), base);
+    await tester.tap(stepUp);
+    await tester.pump();
+    expect(controller.text, '4');
+    focusNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(controller.text, '4');
+
+    // disabled keeps the arrows and the geometry, and grays out.
+    await tester.pumpWidget(build(enabled: false, readOnly: false));
+    await tester.pumpAndSettle();
+    expect(stepUp, findsOneWidget);
+    expect(tester.getSize(find.byType(CLTextField)), base);
+  });
+
+  testWidgets('disabled state leaves its fill to the Claralight surface', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(const CLTextField(enabled: false, placeholder: 'Unavailable')),
+    );
+
+    final theme = CLThemeData();
+    final surface = tester.widget<AnimatedContainer>(
+      find.byKey(const Key('cl-text-field-surface')),
+    );
+    final surfaceDecoration = surface.decoration! as ShapeDecoration;
+    expect(
+      surfaceDecoration.color,
+      theme.colors.control.withValues(alpha: theme.colors.control.a * 0.5),
+    );
+
+    final field = tester.widget<CupertinoTextField>(
+      find.byType(CupertinoTextField),
+    );
+    final fieldDecoration = field.decoration!;
+    expect(field.enabled, isFalse);
+    expect(fieldDecoration, isA<BoxDecoration>());
+    expect(fieldDecoration.color, isNull);
+    expect(field.style?.color, theme.colors.textDisabled);
+  });
+
   testWidgets('the whole numeric stepper surface focuses the text field', (
     tester,
   ) async {
@@ -2195,7 +2271,7 @@ void main() {
     await mouse.up();
   });
 
-  testWidgets('wheel steps once, preserves focus, and filters signals', (
+  testWidgets('wheel steps only while focused, preserves focus, and filters signals', (
     tester,
   ) async {
     final controller = TextEditingController(text: '4');
@@ -2231,8 +2307,27 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(controller.text, '6');
+    expect(controller.text, '4');
     expect(focusNode.hasFocus, isFalse);
+    expect(allowedPlatformDefault, isTrue);
+    expect(commits, isEmpty);
+
+    focusNode.requestFocus();
+    await tester.pump();
+    expect(focusNode.hasFocus, isTrue);
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        position: position,
+        scrollDelta: const Offset(0, -120),
+        onRespond: ({required allowPlatformDefault}) {
+          allowedPlatformDefault = allowPlatformDefault;
+        },
+      ),
+    );
+    await tester.pump();
+    expect(controller.text, '6');
+    expect(focusNode.hasFocus, isTrue);
     expect(allowedPlatformDefault, isFalse);
     expect(commits, isEmpty);
     await tester.pump(const Duration(milliseconds: 119));
@@ -2269,6 +2364,20 @@ void main() {
     await tester.pump();
     expect(controller.text, '6');
 
+    focusNode.unfocus();
+    await tester.pump();
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        position: position,
+        scrollDelta: const Offset(0, -20),
+      ),
+    );
+    await tester.pump();
+    expect(controller.text, '6');
+
+    focusNode.requestFocus();
+    await tester.pump();
     controller.text = '10';
     await tester.pump();
     var respondedAtBoundary = false;
@@ -2320,6 +2429,8 @@ void main() {
     );
 
     final position = tester.getCenter(find.byType(CLTextField));
+    await tester.tap(find.byType(CLTextField));
+    await tester.pump();
     await tester.sendEventToBinding(
       PointerScrollEvent(
         kind: PointerDeviceKind.mouse,

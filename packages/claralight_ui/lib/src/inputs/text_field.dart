@@ -344,7 +344,10 @@ class _CLTextFieldState extends State<CLTextField>
   bool get _isNumeric =>
       widget.keyboardType?.index == TextInputType.number.index;
 
-  bool get _showsStepper => _isNumeric && widget.step > 0 && !widget.readOnly;
+  /// The stepper keeps its geometry while [readOnly] so disabling a numeric
+  /// field never reflows the control; readOnly steppers render gray and
+  /// inert ([_canStep] rejects them).
+  bool get _showsStepper => _isNumeric && widget.step > 0;
 
   double? get _number {
     final value = double.tryParse(_controller.text.trim());
@@ -364,7 +367,7 @@ class _CLTextFieldState extends State<CLTextField>
       (widget.error || (_isNumeric && _showValidationError && !_isValidNumber));
 
   bool _canStep(double direction) {
-    if (!widget.enabled || !_showsStepper) return false;
+    if (!widget.enabled || widget.readOnly || !_showsStepper) return false;
     final value = _number;
     if (value == null) return false;
     final min = widget.min;
@@ -890,8 +893,16 @@ class _CLTextFieldState extends State<CLTextField>
     return KeyEventResult.handled;
   }
 
+  /// The field is focused and shows its accent ring: either the editing
+  /// focus node or an active scrub operation. Wheel stepping only responds
+  /// in this state so unfocused fields never steal scroll from ancestors.
+  bool get _isFocused =>
+      _focusNode.hasFocus ||
+      (_operationFocusRequested && _operationFocusNode.hasPrimaryFocus);
+
   void _handlePointerSignal(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent ||
+    if (!_isFocused ||
+        event is! PointerScrollEvent ||
         event.kind != PointerDeviceKind.mouse ||
         _hasStepModifier) {
       return;
@@ -932,9 +943,7 @@ class _CLTextFieldState extends State<CLTextField>
 
   Widget _buildTextField(BuildContext context) {
     final theme = CLTheme.of(context);
-    final focused =
-        _focusNode.hasFocus ||
-        (_operationFocusRequested && _operationFocusNode.hasPrimaryFocus);
+    final focused = _isFocused;
     final textStyle = _textStyle(theme);
     final field = _buildEditableText(theme, textStyle);
     final horizontalPad = widget.size == CLControlSize.small ? 10.0 : 12.0;
@@ -986,7 +995,10 @@ class _CLTextFieldState extends State<CLTextField>
       textAlign: widget.textAlign,
       onChanged: _handleChanged,
       onSubmitted: _handleSubmitted,
-      decoration: null,
+      // Keep the Claralight surface in charge of disabled styling.
+      // A null decoration makes CupertinoTextField inject its opaque
+      // platform disabled background behind the editable region.
+      decoration: const BoxDecoration(),
       padding: EdgeInsets.zero,
       maxLines: 1,
     );
@@ -1076,6 +1088,7 @@ class _CLTextFieldState extends State<CLTextField>
           width: widget.width,
           height: _height,
           child: AnimatedContainer(
+            key: const Key('cl-text-field-surface'),
             duration: CLMotion.fast,
             curve: Curves.easeOutCubic,
             decoration: clSmoothDecoration(
