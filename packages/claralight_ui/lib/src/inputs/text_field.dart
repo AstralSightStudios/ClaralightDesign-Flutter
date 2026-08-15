@@ -480,7 +480,22 @@ class _CLTextFieldState extends State<CLTextField>
 
   void _requestEditingFocus() {
     _operationFocusRequested = false;
+    // Always request focus first: it wins any pending deferred unfocus (e.g.
+    // the Done action's _finalizeEditing) and is a no-op when already focused.
     _focusNode.requestFocus();
+    if (_focusNode.hasPrimaryFocus) {
+      // The platform can dismiss the IME while this node keeps focus (Android
+      // back button, Done action, iOS swipe-down). requestFocus() alone cannot
+      // re-attach the soft keyboard, so explicitly re-open it.
+      _requestKeyboard();
+    }
+  }
+
+  /// Re-attaches the soft keyboard when the field already owns primary focus.
+  void _requestKeyboard() {
+    _focusNode.context
+        ?.findAncestorStateOfType<EditableTextState>()
+        ?.requestKeyboard();
   }
 
   void _requestOperationFocus() {
@@ -814,7 +829,9 @@ class _CLTextFieldState extends State<CLTextField>
   void _handleSubmitted(String value) {
     if (_isNumeric && !_isValidNumber) {
       setState(() => _showValidationError = true);
-      _focusNode.requestFocus();
+      // Keep the keyboard up so the user can fix the invalid value; the
+      // field still owns focus here, so requestFocus alone would do nothing.
+      _requestEditingFocus();
       return;
     }
     _commitTextEditing();

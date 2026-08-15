@@ -2670,4 +2670,76 @@ void main() {
 
     expect(submitted, '7');
   });
+
+  testWidgets(
+    'tapping the field surface reopens the IME after the platform hides it',
+    (tester) async {
+      // Regression: Android back / iOS swipe-down dismisses the IME while the
+      // field keeps focus; requestFocus() alone could never re-attach it.
+      await tester.pumpWidget(
+        host(
+          CLTextField(
+            controller: TextEditingController(text: '12'),
+            keyboardType: const TextInputType.numberWithOptions(
+              signed: true,
+              decimal: true,
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(CLTextField);
+      await tester.tap(field);
+      await tester.pump();
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+
+      await tester.enterText(field, '1');
+      await tester.pump();
+
+      // Platform hides the IME without telling the framework (back button).
+      tester.testTextInput.hide();
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isFalse);
+
+      // Tap the field surface away from the tiny editable strip.
+      final rect = tester.getRect(field);
+      await tester.tapAt(Offset(rect.left + 24, rect.center.dy));
+      await tester.pump();
+
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue,
+          reason: 'tapping the field must re-attach the soft keyboard');
+    },
+  );
+
+  testWidgets('invalid submission re-attaches the keyboard for correction', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        CLTextField(
+          controller: TextEditingController(text: '5'),
+          keyboardType: const TextInputType.numberWithOptions(
+            signed: true,
+            decimal: true,
+          ),
+        ),
+      ),
+    );
+
+      final field = find.byType(CLTextField);
+      await tester.tap(field);
+      await tester.pump();
+      await tester.enterText(field, '-');
+      await tester.pump();
+
+      // Submitting an incomplete number closes the connection (Done action);
+      // the field must bring the IME right back so the user can finish it.
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue,
+          reason: 'invalid submission must keep the keyboard available');
+  });
 }
