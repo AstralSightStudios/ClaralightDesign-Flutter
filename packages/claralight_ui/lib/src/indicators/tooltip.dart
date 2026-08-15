@@ -105,7 +105,7 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
       _spring.animateWith(
         SpringSimulation(
           _open
-              ? const SpringDescription(mass: 1, stiffness: 560, damping: 27)
+              ? const SpringDescription(mass: 1, stiffness: 560, damping: 37)
               : const SpringDescription(mass: 1, stiffness: 620, damping: 40),
           _spring.value,
           _open ? 1 : 0,
@@ -179,7 +179,7 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
     if (_disableAnimations) return;
     _spring.animateWith(
       SpringSimulation(
-        const SpringDescription(mass: 1, stiffness: 560, damping: 27),
+        const SpringDescription(mass: 1, stiffness: 560, damping: 37),
         _spring.value,
         1,
         0,
@@ -289,10 +289,16 @@ class _CLTooltipState extends State<CLTooltip> with TickerProviderStateMixin {
             shadowColor: const Color(0x40000000),
             shadowBlur: 18,
             shadowOffset: const Offset(0, 6),
-            opacity:
-                (_disableAnimations ? CLMotion.easeOut : Curves.easeOutCubic)
-                    .transform(_reveal.value),
-            scale: 0.92 + 0.08 * _spring.value,
+            // Normal motion grows the surface from the anchor with a spring
+            // overshoot; opacity is reserved for the non-moving
+            // reduced-motion fallback.
+            opacity: _disableAnimations
+                ? CLMotion.easeOut.transform(_reveal.value)
+                : 1,
+            scale: _disableAnimations
+                ? 1
+                : Curves.easeOutCubic.transform(_reveal.value) *
+                      _spring.value,
             child: child!,
           );
         },

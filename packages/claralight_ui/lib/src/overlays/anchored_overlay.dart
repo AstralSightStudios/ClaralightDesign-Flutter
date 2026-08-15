@@ -878,7 +878,7 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    if (_opacity <= 0 || size.isEmpty) return;
+    if (_opacity <= 0 || _scale <= 0 || size.isEmpty) return;
     final alpha = (_opacity.clamp(0.0, 1.0) * 255).round();
     context.pushOpacity(offset, alpha, (context, offset) {
       final origin = _scaleOrigin;
@@ -949,5 +949,17 @@ class _RenderCLAnchoredSurface extends RenderShiftedBox {
   }
 
   @override
-  bool hitTestSelf(Offset position) => _surfacePath().contains(position);
+  bool hitTestSelf(Offset position) {
+    if (_scale <= 0) return false;
+    // The surface is painted through an anchor-origin scale, so hits must be
+    // inverse-transformed into the same space. This keeps the hit area glued
+    // to the visually growing surface instead of the full-size placeholder.
+    final origin = _scaleOrigin;
+    return _surfacePath().contains(
+      Offset(
+        origin.dx + (position.dx - origin.dx) / _scale,
+        origin.dy + (position.dy - origin.dy) / _scale,
+      ),
+    );
+  }
 }

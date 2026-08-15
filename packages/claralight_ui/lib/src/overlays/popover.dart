@@ -143,7 +143,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
     } else if (_open) {
       _spring.animateWith(
         SpringSimulation(
-          const SpringDescription(mass: 1, stiffness: 520, damping: 28),
+          const SpringDescription(mass: 1, stiffness: 520, damping: 36),
           _spring.value,
           1,
           0,
@@ -233,7 +233,7 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
     if (!_disableAnimations) {
       _spring.animateWith(
         SpringSimulation(
-          const SpringDescription(mass: 1, stiffness: 520, damping: 28),
+          const SpringDescription(mass: 1, stiffness: 520, damping: 36),
           _spring.value,
           1,
           0,
@@ -360,12 +360,16 @@ class _CLPopoverState extends State<CLPopover> with TickerProviderStateMixin {
                     shadowColor: const Color(0x59000000),
                     shadowBlur: 24,
                     shadowOffset: const Offset(0, 10),
-                    opacity:
-                        (_disableAnimations
-                                ? CLMotion.easeOut
-                                : Curves.easeOutCubic)
-                            .transform(_reveal.value),
-                    scale: 0.96 + 0.04 * _spring.value,
+                    // Normal motion grows the surface from the anchor with a
+                    // spring overshoot; opacity is reserved for the
+                    // non-moving reduced-motion fallback.
+                    opacity: _disableAnimations
+                        ? CLMotion.easeOut.transform(_reveal.value)
+                        : 1,
+                    scale: _disableAnimations
+                        ? 1
+                        : Curves.easeOutCubic.transform(_reveal.value) *
+                              _spring.value,
                     child: child!,
                   );
                 },

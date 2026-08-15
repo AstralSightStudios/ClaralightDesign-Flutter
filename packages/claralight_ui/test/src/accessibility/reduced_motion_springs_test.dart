@@ -586,7 +586,8 @@ void main() {
       final normalScale = tester
           .widget<CLAnchoredOverlay>(find.byType(CLAnchoredOverlay))
           .scale;
-      expect(normalScale, greaterThan(0.96));
+      // The surface grows from the anchor: mid-grow, still below identity.
+      expect(normalScale, greaterThan(0.7));
       expect(normalScale, lessThan(1));
       _motionState(tester).setReduced(true);
       await tester.pump();
@@ -666,7 +667,8 @@ void main() {
       final normalScale = tester
           .widget<CLAnchoredOverlay>(find.byType(CLAnchoredOverlay))
           .scale;
-      expect(normalScale, greaterThan(0.92));
+      // The surface grows from the anchor: mid-grow, still below identity.
+      expect(normalScale, greaterThan(0.7));
       expect(normalScale, lessThan(1));
       _motionState(tester).setReduced(true);
       await tester.pump();

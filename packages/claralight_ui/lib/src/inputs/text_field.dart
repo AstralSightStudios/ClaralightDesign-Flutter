@@ -1258,7 +1258,7 @@ class _CLTextFieldState extends State<CLTextField>
         child: AnimatedBuilder(
           animation: _scrubReveal,
           builder: (context, child) {
-            final opacity = CLMotion.easeOut.transform(_scrubReveal.value);
+            final growth = CLMotion.easeOut.transform(_scrubReveal.value);
             return CLAnchoredOverlay(
               key: const Key('cl-text-field-scrub-popover'),
               anchorKey: _scrubAnchorKey,
@@ -1271,8 +1271,10 @@ class _CLTextFieldState extends State<CLTextField>
               shadowColor: const Color(0x59000000),
               shadowBlur: 24,
               shadowOffset: const Offset(0, 10),
-              opacity: opacity,
-              scale: _disableAnimations ? 1 : 0.96 + 0.04 * opacity,
+              // Normal motion grows the value chip from the anchor; opacity
+              // is reserved for the non-moving reduced-motion fallback.
+              opacity: _disableAnimations ? growth : 1,
+              scale: _disableAnimations ? 1 : growth,
               child: child!,
             );
           },
