@@ -12,8 +12,14 @@ import '../surfaces/pressable.dart';
 import '../surfaces/surface.dart';
 import '../theme/theme.dart';
 
+/// Horizontal gap between an option's leading widget and its label, and the
+/// width allowance reserved for a leading widget in width estimates.
+const double _kLeadingGap = 8;
+const double _kLeadingAllowance = 26;
+
 /// Claralight select dropdown variants.
 enum CLSelectVariant {
+
   /// Standard neutral control-fill select field.
   standard,
 
@@ -26,7 +32,11 @@ class CLSelectOption<T> {
   final T value;
   final String label;
 
-  const CLSelectOption(this.value, this.label);
+  /// Optional widget shown before the label in both the trigger and the
+  /// options panel, such as a leading glyph or icon.
+  final Widget? leading;
+
+  const CLSelectOption(this.value, this.label, {this.leading});
 }
 
 /// A Claralight dropdown — the "填充模式 / 数字填充" and "格式 / 00:00"
@@ -336,7 +346,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
 
   bool get _enabled => widget.onChanged != null;
 
-  double _calculateTriggerWidth(String label) {
+  double _calculateTriggerWidth(CLSelectOption<T> option) {
     if (widget.width != null) return widget.width!;
     final theme = CLTheme.of(context);
     final textStyle = (_size == CLControlSize.large
@@ -344,14 +354,18 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         : theme.typography.callout);
     final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
     final painter = TextPainter(
-      text: TextSpan(text: label, style: textStyle),
+      text: TextSpan(text: option.label, style: textStyle),
       maxLines: 1,
       textDirection: textDirection,
     )..layout();
     final horizontalPadding = (_size == CLControlSize.small ? 10 : 12) * 2;
     const chevronsWidth = 8.0;
     const gap = 6.0;
-    return painter.width + chevronsWidth + gap + horizontalPadding;
+    return painter.width +
+        chevronsWidth +
+        gap +
+        horizontalPadding +
+        (option.leading == null ? 0 : _kLeadingAllowance);
   }
 
   void _toggle() {
@@ -408,6 +422,9 @@ class _CLSelectState<T> extends State<CLSelect<T>>
     final naturalPanelWidth =
         maxOptionWidth +
         40 +
+        (widget.options.any((option) => option.leading != null)
+            ? _kLeadingAllowance
+            : 0) +
         _panelHorizontalPadding * 2 +
         _panelOutlineWidth * 2;
 
@@ -532,7 +549,7 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         effectiveVariant == CLSelectVariant.ghost && widget.width == null;
 
     if (isGhostShrinkWrap) {
-      final newWidth = _calculateTriggerWidth(option.label);
+      final newWidth = _calculateTriggerWidth(option);
       final effectiveTextAlign = widget.textAlign ?? TextAlign.right;
       _targetClosingTriggerSize = Size(newWidth, _height);
       if (effectiveTextAlign == TextAlign.right) {
@@ -589,12 +606,14 @@ class _CLSelectState<T> extends State<CLSelect<T>>
         : widget.variant;
   }
 
-  String get _selectedLabel {
+  CLSelectOption<T>? get _selectedOption {
     for (final option in widget.options) {
-      if (option.value == widget.value) return option.label;
+      if (option.value == widget.value) return option;
     }
-    return '';
+    return null;
   }
+
+  String get _selectedLabel => _selectedOption?.label ?? '';
 
   Widget _buildTrigger({
     required CLThemeData theme,
@@ -674,10 +693,22 @@ class _CLSelectState<T> extends State<CLSelect<T>>
       textAlign: textAlign,
       style: textStyle,
     );
+    final leading = _selectedOption?.leading;
 
     return Row(
       mainAxisSize: expands ? MainAxisSize.max : MainAxisSize.min,
       children: [
+        if (leading != null) ...[
+          IconTheme.merge(
+            data: IconThemeData(
+              color: _enabled
+                  ? theme.colors.textPrimary
+                  : theme.colors.textDisabled,
+            ),
+            child: leading,
+          ),
+          const SizedBox(width: _kLeadingGap),
+        ],
         if (expands) Expanded(child: text) else Flexible(child: text),
         const SizedBox(width: 6),
         _Chevrons(color: theme.colors.textTertiary),
@@ -933,8 +964,16 @@ class _OptionRowState<T> extends State<_OptionRow<T>> {
     final color = widget.checked
         ? theme.colors.accent
         : theme.colors.textPrimary;
+    final leading = widget.option.leading;
     return Row(
       children: [
+        if (leading != null) ...[
+          IconTheme.merge(
+            data: IconThemeData(color: color),
+            child: leading,
+          ),
+          const SizedBox(width: _kLeadingGap),
+        ],
         Expanded(
           child: Text(
             widget.option.label,
